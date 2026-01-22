@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIMS ERP - Database Schema</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        
+        .schema-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        
+        .model-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            transition: transform 0.3s, box-shadow 0.3s;
+            background: white;
+        }
+        
+        .model-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        }
+        
+        .model-header {
+            padding: 15px 20px;
+            font-weight: bold;
+            font-size: 1.2em;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .user-models .model-header { background: linear-gradient(135deg, #667eea, #764ba2); }
+        .academic-models .model-header { background: linear-gradient(135deg, #f093fb, #f5576c); }
+        .exam-models .model-header { background: linear-gradient(135deg, #4facfe, #00f2fe); }
+        .finance-models .model-header { background: linear-gradient(135deg, #43e97b, #38f9d7); }
+        
+        .model-body {
+            padding: 0;
+        }
+        
+        .field {
+            padding: 10px 20px;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .field:last-child {
+            border-bottom: none;
+        }
+        
+        .field-name {
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .field-type {
+            color: #666;
+            font-size: 0.9em;
+            background: #f5f5f5;
+            padding: 3px 8px;
+            border-radius: 4px;
+        }
+        
+        .relation {
+            color: #667eea;
+            font-weight: 500;
+        }
+        
+        .icon {
+            font-size: 1.5em;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎓 AIMS ERP Database Schema</h1>
+        <p class="subtitle">Comprehensive Academic Institute Management System</p>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-number">15</div>
+                <div class="stat-label">Total Models</div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, #f093fb, #f5576c);">
+                <div class="stat-number">4</div>
+                <div class="stat-label">User Roles</div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, #4facfe, #00f2fe);">
+                <div class="stat-number">50+</div>
+                <div class="stat-label">Database Fields</div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, #43e97b, #38f9d7);">
+                <div class="stat-number">3</div>
+                <div class="stat-label">Core Modules</div>
+            </div>
+        </div>
+
+        <div class="schema-grid">
+            <!-- USER MANAGEMENT -->
+            <div class="model-card user-models">
+                <div class="model-header">
+                    <span class="icon">👤</span>
+                    <span>User</span>
+                </div>
+                <div class="model-body">
+                    <div class="field">
+                        <span class="field-name">id</span>
+                        <span class="field-type">UUID</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">username</span>
+                        <span class="field-type">String (unique)</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">password</span>
+                        <span class="field-type">String</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">role</span>
+                        <span class="field-type">Role Enum</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">isActive</span>
+                        <span class="field-type">Boolean</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ studentProfile</span>
+                        <span class="field-type">One-to-One</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ teacherProfile</span>
+                        <span class="field-type">One-to-One</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ parentProfile</span>
+                        <span class="field-type">One-to-One</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="model-card user-models">
+                <div class="model-header">
+                    <span class="icon">👨‍🎓</span>
+                    <span>StudentProfile</span>
+                </div>
+                <div class="model-body">
+                    <div class="field">
+                        <span class="field-name">fullName</span>
+                        <span class="field-type">String</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">mobile</span>
+                        <span class="field-type">String</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ batch</span>
+                        <span class="field-type">Many-to-One</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ parent</span>
+                        <span class="field-type">Many-to-One</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">feeAgreed</span>
+                        <span class="field-type">Float</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ feesPaid</span>
+                        <span class="field-type">One-to-Many</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="model-card user-models">
+                <div class="model-header">
+                    <span class="icon">👨‍🏫</span>
+                    <span>TeacherProfile</span>
+                </div>
+                <div class="model-body">
+                    <div class="field">
+                        <span class="field-name">fullName</span>
+                        <span class="field-type">String</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">email</span>
+                        <span class="field-type">String (unique)</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">subject</span>
+                        <span class="field-type">String</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">qualification</span>
+                        <span class="field-type">String</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ questionBanks</span>
+                        <span class="field-type">One-to-Many</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ examsCreated</span>
+                        <span class="field-type">One-to-Many</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="model-card user-models">
+                <div class="model-header">
+                    <span class="icon">👨‍👩‍👧</span>
+                    <span>ParentProfile</span>
+                </div>
+                <div class="model-body">
+                    <div class="field">
+                        <span class="field-name">mobile</span>
+                        <span class="field-type">String (unique)</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ children</span>
+                        <span class="field-type">One-to-Many</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ACADEMIC MANAGEMENT -->
+            <div class="model-card academic-models">
+                <div class="model-header">
+                    <span class="icon">📚</span>
+                    <span>Batch</span>
+                </div>
+                <div class="model-body">
+                    <div class="field">
+                        <span class="field-name">name</span>
+                        <span class="field-type">String</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ students</span>
+                        <span class="field-type">One-to-Many</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ notices</span>
+                        <span class="field-type">One-to-Many</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ resources</span>
+                        <span class="field-type">One-to-Many</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="model-card academic-models">
+                <div class="model-header">
+                    <span class="icon">📢</span>
+                    <span>Notice</span>
+                </div>
+                <div class="model-body">
+                    <div class="field">
+                        <span class="field-name">title</span>
+                        <span class="field-type">String</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">content</span>
+                        <span class="field-type">String</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ batch</span>
+                        <span class="field-type">Many-to-One</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="model-card academic-models">
+                <div class="model-header">
+                    <span class="icon">📖</span>
+                    <span>Resource</span>
+                </div>
+                <div class="model-body">
+                    <div class="field">
+                        <span class="field-name">title</span>
+                        <span class="field-type">String</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">type</span>
+                        <span class="field-type">VIDEO | NOTE</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">url</span>
+                        <span class="field-type">String</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ batch</span>
+                        <span class="field-type">Many-to-One</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- EXAM SYSTEM -->
+            <div class="model-card exam-models">
+                <div class="model-header">
+                    <span class="icon">📝</span>
+                    <span>QuestionBank</span>
+                </div>
+                <div class="model-body">
+                    <div class="field">
+                        <span class="field-name">questionText</span>
+                        <span class="field-type">String</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">options</span>
+                        <span class="field-type">JSON</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">correctOption</span>
+                        <span class="field-type">String</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">subject</span>
+                        <span class="field-type">String</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">difficulty</span>
+                        <span class="field-type">String</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">tags</span>
+                        <span class="field-type">String[]</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ createdBy</span>
+                        <span class="field-type">Teacher</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="model-card exam-models">
+                <div class="model-header">
+                    <span class="icon">📋</span>
+                    <span>Exam</span>
+                </div>
+                <div class="model-body">
+                    <div class="field">
+                        <span class="field-name">title</span>
+                        <span class="field-type">String</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">durationMin</span>
+                        <span class="field-type">Int</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">totalMarks</span>
+                        <span class="field-type">Int</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">isPublished</span>
+                        <span class="field-type">Boolean</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ createdBy</span>
+                        <span class="field-type">Teacher</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ questions</span>
+                        <span class="field-type">One-to-Many</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ attempts</span>
+                        <span class="field-type">One-to-Many</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="model-card exam-models">
+                <div class="model-header">
+                    <span class="icon">❓</span>
+                    <span>Question</span>
+                </div>
+                <div class="model-body">
+                    <div class="field">
+                        <span class="field-name relation">→ exam</span>
+                        <span class="field-type">Many-to-One</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ questionBank</span>
+                        <span class="field-type">Optional</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">options</span>
+                        <span class="field-type">JSON</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">marks</span>
+                        <span class="field-type">Int</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">orderIndex</span>
+                        <span class="field-type">Int</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="model-card exam-models">
+                <div class="model-header">
+                    <span class="icon">📊</span>
+                    <span>TestAttempt</span>
+                </div>
+                <div class="model-body">
+                    <div class="field">
+                        <span class="field-name relation">→ user</span>
+                        <span class="field-type">Student</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ exam</span>
+                        <span class="field-type">Exam</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">status</span>
+                        <span class="field-type">Enum</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">totalScore</span>
+                        <span class="field-type">Float</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">correctCount</span>
+                        <span class="field-type">Int</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">wrongCount</span>
+                        <span class="field-type">Int</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ answers</span>
+                        <span class="field-type">One-to-Many</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="model-card exam-models">
+                <div class="model-header">
+                    <span class="icon">✅</span>
+                    <span>Answer</span>
+                </div>
+                <div class="model-body">
+                    <div class="field">
+                        <span class="field-name relation">→ attempt</span>
+                        <span class="field-type">TestAttempt</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name relation">→ question</span>
+                        <span class="field-type">Question</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">selectedOption</span>
+                        <span class="field-type">String</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">isCorrect</span>
+                        <span class="field-type">Boolean</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">marksAwarded</span>
+                        <span class="field-type">Float</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">timeSpentSec</span>
+                        <span class="field-type">Int</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FINANCE -->
+            <div class="model-card finance-models">
+                <div class="model-header">
+                    <span class="icon">💰</span>
+                    <span>FeeRecord</span>
+                </div>
+                <div class="model-body">
+                    <div class="field">
+                        <span class="field-name relation">→ student</span>
+                        <span class="field-type">Student</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">amount</span>
+                        <span class="field-type">Float</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">date</span>
+                        <span class="field-type">DateTime</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">remarks</span>
+                        <span class="field-type">String</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="model-card finance-models">
+                <div class="model-header">
+                    <span class="icon">💸</span>
+                    <span>Expense</span>
+                </div>
+                <div class="model-body">
+                    <div class="field">
+                        <span class="field-name">title</span>
+                        <span class="field-type">String</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">category</span>
+                        <span class="field-type">String</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">amount</span>
+                        <span class="field-type">Float</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">vendor</span>
+                        <span class="field-type">String</span>
+                    </div>
+                    <div class="field">
+                        <span class="field-name">quantity</span>
+                        <span class="field-type">Int</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

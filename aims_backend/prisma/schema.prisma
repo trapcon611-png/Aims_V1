@@ -1,0 +1,286 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- 1. USER & PROFILES ---
+
+enum Role {
+  STUDENT
+  PARENT
+  TEACHER
+  SUPER_ADMIN
+  SECURITY_ADMIN // Added for Security Panel
+}
+
+model User {
+  id              String          @id @default(uuid())
+  username        String          @unique
+  password        String
+  visiblePassword String?         // Stores plain password for Admin viewing (Per request)
+  role            Role
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  studentProfile  StudentProfile?
+  parentProfile   ParentProfile?
+  teacherProfile  TeacherProfile?
+  attempts        TestAttempt[]
+}
+
+model StudentProfile {
+  id                  String          @id @default(uuid())
+  userId              String          @unique
+  user                User            @relation(fields: [userId], references: [id])
+  fullName            String
+  mobile              String?
+  address             String?         
+  batchId             String?
+  batch               Batch?          @relation(fields: [batchId], references: [id])
+  parentId            String?
+  parent              ParentProfile?  @relation(fields: [parentId], references: [id])
+  
+  // Fee Agreement Fields
+  feeAgreed           Float           @default(0)
+  waiveOff            Float           @default(0) 
+  latePenalty         Float           @default(0) 
+  installments        Int             @default(1) 
+  nextPaymentDate     DateTime?       
+  installmentSchedule Json?           
+  feeAgreementDate    DateTime?       
+
+  feesPaid            FeeRecord[]
+  attendance          Attendance[]
+}
+
+model ParentProfile {
+  id              String           @id @default(uuid())
+  userId          String           @unique
+  user            User             @relation(fields: [userId], references: [id])
+  mobile          String           @unique
+  isMobileVisible Boolean          @default(false) // Toggle for Director View
+  children        StudentProfile[]
+}
+
+model TeacherProfile {
+  id            String         @id @default(uuid())
+  userId        String         @unique
+  user          User           @relation(fields: [userId], references: [id])
+  fullName      String
+  email         String?        @unique
+  mobile        String?        @unique
+  subject       String?
+  qualification String?
+  examsCreated  Exam[]
+  questionBanks QuestionBank[]
+  createdAt     DateTime       @default(now())
+}
+
+// --- 2. ACADEMIC ---
+
+model Batch {
+  id         String           @id @default(uuid())
+  name       String
+  startYear  String           @default("2026")
+  strength   Int              @default(60)
+  fee        Float            @default(0)
+  students   StudentProfile[]
+  attendance Attendance[]
+  notices    Notice[]
+  resources  Resource[]
+  exams      Exam[]           
+}
+
+model Notice {
+  id        String   @id @default(uuid())
+  title     String
+  content   String
+  batchId   String?
+  batch     Batch?   @relation(fields: [batchId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+enum ResourceType {
+  VIDEO
+  NOTE
+}
+
+model Resource {
+  id        String       @id @default(uuid())
+  title     String
+  type      ResourceType
+  url       String
+  batchId   String?
+  batch     Batch?       @relation(fields: [batchId], references: [id])
+  createdAt DateTime     @default(now())
+}
+
+// --- 3. EXAM SYSTEM ---
+
+model Exam {
+  id          String          @id @default(uuid())
+  title       String
+  description String?
+  durationMin Int
+  totalMarks  Int
+  scheduledAt DateTime
+  isPublished Boolean         @default(false)
+  createdById String?
+  createdBy   TeacherProfile? @relation(fields: [createdById], references: [id])
+  batchId     String?         
+  batch       Batch?          @relation(fields: [batchId], references: [id])
+  questions   Question[]
+  attempts    TestAttempt[]
+  createdAt   DateTime        @default(now())
+}
+
+model QuestionBank {
+  id              String         @id @default(uuid())
+  createdById     String
+  createdBy       TeacherProfile @relation(fields: [createdById], references: [id])
+  questionText    String
+  options         Json
+  correctOption   String
+  explanation     String?
+  subject         String
+  topic           String?
+  tags            String[]
+  difficulty      String
+  marks           Int            @default(4)
+  negative        Int            @default(-1)
+  expectedTime    Int            @default(60) 
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  usedInQuestions Question[]
+}
+
+model Question {
+  id             String        @id @default(uuid())
+  examId         String
+  exam           Exam          @relation(fields: [examId], references: [id], onDelete: Cascade)
+  questionBankId String?
+  questionBank   QuestionBank? @relation(fields: [questionBankId], references: [id])
+  questionText   String
+  options        Json
+  correctOption  String
+  subject        String
+  difficulty     String
+  marks          Int           @default(4)
+  negative       Int           @default(-1)
+  expectedTime   Int           @default(60) 
+  orderIndex     Int           @default(0)
+  answers        Answer[]
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  EVALUATED
+}
+
+model TestAttempt {
+  id           String        @id @default(uuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id])
+  examId       String
+  exam         Exam          @relation(fields: [examId], references: [id])
+  status       AttemptStatus @default(IN_PROGRESS)
+  totalScore   Float         @default(0)
+  
+  physics      Float         @default(0) 
+  chemistry    Float         @default(0)
+  maths        Float         @default(0)
+
+  scoreDetails Json?         
+  correctCount Int           @default(0)
+  wrongCount   Int           @default(0)
+  skippedCount Int           @default(0)
+  startedAt    DateTime      @default(now())
+  submittedAt  DateTime?
+  answers      Answer[]
+}
+
+model Answer {
+  id             String      @id @default(uuid())
+  attemptId      String
+  attempt        TestAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId     String
+  question       Question    @relation(fields: [questionId], references: [id])
+  selectedOption String?
+  isCorrect      Boolean     @default(false)
+  marksAwarded   Float       @default(0)
+  timeTaken      Int         @default(0) 
+  createdAt      DateTime    @default(now())
+}
+
+// --- 4. ATTENDANCE ---
+
+model Attendance {
+  id        String         @id @default(uuid())
+  date      DateTime
+  subject   String         @default("General")
+  topic     String?        
+  time      String         @default("N/A")      
+  batchId   String?
+  batch     Batch?         @relation(fields: [batchId], references: [id])
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id])
+  isPresent Boolean        @default(false)
+  createdAt DateTime       @default(now())
+
+  @@unique([date, studentId, subject, time]) 
+}
+
+// --- 5. FINANCE ---
+
+model FeeRecord {
+  id            String         @id @default(uuid())
+  studentId     String
+  student       StudentProfile @relation(fields: [studentId], references: [id])
+  amount        Float
+  date          DateTime       @default(now())
+  remarks       String?
+  transactionId String?        
+  paymentMode   String?        @default("CASH")
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  title       String
+  category    String
+  amount      Float
+  vendor      String?
+  quantity    Int?
+  unitPrice   Float?
+  description String?
+  date        DateTime @default(now())
+}
+
+// --- 6. CRM (ENQUIRIES) ---
+
+enum EnquiryStatus {
+  PENDING
+  CALLED
+  ADMITTED
+  PARTIALLY_ALLOCATED
+  UNALLOCATED
+  CANCELLED
+  CLOSED
+}
+
+model Enquiry {
+  id            String        @id @default(uuid())
+  studentName   String
+  mobile        String
+  course        String?       // Now linked to Batch Names visually
+  allotedTo     String?       // NEW: Name of the staff/admin handling this
+  source        String?       
+  status        EnquiryStatus @default(PENDING)
+  followUpCount Int           @default(0)
+  remarks       String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}

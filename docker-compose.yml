@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  # --- 1. Database (PostgreSQL) ---
+  postgres:
+    image: postgres:15-alpine
+    container_name: aims_db
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secure_aims_password
+      POSTGRES_DB: aims_institute
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - aims_network
+
+  # --- 2. Backend (NestJS) ---
+  backend:
+    build: 
+      context: ./AIMS_BACKEND
+      dockerfile: Dockerfile
+    container_name: aims_backend
+    restart: always
+    ports:
+      - "3001:3001"
+    environment:
+      # Internal Docker URL for Database
+      DATABASE_URL: "postgresql://admin:secure_aims_password@postgres:5432/aims_institute?schema=public"
+      PORT: 3001
+      # Update these keys for production!
+      JWT_SECRET: "aims-production-secret-key"
+    depends_on:
+      - postgres
+    networks:
+      - aims_network
+    # Wait for DB to be ready, then push schema, seed, and start
+    command: >
+      sh -c "npx prisma db push && npx prisma db seed && npm run start:prod"
+
+  # --- 3. Frontend (Next.js) ---
+  frontend:
+    build: 
+      context: ./AIMS_INSTITUTE_APP
+      dockerfile: Dockerfile
+    container_name: aims_frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      # PUBLIC IP ADDRESS OF YOUR VPS
+      # Change 'localhost' to your VPS IP or Domain (e.g. http://123.45.67.89:3001)
+      NEXT_PUBLIC_API_URL: "http://localhost:3001"
+    depends_on:
+      - backend
+    networks:
+      - aims_network
+
+networks:
+  aims_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
