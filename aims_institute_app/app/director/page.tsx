@@ -48,7 +48,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
-const API_URL = 'http://localhost:3001';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 // --- TYPES ---
 interface Batch { id: string; name: string; startYear: string; strength: number; fee: number; }
