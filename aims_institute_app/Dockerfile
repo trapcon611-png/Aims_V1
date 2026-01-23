@@ -13,11 +13,15 @@ RUN npm install
 # Copy source code
 COPY . .
 
-# Capture the Build Argument
+# --- CRITICAL CONFIGURATION ---
+# 1. Accept the argument passed from docker-compose.yml
 ARG NEXT_PUBLIC_API_URL
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
-# Build Next.js app
+# 2. Set it as an environment variable so Next.js can see it during 'npm run build'
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+# ------------------------------
+
+# Build Next.js app (This "bakes" the API URL into the HTML/JS)
 RUN npm run build
 
 # Expose Frontend port
