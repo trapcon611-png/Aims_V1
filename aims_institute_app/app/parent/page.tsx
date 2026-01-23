@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+console.log("Parent Panel connected to:", API_URL); // Debug log
 
 // --- TYPES ---
 interface FeeRecord {
