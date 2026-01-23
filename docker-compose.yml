@@ -43,8 +43,10 @@ services:
   # --- 3. Frontend (Next.js) ---
   frontend:
     build: 
-      context: ./AIMS_INSTITUTE_APP
+      context: ./aims_institute_app
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "http://147.93.110.78:3001"
     container_name: aims_frontend
     restart: always
     ports:
