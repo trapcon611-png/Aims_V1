@@ -45,11 +45,12 @@ import {
   WifiOff,
   RefreshCw,
   User,
-  Percent
+  Percent,
+  Cake,
+  MessageSquare
 } from 'lucide-react';
 import Link from 'next/link';
 
-// --- CONFIGURATION ---
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 console.log("Director Console connected to:", API_URL);
 
@@ -68,6 +69,7 @@ interface StudentRecord {
   isMobileMasked?: boolean; 
   batch: string;
   address?: string; 
+  dob?: string; // Added Birthday Field
   feeTotal: number;
   feePaid: number;
   feeRemaining: number;
@@ -364,6 +366,7 @@ export default function DirectorPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isOnline, setIsOnline] = useState(true);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Pagination
   const [directoryPage, setDirectoryPage] = useState(1);
@@ -393,7 +396,8 @@ export default function DirectorPage() {
     installments: 1, installmentSchedule: [] as InstallmentPlan[], 
     parentId: '', parentPassword: '', parentPhone: '',
     agreedDate: new Date().toISOString().split('T')[0],
-    withGst: false
+    withGst: false,
+    dob: '' // Added Birthday
   });
   
   const [newBatch, setNewBatch] = useState({ name: '', startYear: '', strength: 0, fee: 0 });
@@ -509,12 +513,17 @@ export default function DirectorPage() {
     setAdmissionData(prev => ({ ...prev, installmentSchedule: newSchedule }));
   }, [admissionData.fees, admissionData.waiveOff, admissionData.installments, admissionData.agreedDate, admissionData.withGst]);
 
+  const handlePhoneInput = (e: React.ChangeEvent<HTMLInputElement>, setter: any, field: string) => {
+    const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+    setter((prev: any) => ({ ...prev, [field]: val }));
+  };
+
   // Handlers
   const handleAdmission = async (e: React.FormEvent) => { 
     e.preventDefault(); 
     if (!isOnline) {
        saveToOfflineQueue('ADMISSION', admissionData);
-       setAdmissionData({ studentName: '', studentId: '', studentPassword: '', studentPhone: '', address: '', batchId: '', fees: 0, waiveOff: 0, penalty: 0, installments: 1, installmentSchedule: [], parentId: '', parentPassword: '', parentPhone: '', agreedDate: new Date().toISOString().split('T')[0], withGst: false });
+       setAdmissionData({ studentName: '', studentId: '', studentPassword: '', studentPhone: '', address: '', batchId: '', fees: 0, waiveOff: 0, penalty: 0, installments: 1, installmentSchedule: [], parentId: '', parentPassword: '', parentPhone: '', agreedDate: new Date().toISOString().split('T')[0], withGst: false, dob: '' });
        return;
     }
     setStatus('Processing...'); 
@@ -529,7 +538,7 @@ export default function DirectorPage() {
           fees: finalFee // Override fees with GST included amount for DB storage
       }); 
       setStatus('Success!'); 
-      setAdmissionData({ studentName: '', studentId: '', studentPassword: '', studentPhone: '', address: '', batchId: '', fees: 0, waiveOff: 0, penalty: 0, installments: 1, installmentSchedule: [], parentId: '', parentPassword: '', parentPhone: '', agreedDate: new Date().toISOString().split('T')[0], withGst: false }); 
+      setAdmissionData({ studentName: '', studentId: '', studentPassword: '', studentPhone: '', address: '', batchId: '', fees: 0, waiveOff: 0, penalty: 0, installments: 1, installmentSchedule: [], parentId: '', parentPassword: '', parentPhone: '', agreedDate: new Date().toISOString().split('T')[0], withGst: false, dob: '' }); 
       refreshData(); 
     } catch (e: any) { setStatus(`Error: ${e.message}`); } 
   };
@@ -566,128 +575,174 @@ export default function DirectorPage() {
 
   if (!isUnlocked) return <DirectorLogin onUnlock={() => setIsUnlocked(true)} />;
 
+  // --- GLASSMORPHISM PANEL STYLE ---
+  const glassPanel = "bg-white/60 backdrop-blur-xl border border-white/40 shadow-xl rounded-2xl transition-all duration-300 hover:shadow-2xl hover:bg-white/70";
+
   return (
-    <div className="flex h-screen bg-gray-50 font-sans">
-      <aside className="w-64 bg-slate-900 text-white flex flex-col">
-        <div className="p-6 border-b border-slate-800"><h2 className="text-xl font-bold">AIMS ERP</h2><p className="text-xs text-slate-400">Director Console</p></div>
-        <nav className="p-4 space-y-2">
+    <div className="flex h-screen bg-gradient-to-br from-slate-100 to-indigo-50 font-sans overflow-hidden">
+      
+      {/* COLLAPSIBLE SIDEBAR */}
+      <aside className={`bg-slate-900/95 backdrop-blur-xl text-white flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-64'} shadow-2xl relative z-20`}>
+        <div className={`p-6 border-b border-slate-800 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
+          {!isSidebarCollapsed && (
+            <div>
+              <h2 className="text-xl font-bold tracking-tight bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">AIMS ERP</h2>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest">Director Console</p>
+            </div>
+          )}
+          <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-1 rounded-full hover:bg-slate-800 text-slate-400 transition">
+            {isSidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+          </button>
+        </div>
+        
+        <nav className="p-4 space-y-2 flex-1">
           {['users', 'batches', 'accounts', 'enquiries', 'directory', 'academics', 'content'].map(tab => (
-             <button key={tab} onClick={() => setActiveTab(tab)} className={`w-full flex items-center space-x-3 px-4 py-3 rounded capitalize ${activeTab === tab ? 'bg-blue-600' : 'hover:bg-slate-800'}`}><span>{tab}</span></button>
+             <button 
+                key={tab} 
+                onClick={() => setActiveTab(tab)} 
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 capitalize ${activeTab === tab ? 'bg-blue-600 shadow-lg shadow-blue-900/20 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`}
+                title={tab}
+             >
+                {/* Icons mapped to tabs could be added here for better collapsed view UX */}
+                <span>{tab.charAt(0).toUpperCase()}</span>
+                {!isSidebarCollapsed && <span>{tab}</span>}
+             </button>
           ))}
         </nav>
-        <div className="mt-auto p-4"><button onClick={handleLogout} className="flex items-center text-slate-400 hover:text-white"><LogOut size={16} className="mr-2"/> Lock Console</button></div>
+        
+        <div className="p-4 border-t border-slate-800">
+          <button onClick={handleLogout} className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} text-red-400 hover:text-red-300 w-full p-2 rounded-lg hover:bg-red-500/10 transition`}>
+            <LogOut size={18} className={!isSidebarCollapsed ? "mr-2" : ""} /> 
+            {!isSidebarCollapsed && "Lock Console"}
+          </button>
+        </div>
       </aside>
 
       <main className="flex-1 overflow-auto p-8 relative">
-        {!isOnline && <div className="absolute top-0 left-0 right-0 bg-red-600 text-white text-xs font-bold p-2 text-center z-50 flex items-center justify-center gap-2"><WifiOff size={14}/> OFFLINE MODE: ACTIONS WILL SYNC AUTOMATICALLY</div>}
-        {isOnline && status.includes('Sync') && <div className="absolute top-0 left-0 right-0 bg-blue-600 text-white text-xs font-bold p-2 text-center z-50 flex items-center justify-center gap-2"><RefreshCw size={14} className="animate-spin"/> {status}</div>}
+        {!isOnline && <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-500/90 text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg z-50 flex items-center gap-2 backdrop-blur-md border border-red-400/50"><WifiOff size={14}/> OFFLINE MODE</div>}
+        {isOnline && status.includes('Sync') && <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-500/90 text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg z-50 flex items-center gap-2 backdrop-blur-md border border-blue-400/50"><RefreshCw size={14} className="animate-spin"/> {status}</div>}
 
         {activeTab === 'users' && (
-          <div className="space-y-8">
-            <div className="bg-white p-8 rounded-xl shadow-sm border">
-              <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center"><UserPlus className="mr-3 text-blue-600" /> New Student Admission</h2>
-              {status && <div className={`mb-6 p-4 rounded font-bold text-sm ${status.includes('Error') ? 'bg-red-50 text-red-700' : status.includes('Offline') ? 'bg-yellow-50 text-yellow-700' : 'bg-green-50 text-green-700'}`}>{status}</div>}
+          <div className="space-y-8 max-w-5xl mx-auto">
+            <div className={glassPanel + " p-8"}>
+              <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center"><UserPlus className="mr-3 text-blue-600" /> New Student Admission</h2>
+              {status && <div className={`mb-6 p-4 rounded-xl font-bold text-sm border ${status.includes('Error') ? 'bg-red-50/50 text-red-700 border-red-100' : status.includes('Offline') ? 'bg-yellow-50/50 text-yellow-700 border-yellow-100' : 'bg-green-50/50 text-green-700 border-green-100'}`}>{status}</div>}
               <form onSubmit={handleAdmission}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-4">
-                    <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider border-b pb-2">Student Details</h3>
-                    <input className="w-full p-2 border rounded text-gray-900" required placeholder="Student Name" value={admissionData.studentName} onChange={(e) => setAdmissionData({...admissionData, studentName: e.target.value})} />
+                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2 mb-4">Student Details</h3>
+                    <input className="w-full p-3 bg-white/50 border border-slate-200 rounded-xl text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition" required placeholder="Student Name" value={admissionData.studentName} onChange={(e) => setAdmissionData({...admissionData, studentName: e.target.value})} />
+                    
+                    {/* Birthday Field */}
                     <div className="grid grid-cols-2 gap-4">
-                      <input className="w-full p-2 border rounded text-gray-900" required placeholder="Student ID" value={admissionData.studentId} onChange={(e) => setAdmissionData({...admissionData, studentId: e.target.value})} />
-                      <input className="w-full p-2 border rounded text-gray-900" required placeholder="Password" value={admissionData.studentPassword} onChange={(e) => setAdmissionData({...admissionData, studentPassword: e.target.value})} />
+                      <div className="relative">
+                        <input type="date" className="w-full p-3 bg-white/50 border border-slate-200 rounded-xl text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition text-sm" required value={admissionData.dob} onChange={(e) => setAdmissionData({...admissionData, dob: e.target.value})} />
+                        <span className="absolute right-3 top-3 text-slate-400 pointer-events-none"><Cake size={16}/></span>
+                      </div>
+                      <input className="w-full p-3 bg-white/50 border border-slate-200 rounded-xl text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition" required placeholder="Student ID" value={admissionData.studentId} onChange={(e) => setAdmissionData({...admissionData, studentId: e.target.value})} />
                     </div>
-                    <input className="w-full p-2 border rounded text-gray-900" required placeholder="Student Phone" value={admissionData.studentPhone} onChange={(e) => setAdmissionData({...admissionData, studentPhone: e.target.value})} />
-                    <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Residential Address</label><textarea className="w-full p-2 border rounded text-gray-900" rows={2} placeholder="Full Address with Pincode" value={admissionData.address} onChange={(e) => setAdmissionData({...admissionData, address: e.target.value})} /></div>
+
                     <div className="grid grid-cols-2 gap-4">
-                      <select className="w-full p-2 border rounded text-gray-900 bg-white" required value={admissionData.batchId} onChange={(e) => setAdmissionData({...admissionData, batchId: e.target.value})}><option value="">Select Batch</option>{batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
-                      <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Batch Standard Fee</label><input type="number" className="w-full p-2 border rounded text-gray-900" required placeholder="₹" value={admissionData.fees} onChange={(e) => setAdmissionData({...admissionData, fees: parseInt(e.target.value) || 0})} /></div>
+                      <input className="w-full p-3 bg-white/50 border border-slate-200 rounded-xl text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition" required placeholder="Password" value={admissionData.studentPassword} onChange={(e) => setAdmissionData({...admissionData, studentPassword: e.target.value})} />
+                      <input className="w-full p-3 bg-white/50 border border-slate-200 rounded-xl text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition" required placeholder="Phone (10 digits)" value={admissionData.studentPhone} onChange={(e) => handlePhoneInput(e, setAdmissionData, 'studentPhone')} maxLength={10} />
                     </div>
-                    <div className="bg-blue-50 p-4 rounded border border-blue-100 space-y-4">
+                    
+                    <div><textarea className="w-full p-3 bg-white/50 border border-slate-200 rounded-xl text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition" rows={2} placeholder="Residential Address" value={admissionData.address} onChange={(e) => setAdmissionData({...admissionData, address: e.target.value})} /></div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <select className="w-full p-3 bg-white/50 border border-slate-200 rounded-xl text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition" required value={admissionData.batchId} onChange={(e) => setAdmissionData({...admissionData, batchId: e.target.value})}><option value="">Select Batch</option>{batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
+                      <div className="relative"><span className="absolute left-3 top-3 text-slate-400">₹</span><input type="number" className="w-full pl-8 p-3 bg-white/50 border border-slate-200 rounded-xl text-slate-900 font-bold focus:ring-2 focus:ring-blue-500 outline-none transition" required placeholder="Batch Fee" value={admissionData.fees} onChange={(e) => setAdmissionData({...admissionData, fees: parseInt(e.target.value) || 0})} /></div>
+                    </div>
+                    
+                    <div className="bg-blue-50/50 p-5 rounded-xl border border-blue-100 space-y-4">
                         <h4 className="text-xs font-bold text-blue-700 uppercase flex items-center justify-between">
-                            Fee Agreement
-                            {/* --- NEW GST TOGGLE --- */}
-                            <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1 rounded border border-blue-200">
-                                <input type="checkbox" checked={admissionData.withGst} onChange={e => setAdmissionData({...admissionData, withGst: e.target.checked})} className="w-3 h-3 text-blue-600"/>
-                                <span className="text-[10px] text-slate-600">Add 18% GST</span>
+                            Payment Plan
+                            <label className="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 rounded-lg border border-blue-200 shadow-sm hover:border-blue-300 transition">
+                                <input type="checkbox" checked={admissionData.withGst} onChange={e => setAdmissionData({...admissionData, withGst: e.target.checked})} className="w-4 h-4 text-blue-600 rounded"/>
+                                <span className="text-xs font-bold text-slate-600">+ 18% GST</span>
                             </label>
                         </h4>
                         <div className="grid grid-cols-2 gap-4">
-                           <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Waive Off</label><input type="number" className="w-full p-2 border rounded text-gray-900" placeholder="₹ 0" value={admissionData.waiveOff} onChange={(e) => setAdmissionData({...admissionData, waiveOff: parseInt(e.target.value) || 0})} /></div>
-                           <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Late Penalty</label><input type="number" className="w-full p-2 border rounded text-gray-900" placeholder="₹ 0" value={admissionData.penalty} onChange={(e) => setAdmissionData({...admissionData, penalty: parseInt(e.target.value) || 0})} /></div>
+                           <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Waive Off</label><input type="number" className="w-full p-2 bg-white border border-slate-200 rounded-lg text-slate-900" placeholder="0" value={admissionData.waiveOff} onChange={(e) => setAdmissionData({...admissionData, waiveOff: parseInt(e.target.value) || 0})} /></div>
+                           <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Late Penalty</label><input type="number" className="w-full p-2 bg-white border border-slate-200 rounded-lg text-slate-900" placeholder="0" value={admissionData.penalty} onChange={(e) => setAdmissionData({...admissionData, penalty: parseInt(e.target.value) || 0})} /></div>
                         </div>
-                        <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Installments</label><select className="w-full p-2 border rounded text-gray-900 bg-white" value={admissionData.installments} onChange={(e) => setAdmissionData({...admissionData, installments: parseInt(e.target.value)})}>{[1,2,3,4,5,6,9,12].map(n => <option key={n} value={n}>{n} Installments</option>)}</select></div>
-                        {admissionData.installmentSchedule.length > 0 && <div className="mt-2"><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Schedule (Including GST if applied)</label><div className="bg-white border rounded overflow-hidden text-sm">{admissionData.installmentSchedule.map((inst, index) => (<div key={index} className="flex border-b last:border-0"><div className="w-10 p-2 bg-gray-50 border-r text-center text-gray-500 font-bold">{index+1}</div><div className="flex-1 p-1"><input type="date" className="w-full p-1 text-gray-900 text-xs" value={inst.dueDate} onChange={(e) => { const newSchedule = [...admissionData.installmentSchedule]; newSchedule[index].dueDate = e.target.value; setAdmissionData({...admissionData, installmentSchedule: newSchedule}); }}/></div><div className="w-24 p-1 border-l"><input type="number" className="w-full p-1 text-gray-900 text-right font-bold text-xs" value={inst.amount} onChange={(e) => { const newSchedule = [...admissionData.installmentSchedule]; newSchedule[index].amount = parseInt(e.target.value) || 0; setAdmissionData({...admissionData, installmentSchedule: newSchedule}); }}/></div></div>))}</div></div>}
-                        <div className="text-right text-sm font-bold text-blue-800 flex justify-end gap-2">
-                            {admissionData.withGst && <span className="text-xs text-blue-400 bg-blue-100 px-2 rounded flex items-center">+ 18% GST Applied</span>}
-                            <span>Net Payable: ₹ {admissionData.installmentSchedule.reduce((a, b) => a + b.amount, 0).toLocaleString()}</span>
+                        <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Installments</label><select className="w-full p-2 bg-white border border-slate-200 rounded-lg text-slate-900" value={admissionData.installments} onChange={(e) => setAdmissionData({...admissionData, installments: parseInt(e.target.value)})}>{[1,2,3,4,5,6,9,12].map(n => <option key={n} value={n}>{n} Installments</option>)}</select></div>
+                        
+                        {admissionData.installmentSchedule.length > 0 && <div className="mt-2"><div className="bg-white/80 border border-slate-200 rounded-lg overflow-hidden text-xs">{admissionData.installmentSchedule.map((inst, index) => (<div key={index} className="flex border-b border-slate-100 last:border-0"><div className="w-8 py-2 bg-slate-50 text-center text-slate-400 font-bold">{index+1}</div><div className="flex-1 p-1"><input type="date" className="w-full p-1 bg-transparent text-slate-900 outline-none" value={inst.dueDate} onChange={(e) => { const newSchedule = [...admissionData.installmentSchedule]; newSchedule[index].dueDate = e.target.value; setAdmissionData({...admissionData, installmentSchedule: newSchedule}); }}/></div><div className="w-24 p-1 border-l border-slate-100"><input type="number" className="w-full p-1 bg-transparent text-right font-bold text-slate-700 outline-none" value={inst.amount} onChange={(e) => { const newSchedule = [...admissionData.installmentSchedule]; newSchedule[index].amount = parseInt(e.target.value) || 0; setAdmissionData({...admissionData, installmentSchedule: newSchedule}); }}/></div></div>))}</div></div>}
+                        
+                        <div className="text-right text-sm font-bold text-slate-800 flex justify-end items-center gap-2 pt-2 border-t border-blue-200">
+                            {admissionData.withGst && <span className="text-[10px] text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full font-bold">GST INCLUDED</span>}
+                            <span>Total: ₹ {admissionData.installmentSchedule.reduce((a, b) => a + b.amount, 0).toLocaleString()}</span>
                         </div>
                     </div>
                   </div>
                   <div className="space-y-4">
-                    <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider border-b pb-2">Parent Details</h3>
-                    <input className="w-full p-2 border rounded text-gray-900" required placeholder="Parent ID" value={admissionData.parentId} onChange={(e) => setAdmissionData({...admissionData, parentId: e.target.value})} />
-                    <input className="w-full p-2 border rounded text-gray-900" required placeholder="Password" value={admissionData.parentPassword} onChange={(e) => setAdmissionData({...admissionData, parentPassword: e.target.value})} />
-                    <input className="w-full p-2 border rounded text-gray-900" required placeholder="Phone" value={admissionData.parentPhone} onChange={(e) => setAdmissionData({...admissionData, parentPhone: e.target.value})} />
+                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2 mb-4">Parent Details</h3>
+                    <input className="w-full p-3 bg-white/50 border border-slate-200 rounded-xl text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition" required placeholder="Parent ID" value={admissionData.parentId} onChange={(e) => setAdmissionData({...admissionData, parentId: e.target.value})} />
+                    <input className="w-full p-3 bg-white/50 border border-slate-200 rounded-xl text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition" required placeholder="Password" value={admissionData.parentPassword} onChange={(e) => setAdmissionData({...admissionData, parentPassword: e.target.value})} />
+                    <input className="w-full p-3 bg-white/50 border border-slate-200 rounded-xl text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition" required placeholder="Phone (10 digits)" value={admissionData.parentPhone} onChange={(e) => handlePhoneInput(e, setAdmissionData, 'parentPhone')} maxLength={10} />
                   </div>
                 </div>
-                <div className="mt-8 pt-6 border-t flex justify-end"><button className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-blue-700 shadow-lg flex items-center"><CheckCircle className="mr-2" size={18} /> Confirm Admission</button></div>
+                <div className="mt-8 pt-6 border-t border-slate-100 flex justify-end"><button className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 hover:scale-[1.02] transition-all flex items-center active:scale-95"><CheckCircle className="mr-2" size={18} /> Confirm Admission</button></div>
               </form>
             </div>
           </div>
         )}
 
-        {/* ... (Other Tabs Remain Unchanged) ... */}
+        {/* ... (Batches & Accounts - styled similarly if needed, keeping mostly same for brevity but with glassPanel class) ... */}
         {activeTab === 'batches' && (
-          <div className="grid grid-cols-2 gap-8">
-            <div className="bg-white p-6 rounded-xl shadow-sm border">
-              <h3 className="font-bold text-gray-800 mb-4">Create Batch</h3>
+          <div className="grid grid-cols-2 gap-8 max-w-6xl mx-auto">
+            <div className={glassPanel + " p-6"}>
+              <h3 className="font-bold text-slate-800 mb-4 text-lg">Create Batch</h3>
               <form onSubmit={handleAddBatch} className="space-y-4">
-                <input className="w-full p-2 border rounded text-gray-900" placeholder="Batch Name" value={newBatch.name} onChange={(e) => setNewBatch({...newBatch, name: e.target.value})} required />
-                <input className="w-full p-2 border rounded text-gray-900" placeholder="Year" value={newBatch.startYear} onChange={(e) => setNewBatch({...newBatch, startYear: e.target.value})} required />
+                <input className="w-full p-3 bg-white/50 border rounded-xl text-slate-900 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Batch Name" value={newBatch.name} onChange={(e) => setNewBatch({...newBatch, name: e.target.value})} required />
+                <input className="w-full p-3 bg-white/50 border rounded-xl text-slate-900 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Year" value={newBatch.startYear} onChange={(e) => setNewBatch({...newBatch, startYear: e.target.value})} required />
                 <div className="grid grid-cols-2 gap-4">
-                   <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Max Students (Strength)</label><input type="number" className="w-full p-2 border rounded text-gray-900" placeholder="60" value={newBatch.strength} onChange={(e) => setNewBatch({...newBatch, strength: parseInt(e.target.value) || 0})} required /></div>
-                   <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Course Fee (Standard)</label><input type="number" className="w-full p-2 border rounded text-gray-900" placeholder="₹" value={newBatch.fee} onChange={(e) => setNewBatch({...newBatch, fee: parseInt(e.target.value) || 0})} required /></div>
+                   <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Max Students</label><input type="number" className="w-full p-3 bg-white/50 border rounded-xl text-slate-900 outline-none" placeholder="60" value={newBatch.strength} onChange={(e) => setNewBatch({...newBatch, strength: parseInt(e.target.value) || 0})} required /></div>
+                   <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Standard Fee</label><input type="number" className="w-full p-3 bg-white/50 border rounded-xl text-slate-900 outline-none" placeholder="₹" value={newBatch.fee} onChange={(e) => setNewBatch({...newBatch, fee: parseInt(e.target.value) || 0})} required /></div>
                 </div>
-                <button className="w-full bg-slate-900 text-white py-2 rounded font-bold hover:bg-slate-800">Add</button>
+                <button className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold hover:bg-slate-800 transition shadow-lg">Add Batch</button>
               </form>
             </div>
-            <div className="bg-white p-6 rounded-xl shadow-sm border">
-              <h3 className="font-bold text-gray-800 mb-4 flex justify-between">Active Batches {isLoading && <Loader2 className="animate-spin text-blue-600" size={18} />}</h3>
-              {batches.length === 0 ? <p className="text-gray-400 text-sm">No batches found.</p> : batches.map(b => (<div key={b.id} className="flex justify-between border-b py-2 text-gray-700"><span>{b.name} <span className="text-xs text-gray-400">({b.startYear})</span></span><div className="text-right"><span className="font-bold block text-sm">{b.strength} Students</span><span className="text-xs text-green-600 font-bold">Fee: ₹{(b.fee || 0).toLocaleString()}</span></div></div>))}
+            <div className={glassPanel + " p-6"}>
+              <h3 className="font-bold text-slate-800 mb-4 flex justify-between items-center text-lg">Active Batches {isLoading && <Loader2 className="animate-spin text-blue-600" size={18} />}</h3>
+              <div className="space-y-2">
+                {batches.length === 0 ? <p className="text-slate-400 text-sm italic">No batches found.</p> : batches.map(b => (<div key={b.id} className="flex justify-between items-center bg-white/40 p-3 rounded-lg border border-white/50"><span className="font-medium text-slate-700">{b.name} <span className="text-xs text-slate-400 ml-1">({b.startYear})</span></span><div className="text-right"><span className="font-bold block text-sm text-slate-800">{b.strength} Students</span><span className="text-xs text-green-600 font-bold bg-green-50 px-2 py-0.5 rounded-full">₹{(b.fee || 0).toLocaleString()}</span></div></div>))}
+              </div>
             </div>
           </div>
         )}
 
         {activeTab === 'accounts' && (
-          <div className="space-y-8">
+          <div className="space-y-8 max-w-6xl mx-auto">
             <div className="grid grid-cols-3 gap-6">
-              <div className="bg-green-50 p-6 rounded-xl border border-green-200"><div className="text-sm font-bold text-green-700">REVENUE</div><div className="text-3xl font-bold text-green-900">₹ {(summary.revenue || 0).toLocaleString()}</div></div>
-              <div className="bg-red-50 p-6 rounded-xl border border-red-200"><div className="text-sm font-bold text-red-700">EXPENSES</div><div className="text-3xl font-bold text-red-900">₹ {(summary.expenses || 0).toLocaleString()}</div></div>
-              <div className="bg-blue-50 p-6 rounded-xl border border-blue-200"><div className="text-sm font-bold text-blue-700">NET PROFIT</div><div className="text-3xl font-bold text-blue-900">₹ {(summary.profit || 0).toLocaleString()}</div></div>
+              <div className="bg-emerald-50/80 backdrop-blur-sm p-6 rounded-2xl border border-emerald-100 shadow-sm"><div className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Total Revenue</div><div className="text-3xl font-black text-emerald-900 tracking-tight">₹ {(summary.revenue || 0).toLocaleString()}</div></div>
+              <div className="bg-red-50/80 backdrop-blur-sm p-6 rounded-2xl border border-red-100 shadow-sm"><div className="text-xs font-bold text-red-600 uppercase tracking-wider mb-1">Total Expenses</div><div className="text-3xl font-black text-red-900 tracking-tight">₹ {(summary.expenses || 0).toLocaleString()}</div></div>
+              <div className="bg-blue-50/80 backdrop-blur-sm p-6 rounded-2xl border border-blue-100 shadow-sm"><div className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Net Profit</div><div className="text-3xl font-black text-blue-900 tracking-tight">₹ {(summary.profit || 0).toLocaleString()}</div></div>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className="bg-white p-6 rounded-xl shadow-sm border">
-                <h3 className="font-bold text-gray-800 mb-4 flex items-center"><Wallet size={18} className="mr-2 text-green-600"/> Collect Fee</h3>
+              <div className={glassPanel + " p-6"}>
+                <h3 className="font-bold text-slate-800 mb-4 flex items-center text-lg"><Wallet size={20} className="mr-2 text-emerald-600"/> Collect Fee</h3>
                 <form onSubmit={handleCollectFee} className="space-y-4">
-                  <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Select Student</label><select className="w-full p-2 border rounded text-gray-900 bg-white" value={feeForm.studentId} onChange={e => setFeeForm({...feeForm, studentId: e.target.value})} required><option value="">-- Choose --</option>{students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.studentId})</option>)}</select></div>
+                  <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Select Student</label><select className="w-full p-3 bg-white/50 border rounded-xl text-slate-900 outline-none" value={feeForm.studentId} onChange={e => setFeeForm({...feeForm, studentId: e.target.value})} required><option value="">-- Choose --</option>{students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.studentId})</option>)}</select></div>
                   <div className="grid grid-cols-2 gap-4">
-                    <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Amount (₹)</label><input type="number" className="w-full p-2 border rounded text-gray-900" placeholder="5000" value={feeForm.amount} onChange={e => setFeeForm({...feeForm, amount: parseInt(e.target.value) || 0})} required/></div>
-                    <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Mode</label><select className="w-full p-2 border rounded text-gray-900 bg-white" value={feeForm.paymentMode} onChange={e => setFeeForm({...feeForm, paymentMode: e.target.value})}><option value="CASH">CASH</option><option value="ONLINE">ONLINE / UPI</option><option value="CHEQUE">CHEQUE</option></select></div>
+                    <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Amount</label><input type="number" className="w-full p-3 bg-white/50 border rounded-xl text-slate-900 outline-none" placeholder="₹ 5000" value={feeForm.amount} onChange={e => setFeeForm({...feeForm, amount: parseInt(e.target.value) || 0})} required/></div>
+                    <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Mode</label><select className="w-full p-3 bg-white/50 border rounded-xl text-slate-900 outline-none" value={feeForm.paymentMode} onChange={e => setFeeForm({...feeForm, paymentMode: e.target.value})}><option value="CASH">CASH</option><option value="ONLINE">ONLINE / UPI</option><option value="CHEQUE">CHEQUE</option></select></div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 p-2 bg-blue-50/50 rounded-lg border border-blue-100">
                     <input type="checkbox" id="gstToggle" checked={feeForm.withGst} onChange={e => setFeeForm({...feeForm, withGst: e.target.checked})} className="w-4 h-4 text-blue-600 rounded" />
-                    <label htmlFor="gstToggle" className="text-xs font-bold text-gray-600 flex items-center gap-1"><Percent size={12}/> Enable GST (18%) for Invoice</label>
+                    <label htmlFor="gstToggle" className="text-xs font-bold text-slate-600 flex items-center gap-1 cursor-pointer select-none"><Percent size={12}/> Generate GST Invoice (18%)</label>
                   </div>
-                  <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Transaction Ref / Remarks</label><input type="text" className="w-full p-2 border rounded text-gray-900" placeholder="e.g. UPI Ref No. or Cash Receipt" value={feeForm.transactionId} onChange={e => setFeeForm({...feeForm, transactionId: e.target.value})}/></div>
-                  <button className="w-full bg-green-600 text-white py-2 rounded font-bold hover:bg-green-700">Record Payment & Print Invoice</button>
+                  <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks / Transaction Ref</label><input type="text" className="w-full p-3 bg-white/50 border rounded-xl text-slate-900 outline-none" placeholder="e.g. Cash Receipt No. 101" value={feeForm.transactionId} onChange={e => setFeeForm({...feeForm, transactionId: e.target.value})}/></div>
+                  <button className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition shadow-lg shadow-emerald-500/20">Record Payment & Print</button>
                 </form>
               </div>
-              <div className="bg-white p-6 rounded-xl shadow-sm border">
-                <h3 className="font-bold text-gray-800 mb-4 flex items-center"><IndianRupee size={18} className="mr-2 text-red-600"/> Log Expense</h3>
+              <div className={glassPanel + " p-6"}>
+                <h3 className="font-bold text-slate-800 mb-4 flex items-center text-lg"><IndianRupee size={20} className="mr-2 text-red-600"/> Log Expense</h3>
                 <form onSubmit={handleAddExpense} className="space-y-4">
-                   <div className="flex gap-4"><div className="flex-1"><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Title</label><input className="w-full p-2 border rounded text-gray-900" placeholder="e.g. Electricity" value={newExpense.title} onChange={e => setNewExpense({...newExpense, title: e.target.value})} required /></div><div className="w-1/3"><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Amount</label><input type="number" className="w-full p-2 border rounded text-gray-900" placeholder="₹" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: parseInt(e.target.value) || 0})} required /></div></div>
-                   <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Category</label><select className="w-full p-2 border rounded text-gray-900 bg-white" value={newExpense.category} onChange={e => setNewExpense({...newExpense, category: e.target.value})}><option>General</option><option>Salary</option><option>Infra</option></select></div>
-                   <button className="w-full bg-red-600 text-white py-2 rounded font-bold hover:bg-red-700">Log Expense</button>
+                   <div className="flex gap-4"><div className="flex-1"><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Title</label><input className="w-full p-3 bg-white/50 border rounded-xl text-slate-900 outline-none" placeholder="e.g. Electricity Bill" value={newExpense.title} onChange={e => setNewExpense({...newExpense, title: e.target.value})} required /></div><div className="w-1/3"><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Amount</label><input type="number" className="w-full p-3 bg-white/50 border rounded-xl text-slate-900 outline-none" placeholder="₹" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: parseInt(e.target.value) || 0})} required /></div></div>
+                   <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Category</label><select className="w-full p-3 bg-white/50 border rounded-xl text-slate-900 outline-none" value={newExpense.category} onChange={e => setNewExpense({...newExpense, category: e.target.value})}><option>General</option><option>Salary</option><option>Infra</option></select></div>
+                   <button className="w-full bg-red-600 text-white py-3 rounded-xl font-bold hover:bg-red-700 transition shadow-lg shadow-red-500/20">Log Expense</button>
                 </form>
               </div>
             </div>
@@ -695,70 +750,79 @@ export default function DirectorPage() {
         )}
 
         {activeTab === 'enquiries' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-sm border h-fit">
-              <h3 className="font-bold text-gray-800 mb-4 flex items-center border-b pb-3"><PhoneCall size={20} className="mr-2 text-blue-600"/> Log New Enquiry</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
+            <div className={`lg:col-span-1 h-fit ${glassPanel} p-6`}>
+              <h3 className="font-bold text-slate-800 mb-4 flex items-center border-b border-slate-200 pb-3 text-lg"><PhoneCall size={20} className="mr-2 text-blue-600"/> Log New Enquiry</h3>
               <form onSubmit={handleAddEnquiry} className="space-y-4">
-                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Student Name</label><input className="w-full p-2 border rounded text-gray-900" required placeholder="e.g. Amit Kumar" value={enquiryForm.studentName} onChange={e => setEnquiryForm({...enquiryForm, studentName: e.target.value})} /></div>
-                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Mobile Number</label><input className="w-full p-2 border rounded text-gray-900" required placeholder="98765xxxxx" value={enquiryForm.mobile} onChange={e => setEnquiryForm({...enquiryForm, mobile: e.target.value})} /></div>
-                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Interested Course</label><select className="w-full p-2 border rounded text-gray-900 bg-white" required value={enquiryForm.course} onChange={e => setEnquiryForm({...enquiryForm, course: e.target.value})}><option value="">Select Course</option>{batches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}<option value="FOUNDATION">Foundation</option></select></div>
-                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Assign To</label><input className="w-full p-2 border rounded text-gray-900" placeholder="Counselor Name" value={enquiryForm.allotedTo} onChange={e => setEnquiryForm({...enquiryForm, allotedTo: e.target.value})} /></div>
-                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Remarks</label><textarea className="w-full p-2 border rounded text-gray-900" rows={3} placeholder="Notes..." value={enquiryForm.remarks} onChange={e => setEnquiryForm({...enquiryForm, remarks: e.target.value})} /></div>
-                <button className="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700">Save Enquiry</button>
+                <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Student Name</label><input className="w-full p-3 bg-white/50 border rounded-xl text-slate-900 outline-none" required placeholder="e.g. Amit Kumar" value={enquiryForm.studentName} onChange={e => setEnquiryForm({...enquiryForm, studentName: e.target.value})} /></div>
+                <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Mobile (10 Digits)</label><input className="w-full p-3 bg-white/50 border rounded-xl text-slate-900 outline-none" required placeholder="98765xxxxx" value={enquiryForm.mobile} onChange={e => handlePhoneInput(e, setEnquiryForm, 'mobile')} maxLength={10} /></div>
+                <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Interested Course</label><select className="w-full p-3 bg-white/50 border rounded-xl text-slate-900 outline-none" required value={enquiryForm.course} onChange={e => setEnquiryForm({...enquiryForm, course: e.target.value})}><option value="">Select Course</option>{batches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}<option value="FOUNDATION">Foundation</option></select></div>
+                <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Assign To</label><input className="w-full p-3 bg-white/50 border rounded-xl text-slate-900 outline-none" placeholder="Counselor Name" value={enquiryForm.allotedTo} onChange={e => setEnquiryForm({...enquiryForm, allotedTo: e.target.value})} /></div>
+                <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</label><textarea className="w-full p-3 bg-white/50 border rounded-xl text-slate-900 outline-none" rows={3} placeholder="Notes..." value={enquiryForm.remarks} onChange={e => setEnquiryForm({...enquiryForm, remarks: e.target.value})} /></div>
+                <button className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition shadow-lg">Save Enquiry</button>
               </form>
             </div>
-            <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border overflow-hidden flex flex-col h-[600px]">
-              <div className="px-6 py-4 border-b bg-gray-50 flex justify-between items-center"><h3 className="font-bold text-gray-800">Recent Enquiries</h3><span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded">{enquiries.length} Total</span></div>
-              <div className="flex-1 overflow-y-auto">
+            <div className={`lg:col-span-2 ${glassPanel} overflow-hidden flex flex-col h-[700px]`}>
+              <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/50 flex justify-between items-center"><h3 className="font-bold text-slate-800">Recent Enquiries</h3><span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded">{enquiries.length} Total</span></div>
+              <div className="flex-1 overflow-y-auto custom-scrollbar">
                 <table className="w-full text-left">
-                  <thead className="bg-gray-100 text-gray-500 text-xs uppercase sticky top-0 z-10 shadow-sm"><tr><th className="px-6 py-3">Name / Mobile</th><th className="px-6 py-3">Assigned To</th><th className="px-6 py-3">Status</th><th className="px-6 py-3 text-right">Action</th></tr></thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {paginatedEnquiries.length === 0 ? <tr><td colSpan={4} className="px-6 py-8 text-center text-gray-400">No enquiries found.</td></tr> : paginatedEnquiries.map(enq => (
-                      <tr key={enq.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4"><div className="font-bold text-gray-900">{enq.studentName}</div><div className="text-xs text-gray-500">{enq.mobile}</div></td>
+                  <thead className="bg-slate-100/80 text-slate-500 text-xs uppercase sticky top-0 z-10 backdrop-blur-sm"><tr><th className="px-6 py-3">Name / Mobile</th><th className="px-6 py-3">Details</th><th className="px-6 py-3">Status</th><th className="px-6 py-3 text-right">Action</th></tr></thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {paginatedEnquiries.length === 0 ? <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-400 italic">No enquiries found.</td></tr> : paginatedEnquiries.map(enq => (
+                      <tr key={enq.id} className="hover:bg-slate-50/50 transition">
                         <td className="px-6 py-4">
-                           <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-50 text-blue-700 text-xs font-bold border border-blue-100">
-                              <User size={12}/> {enq.allotedTo || 'Unassigned'}
-                           </span>
-                           <div className="text-xs text-gray-500 mt-1 pl-1">{enq.course}</div>
+                            <div className="font-bold text-slate-900">{enq.studentName}</div>
+                            <div className="text-xs text-slate-500 font-mono">{enq.mobile}</div>
+                            {/* --- REMARKS DISPLAY --- */}
+                            {enq.remarks && (
+                                <div className="mt-1 text-[10px] text-slate-600 bg-yellow-50 px-2 py-1 rounded border border-yellow-100 flex gap-1 items-start w-fit max-w-[200px]">
+                                    <MessageSquare size={10} className="mt-0.5 shrink-0"/> <span className="line-clamp-2">{enq.remarks}</span>
+                                </div>
+                            )}
                         </td>
-                        <td className="px-6 py-4"><div className="flex items-center gap-2"><select className="p-1 border rounded text-xs bg-white text-gray-900" value={enq.followUpCount || 0} onChange={(e) => handleUpdateEnquiryStatus(enq.id, enq.status, parseInt(e.target.value))}>{[0,1,2,3,4,5].map(n => <option key={n} value={n}>{n} Follow-ups</option>)}</select></div></td>
-                        <td className="px-6 py-4 text-right"><select className="p-1 border rounded text-xs bg-white text-gray-900 w-24" value={enq.status} onChange={(e) => handleUpdateEnquiryStatus(enq.id, e.target.value, enq.followUpCount)}><option value="PENDING">Pending</option><option value="ADMITTED">Admitted</option><option value="PARTIALLY_ALLOCATED">Allocated</option><option value="UNALLOCATED">Unallocated</option><option value="CANCELLED">Cancel</option></select></td>
+                        <td className="px-6 py-4">
+                           <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-indigo-50 text-indigo-700 text-[10px] font-bold border border-indigo-100 mb-1">
+                              <User size={10}/> {enq.allotedTo || 'Unassigned'}
+                           </span>
+                           <div className="text-xs text-slate-600 font-medium">{enq.course}</div>
+                        </td>
+                        <td className="px-6 py-4"><div className="flex items-center gap-2"><select className="p-1 border rounded text-xs bg-white text-slate-900 outline-none" value={enq.followUpCount || 0} onChange={(e) => handleUpdateEnquiryStatus(enq.id, enq.status, parseInt(e.target.value))}>{[0,1,2,3,4,5].map(n => <option key={n} value={n}>{n} Follow-ups</option>)}</select></div></td>
+                        <td className="px-6 py-4 text-right"><select className={`p-1.5 border rounded text-xs font-bold outline-none ${enq.status === 'ADMITTED' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-white text-slate-900'}`} value={enq.status} onChange={(e) => handleUpdateEnquiryStatus(enq.id, e.target.value, enq.followUpCount)}><option value="PENDING">Pending</option><option value="ADMITTED">Admitted</option><option value="PARTIALLY_ALLOCATED">Allocated</option><option value="UNALLOCATED">Unallocated</option><option value="CANCELLED">Cancel</option></select></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              {totalEnquiryPages > 1 && <div className="p-4 border-t bg-gray-50 flex justify-between items-center text-xs"><span className="text-gray-500">Page {enquiryPage} of {totalEnquiryPages}</span><div className="flex gap-2"><button onClick={() => setEnquiryPage(p => Math.max(1, p - 1))} disabled={enquiryPage === 1} className="p-1.5 rounded border bg-white hover:bg-gray-100 disabled:opacity-50"><ChevronLeft size={16}/></button><button onClick={() => setEnquiryPage(p => Math.min(totalEnquiryPages, p + 1))} disabled={enquiryPage === totalEnquiryPages} className="p-1.5 rounded border bg-white hover:bg-gray-100 disabled:opacity-50"><ChevronRight size={16}/></button></div></div>}
+              {totalEnquiryPages > 1 && <div className="p-4 border-t border-slate-200 bg-slate-50/50 flex justify-between items-center text-xs"><span className="text-slate-500">Page {enquiryPage} of {totalEnquiryPages}</span><div className="flex gap-2"><button onClick={() => setEnquiryPage(p => Math.max(1, p - 1))} disabled={enquiryPage === 1} className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50"><ChevronLeft size={16}/></button><button onClick={() => setEnquiryPage(p => Math.min(totalEnquiryPages, p + 1))} disabled={enquiryPage === totalEnquiryPages} className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50"><ChevronRight size={16}/></button></div></div>}
             </div>
           </div>
         )}
 
         {activeTab === 'directory' && (
-          <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-            <div className="px-6 py-4 border-b bg-gray-50 flex flex-col md:flex-row justify-between items-center gap-4">
-              <div><h3 className="font-bold text-gray-800">Complete Student & Parent Registry</h3><div className="text-xs font-bold text-gray-500 uppercase">{filteredStudents.length} Records Found</div></div>
-              <div className="relative w-full md:w-64"><input type="text" className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /><Search size={16} className="absolute left-3 top-2.5 text-gray-400" /></div>
+          <div className={`${glassPanel} overflow-hidden max-w-7xl mx-auto`}>
+            <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-4">
+              <div><h3 className="font-bold text-slate-800 text-lg">Student Directory</h3><div className="text-xs font-bold text-slate-500 uppercase">{filteredStudents.length} Records Found</div></div>
+              <div className="relative w-full md:w-72"><input type="text" className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm" placeholder="Search students..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /><Search size={16} className="absolute left-3 top-3 text-slate-400" /></div>
             </div>
             <div className="overflow-x-auto">
               <div className="max-h-[600px] overflow-y-auto">
                 <table className="w-full text-left min-w-[1000px]">
-                  <thead className="bg-gray-800 text-white text-xs uppercase sticky top-0 z-10 shadow-md"><tr><th className="px-6 py-4">Student Info</th><th className="px-6 py-4">Credentials (S)</th><th className="px-6 py-4">Parent Info</th><th className="px-6 py-4">Credentials (P)</th><th className="px-6 py-4 text-center">Mobile (Security)</th><th className="px-6 py-4 text-right">Fee Status</th></tr></thead>
-                  <tbody className="divide-y divide-gray-100 text-sm">
-                    {paginatedStudents.length === 0 ? <tr><td colSpan={6} className="text-center py-8 text-gray-400">No records match your search.</td></tr> : paginatedStudents.map(s => (
+                  <thead className="bg-slate-900 text-white text-xs uppercase sticky top-0 z-10 shadow-md"><tr><th className="px-6 py-4">Student Info</th><th className="px-6 py-4">Credentials (S)</th><th className="px-6 py-4">Parent Info</th><th className="px-6 py-4">Credentials (P)</th><th className="px-6 py-4 text-center">Mobile (Security)</th><th className="px-6 py-4 text-right">Fee Status</th></tr></thead>
+                  <tbody className="divide-y divide-slate-100 text-sm">
+                    {paginatedStudents.length === 0 ? <tr><td colSpan={6} className="text-center py-10 text-slate-400 italic">No records match your search.</td></tr> : paginatedStudents.map(s => (
                       <tr key={s.id} className="hover:bg-blue-50/30 transition">
-                        <td className="px-6 py-4"><div className="font-bold text-gray-900">{s.name}</div><span className="inline-block bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded mt-1">{s.batch}</span></td>
-                        <td className="px-6 py-4 font-mono text-xs"><div className="text-gray-500">ID: <span className="text-blue-600 font-bold">{s.studentId}</span></div><div className="text-gray-400">PW: {s.studentPassword || '****'}</div></td>
-                        <td className="px-6 py-4"><div className="font-medium text-gray-800">Parent of {s.name.split(' ')[0]}</div>{s.address && <div className="text-xs text-gray-400 mt-1 max-w-[150px] truncate" title={s.address}>{s.address}</div>}</td>
-                        <td className="px-6 py-4 font-mono text-xs"><div className="text-gray-500">ID: <span className="text-purple-600 font-bold">{s.parentId}</span></div><div className="text-gray-400">PW: {s.parentPassword || '****'}</div></td>
-                        <td className="px-6 py-4 text-center"><div className="flex items-center justify-center gap-2 bg-gray-50 border border-gray-200 rounded px-3 py-1.5 w-fit mx-auto"><span className={`font-mono font-bold ${s.isMobileMasked ? 'text-gray-400' : 'text-green-600'}`}>{s.parentMobile}</span>{!s.isMobileMasked && <button onClick={() => navigator.clipboard.writeText(s.parentMobile)} className="text-gray-400 hover:text-blue-600 transition" title="Copy"><Copy size={14}/></button>}{s.isMobileMasked && <span title="Locked by Security Panel"><Lock size={12} className="text-red-400" /></span>}</div></td>
-                        <td className="px-6 py-4 text-right"><div className="text-gray-500 text-xs">Total: ₹{s.feeTotal.toLocaleString()}</div><div className={`font-bold ${s.feeRemaining > 0 ? 'text-red-600' : 'text-green-600'}`}>Due: ₹{s.feeRemaining.toLocaleString()}</div></td>
+                        <td className="px-6 py-4"><div className="font-bold text-slate-900 text-base">{s.name}</div><div className="flex gap-2 mt-1"><span className="inline-block bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide">{s.batch}</span>{s.dob && <span className="inline-flex items-center gap-1 bg-pink-50 text-pink-600 text-[10px] font-bold px-2 py-0.5 rounded border border-pink-100"><Cake size={10}/> {new Date(s.dob).toLocaleDateString(undefined, {month:'short', day:'numeric'})}</span>}</div></td>
+                        <td className="px-6 py-4 font-mono text-xs"><div className="text-slate-500">ID: <span className="text-blue-600 font-bold">{s.studentId}</span></div><div className="text-slate-400">PW: {s.studentPassword || '****'}</div></td>
+                        <td className="px-6 py-4"><div className="font-medium text-slate-800">Parent of {s.name.split(' ')[0]}</div>{s.address && <div className="text-xs text-slate-400 mt-1 max-w-[150px] truncate" title={s.address}>{s.address}</div>}</td>
+                        <td className="px-6 py-4 font-mono text-xs"><div className="text-slate-500">ID: <span className="text-purple-600 font-bold">{s.parentId}</span></div><div className="text-slate-400">PW: {s.parentPassword || '****'}</div></td>
+                        <td className="px-6 py-4 text-center"><div className="flex items-center justify-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5 w-fit mx-auto shadow-sm"><span className={`font-mono font-bold ${s.isMobileMasked ? 'text-slate-400' : 'text-green-600'}`}>{s.parentMobile}</span>{!s.isMobileMasked && <button onClick={() => navigator.clipboard.writeText(s.parentMobile)} className="text-slate-400 hover:text-blue-600 transition" title="Copy"><Copy size={14}/></button>}{s.isMobileMasked && <span title="Locked by Security Panel"><Lock size={12} className="text-red-400" /></span>}</div></td>
+                        <td className="px-6 py-4 text-right"><div className="text-slate-500 text-xs font-medium">Total: ₹{s.feeTotal.toLocaleString()}</div><div className={`font-bold text-base ${s.feeRemaining > 0 ? 'text-red-600' : 'text-green-600'}`}>Due: ₹{s.feeRemaining.toLocaleString()}</div></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              {totalDirectoryPages > 1 && <div className="p-4 border-t bg-gray-50 flex justify-between items-center text-xs"><span className="text-gray-500">Page {directoryPage} of {totalDirectoryPages}</span><div className="flex gap-2"><button onClick={() => setDirectoryPage(p => Math.max(1, p - 1))} disabled={directoryPage === 1} className="p-1.5 rounded border bg-white hover:bg-gray-100 disabled:opacity-50"><ChevronLeft size={16}/></button><button onClick={() => setDirectoryPage(p => Math.min(totalDirectoryPages, p + 1))} disabled={directoryPage === totalDirectoryPages} className="p-1.5 rounded border bg-white hover:bg-gray-100 disabled:opacity-50"><ChevronRight size={16}/></button></div></div>}
+              {totalDirectoryPages > 1 && <div className="p-4 border-t border-slate-200 bg-slate-50/50 flex justify-between items-center text-xs"><span className="text-slate-500">Page {directoryPage} of {totalDirectoryPages}</span><div className="flex gap-2"><button onClick={() => setDirectoryPage(p => Math.max(1, p - 1))} disabled={directoryPage === 1} className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50"><ChevronLeft size={16}/></button><button onClick={() => setDirectoryPage(p => Math.min(totalDirectoryPages, p + 1))} disabled={directoryPage === totalDirectoryPages} className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50"><ChevronRight size={16}/></button></div></div>}
             </div>
           </div>
         )}
