@@ -9,7 +9,7 @@ import {
   LogOut, 
   Loader2, 
   Wallet, 
-  Download,
+  Download, 
   AlertCircle,
   PieChart,
   School,
@@ -28,11 +28,13 @@ import {
   FileCheck,
   Receipt,
   Sun,
-  Moon
+  Moon,
+  Info,
+  CheckCircle
 } from 'lucide-react';
 
+// --- CONFIGURATION ---
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-console.log("Parent Panel connected to:", API_URL); // Debug log
 
 // --- TYPES ---
 interface FeeRecord {
@@ -156,30 +158,107 @@ const ParentLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
   );
 };
 
-// --- COMPONENT: INVOICE MODAL ---
+// --- COMPONENT: A4 INVOICE MODAL ---
 const ParentInvoiceModal = ({ data, onClose }: { data: any, onClose: () => void }) => {
+  // Simple check to assume if amount is uneven it might include GST or if logic dictates
+  // For now, we display flat amount as stored in DB history
+  
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95 duration-200">
-      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden relative text-slate-900">
-        <div className="bg-slate-900 p-6 text-white flex justify-between items-start">
-           <div><h2 className="text-xl font-bold tracking-widest uppercase text-indigo-400">Fee Receipt</h2><p className="text-xs text-slate-400 mt-1">Invoice #: {data.id ? data.id.slice(0,8).toUpperCase() : 'N/A'}</p></div>
-           <div className="text-right"><div className="font-bold text-lg">AIMS Institute</div><p className="text-xs text-slate-400">Pimpri-Chinchwad, MH</p></div>
+    <div className="fixed inset-0 z-[100] flex items-start justify-center bg-black/70 backdrop-blur-sm overflow-y-auto print:bg-white print:fixed print:inset-0 print:z-[9999] print:block">
+      <style jsx global>{`
+        @media print {
+          @page { size: A4; margin: 0; }
+          body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; }
+          .print-hidden { display: none !important; }
+          .print-a4 { width: 210mm !important; min-height: 297mm !important; margin: 0 auto !important; border: none !important; box-shadow: none !important; padding: 20mm !important; border-radius: 0 !important; }
+        }
+      `}</style>
+      
+      <div className="print-a4 bg-white w-[210mm] min-h-[297mm] p-[20mm] relative shadow-2xl my-8 mx-auto flex flex-col justify-between text-slate-900">
+        
+        {/* HEADER */}
+        <div>
+          <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6 mb-8">
+             <div className="flex flex-col gap-2">
+               <div className="h-16 w-16 bg-slate-900 text-white flex items-center justify-center font-bold text-2xl rounded-lg">AI</div>
+               <div>
+                 <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">RECEIPT</h1>
+                 <p className="text-xs font-bold text-slate-500">OFFICIAL PAYMENT RECORD</p>
+               </div>
+             </div>
+             <div className="text-right">
+               <h2 className="text-xl font-bold text-slate-900">AIMS INSTITUTE</h2>
+               <p className="text-sm text-slate-600">123, Knowledge City</p>
+               <p className="text-sm text-slate-600">Pimpri-Chinchwad, MH</p>
+               <p className="text-sm text-slate-600">contact@aimsinstitute.com</p>
+             </div>
+          </div>
+
+          {/* INFO GRID */}
+          <div className="flex justify-between mb-10">
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Received From</p>
+              <h3 className="text-xl font-bold text-slate-900">{data.studentName}</h3>
+              <p className="text-sm text-slate-600">Student ID: {data.studentId}</p>
+              <p className="text-sm text-slate-600">Batch: {data.batch}</p>
+              <p className="text-sm text-slate-600 mt-1">Parent ID: <span className="font-mono font-bold">{data.parentId}</span></p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Receipt Details</p>
+              <p className="text-sm font-bold text-slate-900">No: {data.id ? data.id.slice(0, 8).toUpperCase() : 'N/A'}</p>
+              <p className="text-sm text-slate-600">Date: {new Date(data.date).toLocaleDateString()}</p>
+              <div className="mt-2 inline-block bg-slate-100 px-3 py-1 rounded text-xs font-bold text-slate-700 uppercase border border-slate-200">
+                Mode: {data.paymentMode || 'CASH'}
+              </div>
+            </div>
+          </div>
+
+          {/* TABLE */}
+          <table className="w-full mb-8">
+            <thead>
+              <tr className="bg-slate-900 text-white">
+                <th className="py-3 px-4 text-left text-xs font-bold uppercase tracking-wider">Description</th>
+                <th className="py-3 px-4 text-right text-xs font-bold uppercase tracking-wider">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-slate-200">
+                <td className="py-4 px-4">
+                  <p className="font-bold text-slate-800">Tuition Fee Payment</p>
+                  <p className="text-xs text-slate-500 italic mt-1">Ref: {data.transactionId || 'N/A'}</p>
+                  <p className="text-xs text-slate-500">{data.remarks}</p>
+                </td>
+                <td className="py-4 px-4 text-right font-mono font-bold text-slate-800">
+                  ₹{(data.amount || 0).toLocaleString()}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* TOTALS */}
+          <div className="flex justify-end mb-12">
+            <div className="w-1/2 border-t-2 border-slate-900 pt-4">
+              <div className="flex justify-between items-center">
+                <span className="text-xl font-black text-slate-900 uppercase">Total Paid</span>
+                <span className="text-2xl font-black text-emerald-600">₹{(data.amount || 0).toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="p-8">
-           <div className="flex justify-between mb-8 text-sm">
-              <div><p className="text-xs font-bold text-slate-400 uppercase">Billed To</p><p className="font-bold text-slate-800 text-lg">{data.studentName}</p><p className="text-slate-500">ID: {data.studentId}</p><p className="text-slate-500">Parent ID: <span className="font-mono font-bold text-indigo-600">{data.parentId}</span></p></div>
-              <div className="text-right"><p className="text-xs font-bold text-slate-400 uppercase">Transaction Info</p><p className="font-bold text-slate-800">{new Date(data.date).toLocaleDateString()}</p><p className="text-slate-500">Mode: <span className="font-bold">{data.paymentMode || 'CASH'}</span></p><p className="text-slate-500 text-xs mt-1">Ref: <span className="font-mono">{data.transactionId || 'N/A'}</span></p></div>
-           </div>
-           <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 mb-6">
-              <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-200"><span className="font-bold text-slate-600 text-sm">Description</span><span className="font-bold text-slate-600 text-sm">Amount</span></div>
-              <div className="flex justify-between items-center"><span className="text-slate-800">Tuition Fee Payment <span className="text-xs text-slate-400 ml-2">({data.remarks})</span></span><span className="font-bold text-slate-800">₹{(data.amount||0).toLocaleString()}</span></div>
-           </div>
-           <div className="flex justify-end"><div className="text-right"><p className="text-xs text-slate-400 uppercase font-bold">Total Paid</p><p className="text-2xl font-black text-emerald-600">₹{(data.amount||0).toLocaleString()}</p></div></div>
+
+        {/* FOOTER */}
+        <div className="border-t border-slate-200 pt-6 text-center">
+          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mb-2">Thank you for your payment</p>
+          <p className="text-[10px] text-slate-400">This is a computer-generated document. No signature required.</p>
+          <p className="text-[10px] text-slate-400">AIMS Institute • Registered Education Provider</p>
         </div>
-        <div className="bg-slate-50 p-4 border-t border-slate-100 flex justify-between items-center">
-           <p className="text-xs text-slate-400">Computer generated invoice.</p>
-           <div className="flex gap-2"><button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition"><Printer size={16}/> Print</button><button onClick={onClose} className="p-2 bg-white border border-slate-200 text-slate-500 rounded-lg hover:bg-slate-100 transition"><X size={18}/></button></div>
+
+        {/* PRINT CONTROLS */}
+        <div className="absolute top-4 -right-16 flex flex-col gap-2 print-hidden">
+          <button onClick={() => window.print()} className="bg-blue-600 text-white p-3 rounded-full shadow-lg hover:bg-blue-700 transition" title="Print"><Printer size={20}/></button>
+          <button onClick={onClose} className="bg-white text-slate-700 p-3 rounded-full shadow-lg hover:bg-slate-100 transition" title="Close"><X size={20}/></button>
         </div>
+
       </div>
     </div>
   );
@@ -189,15 +268,54 @@ const ParentInvoiceModal = ({ data, onClose }: { data: any, onClose: () => void 
 const StudentCard = ({ child, onViewInvoice, isDark }: { child: ChildFinancial, onViewInvoice: (inv: any) => void, isDark: boolean }) => {
   const [activeTab, setActiveTab] = useState<'fees' | 'invoices' | 'academics'>('fees');
 
-  const handlePayment = (amount: number, studentId: string) => {
-    alert(`[MOCK PAYMENT GATEWAY]\n\nInitiating Razorpay for Amount: ₹${amount}\nStudent ID: ${studentId}`);
+  // --- LOGIC FIX: Calculate CURRENT Installment amount ---
+  // If user has installments, we ONLY show the next unpaid amount.
+  const calculateCurrentPayable = () => {
+    if (!child.installments || child.installments.length === 0) return child.pendingFees;
+    
+    // We assume installments are sequential. We iterate until we exceed what is paid.
+    let cumulative = 0;
+    const paid = child.paidFees;
+    
+    for (const inst of child.installments) {
+        cumulative += inst.amount;
+        if (cumulative > paid) {
+            // This installment is partially paid or fully unpaid
+            // The amount to pay NOW is the difference (Target - Paid_So_Far)
+            // Wait, logic check: 'cumulative' is the target total at this step.
+            // If paid is 5000, and cumulative is 10000 (first inst), pay = 5000.
+            // If paid is 15000, and cumulative is 10000 (1st), loop continues.
+            // Next cumulative 20000. 20000 > 15000. pay = 20000 - 15000 = 5000.
+            return cumulative - paid; 
+        }
+    }
+    return 0; // Everything paid
   };
 
-  const getInstallmentStatus = (dueDateStr: string, index: number) => {
+  const currentPayable = calculateCurrentPayable();
+
+  const handlePayment = (amount: number, studentId: string) => {
+    alert(`[MOCK PAYMENT GATEWAY]\n\nInitiating Razorpay for Amount: ₹${amount.toLocaleString()}\nStudent ID: ${studentId}`);
+  };
+
+  const getInstallmentStatus = (dueDateStr: string, index: number, instAmount: number) => {
+    const paid = child.paidFees;
+    let cumulativeBefore = 0;
+    if (child.installments) {
+        for(let i=0; i<index; i++) cumulativeBefore += child.installments[i].amount;
+    }
+    
+    // Check if this specific installment is fully covered by the total paid
+    const fullyPaid = paid >= (cumulativeBefore + instAmount);
+    
+    if (fullyPaid) {
+        return { color: 'text-emerald-500', bg: isDark ? 'bg-emerald-900/20 border-emerald-800' : 'bg-emerald-50 border-emerald-100', label: 'Paid', icon: CheckCircle };
+    }
+
     const due = new Date(dueDateStr);
     const now = new Date();
     const isPastDue = now > due;
-    if (isPastDue) return { color: 'text-red-500', bg: isDark ? 'bg-red-900/20 border-red-800' : 'bg-red-50 border-red-100', label: 'Due / Overdue', icon: AlertCircle };
+    if (isPastDue) return { color: 'text-red-500', bg: isDark ? 'bg-red-900/20 border-red-800' : 'bg-red-50 border-red-100', label: 'Overdue', icon: AlertCircle };
     return { color: isDark ? 'text-slate-400' : 'text-slate-600', bg: isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100', label: 'Upcoming', icon: Clock };
   };
 
@@ -239,8 +357,20 @@ const StudentCard = ({ child, onViewInvoice, isDark }: { child: ChildFinancial, 
                  {/* HOLOGRAPHIC CARD */}
                  <div className="p-6 rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-900 to-slate-900 text-white shadow-2xl shadow-indigo-900/20 relative overflow-hidden group isolate min-h-[220px] flex flex-col justify-between border border-white/10">
                     <div className="absolute inset-0 -z-10 opacity-30 mix-blend-overlay bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-purple-500 via-blue-500 to-transparent"></div>
-                    <div className="flex justify-between items-start"><div><p className="text-indigo-200/80 text-xs font-medium mb-1 uppercase tracking-widest">Balance Due</p><p className="text-4xl font-black tracking-tight">₹{child.pendingFees.toLocaleString()}</p></div><div className="p-2.5 bg-white/10 rounded-xl backdrop-blur-md border border-white/10"><CreditCard className="text-indigo-200" size={20}/></div></div>
-                    <div className="mt-6">{child.pendingFees > 0 ? <button onClick={() => handlePayment(child.pendingFees, child.studentId)} className="w-full bg-white text-slate-900 py-3.5 rounded-xl font-bold text-sm hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] active:scale-[0.98]"><Zap size={16} className="text-indigo-600 fill-indigo-600"/> Pay Now</button> : <div className="w-full bg-emerald-500/20 text-emerald-100 py-3 rounded-xl font-bold text-sm text-center border border-emerald-500/30 backdrop-blur-md">Fees Fully Paid</div>}</div>
+                    <div className="flex justify-between items-start"><div><p className="text-indigo-200/80 text-xs font-medium mb-1 uppercase tracking-widest">Active Installment</p><p className="text-4xl font-black tracking-tight">₹{currentPayable.toLocaleString()}</p></div><div className="p-2.5 bg-white/10 rounded-xl backdrop-blur-md border border-white/10"><CreditCard className="text-indigo-200" size={20}/></div></div>
+                    
+                    <div className="mt-6">
+                        {currentPayable > 0 ? (
+                            <button onClick={() => handlePayment(currentPayable, child.studentId)} className="w-full bg-white text-slate-900 py-3.5 rounded-xl font-bold text-sm hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] active:scale-[0.98]">
+                                <Zap size={16} className="text-indigo-600 fill-indigo-600"/> Pay Installment
+                            </button>
+                        ) : (
+                            <div className="w-full bg-emerald-500/20 text-emerald-100 py-3 rounded-xl font-bold text-sm text-center border border-emerald-500/30 backdrop-blur-md">Fees Fully Paid</div>
+                        )}
+                    </div>
+                    {child.pendingFees > currentPayable && (
+                        <div className="mt-2 text-center text-xs text-indigo-300/80 flex items-center justify-center gap-1"><Info size={12}/> Total Outstanding: ₹{child.pendingFees.toLocaleString()}</div>
+                    )}
                  </div>
 
                  {/* INSTALLMENT SCHEDULE */}
@@ -249,12 +379,12 @@ const StudentCard = ({ child, onViewInvoice, isDark }: { child: ChildFinancial, 
                       <h4 className="text-xs font-bold text-indigo-500 uppercase tracking-widest flex items-center gap-2 mb-4"><Calendar size={14}/> Payment Schedule</h4>
                       <div className="space-y-3">
                         {child.installments.map((inst, idx) => {
-                          const status = getInstallmentStatus(inst.dueDate, idx);
+                          const status = getInstallmentStatus(inst.dueDate, idx, inst.amount);
                           const StatusIcon = status.icon;
                           return (
                             <div key={idx} className={`flex justify-between items-center p-3 rounded-xl border text-sm transition-colors ${status.bg}`}>
                                <div className="flex items-center gap-3">
-                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${status.color.includes('red') ? 'bg-red-100/10 text-red-500' : isDark ? 'bg-slate-800 text-indigo-400' : 'bg-indigo-50 text-indigo-600'}`}>{idx + 1}</div>
+                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${status.color.includes('emerald') ? 'bg-emerald-100/10 text-emerald-500' : status.color.includes('red') ? 'bg-red-100/10 text-red-500' : isDark ? 'bg-slate-800 text-indigo-400' : 'bg-indigo-50 text-indigo-600'}`}>{idx + 1}</div>
                                  <div>
                                    <div className={`font-bold ${textMain}`}>₹{inst.amount.toLocaleString()}</div>
                                    <div className={`text-xs ${status.color} flex items-center gap-1`}>

@@ -44,11 +44,14 @@ import {
   Wifi,
   WifiOff,
   RefreshCw,
-  User
+  User,
+  Percent
 } from 'lucide-react';
 import Link from 'next/link';
 
+// --- CONFIGURATION ---
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+console.log("Director Console connected to:", API_URL);
 
 // --- TYPES ---
 interface Batch { id: string; name: string; startYear: string; strength: number; fee: number; }
@@ -81,7 +84,7 @@ interface Enquiry {
   remarks: string; 
   createdAt: string; 
   followUpCount: number;
-  allotedTo?: string; // ALLOCATION FIELD
+  allotedTo?: string;
 }
 interface Exam { id: string; title: string; }
 interface ResultRow { id: string; rank: number; studentName: string; physics: number; chemistry: number; maths: number; total: number; }
@@ -90,7 +93,6 @@ interface InstallmentPlan { id: number; amount: number; dueDate: string; }
 
 // --- API UTILITIES ---
 const erpApi = {
-  // Director Authentication
   async login(username: string, password: string) {
     const response = await fetch(`${API_URL}/auth/login`, {
       method: 'POST',
@@ -100,28 +102,18 @@ const erpApi = {
     if (!response.ok) throw new Error('Invalid Credentials');
     return await response.json();
   },
-
-  // New Admission
   async registerStudent(admissionData: any) {
     const response = await fetch(`${API_URL}/erp/admissions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(admissionData),
     });
-    if (!response.ok) throw new Error('Admission failed. Check IDs or Connection.');
+    if (!response.ok) throw new Error('Admission failed.');
     return await response.json();
   },
-
-  // Student Directory
   async getStudents() {
-    try {
-      const res = await fetch(`${API_URL}/erp/students`);
-      if (!res.ok) return [];
-      return await res.json();
-    } catch (e) { return []; }
+    try { const res = await fetch(`${API_URL}/erp/students`); if (!res.ok) return []; return await res.json(); } catch (e) { return []; }
   },
-
-  // Marks Management
   async updateMarks(data: any) {
     const response = await fetch(`${API_URL}/erp/marks`, {
       method: 'POST',
@@ -131,8 +123,6 @@ const erpApi = {
     if (!response.ok) throw new Error('Failed to save marks');
     return await response.json();
   },
-
-  // Attendance Management
   async saveAttendance(data: any) {
     const response = await fetch(`${API_URL}/erp/attendance`, {
       method: 'POST',
@@ -142,16 +132,9 @@ const erpApi = {
     if (!response.ok) throw new Error('Failed to save attendance');
     return await response.json();
   },
-
-  // Batch Management
   async getBatches() {
-    try {
-      const res = await fetch(`${API_URL}/erp/batches`);
-      if (!res.ok) return [];
-      return await res.json();
-    } catch (e) { return []; }
+    try { const res = await fetch(`${API_URL}/erp/batches`); if (!res.ok) return []; return await res.json(); } catch (e) { return []; }
   },
-
   async createBatch(batchData: any) {
     const res = await fetch(`${API_URL}/erp/batches`, {
       method: 'POST',
@@ -161,17 +144,9 @@ const erpApi = {
     if (!res.ok) throw new Error('Failed to save batch');
     return await res.json();
   },
-
-  // Expense Management
   async getExpenses() {
-    try {
-      const res = await fetch(`${API_URL}/erp/expenses`);
-      if (!res.ok) return [];
-      const data = await res.json();
-      return data.map((d: any) => ({ ...d, date: new Date(d.date).toLocaleDateString() }));
-    } catch (e) { return []; }
+    try { const res = await fetch(`${API_URL}/erp/expenses`); if (!res.ok) return []; const data = await res.json(); return data.map((d: any) => ({ ...d, date: new Date(d.date).toLocaleDateString() })); } catch (e) { return []; }
   },
-
   async createExpense(expenseData: any) {
     const res = await fetch(`${API_URL}/erp/expenses`, {
       method: 'POST',
@@ -181,16 +156,11 @@ const erpApi = {
     if (!res.ok) throw new Error('Failed to save expense');
     return await res.json();
   },
-
   async deleteExpense(id: string) {
-    const res = await fetch(`${API_URL}/erp/expenses/${id}`, {
-      method: 'DELETE',
-    });
+    const res = await fetch(`${API_URL}/erp/expenses/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Failed to delete expense');
     return await res.json();
   },
-
-  // Fee Management
   async collectFee(data: { studentId: string; amount: number; remarks?: string; paymentMode: string; transactionId: string }) {
     const res = await fetch(`${API_URL}/erp/fees`, {
       method: 'POST',
@@ -200,174 +170,171 @@ const erpApi = {
     if (!res.ok) throw new Error('Failed to record fee');
     return await res.json();
   },
-
   async getSummary() {
-    try {
-      const res = await fetch(`${API_URL}/erp/summary`);
-      if (!res.ok) return { revenue: 0, expenses: 0, profit: 0 };
-      return await res.json();
-    } catch (e) { return { revenue: 0, expenses: 0, profit: 0 }; }
+    try { const res = await fetch(`${API_URL}/erp/summary`); if (!res.ok) return { revenue: 0, expenses: 0, profit: 0 }; return await res.json(); } catch (e) { return { revenue: 0, expenses: 0, profit: 0 }; }
   },
-
-  // Content & Notices
-  async getResources() {
-    try {
-      const res = await fetch(`${API_URL}/erp/resources`);
-      if (!res.ok) return [];
-      return await res.json();
-    } catch (e) { return []; }
-  },
-
-  async createResource(data: any) {
-    const res = await fetch(`${API_URL}/erp/resources`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    if (!res.ok) throw new Error('Failed to publish resource');
-    return await res.json();
-  },
-
-  async deleteResource(id: string) {
-    const res = await fetch(`${API_URL}/erp/resources/${id}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error('Failed to delete resource');
-    return await res.json();
-  },
-
-  async getNotices() {
-    try {
-      const res = await fetch(`${API_URL}/erp/notices`);
-      if (!res.ok) return [];
-      return await res.json();
-    } catch (e) { return []; }
-  },
-
-  async createNotice(data: any) {
-    const res = await fetch(`${API_URL}/erp/notices`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    if (!res.ok) throw new Error('Failed to post notice');
-    return await res.json();
-  },
-
-  async deleteNotice(id: string) {
-    const res = await fetch(`${API_URL}/erp/notices/${id}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error('Failed to delete notice');
-    return await res.json();
-  },
-
-  // CRM (Enquiries)
-  async getEnquiries() {
-    try {
-      const res = await fetch(`${API_URL}/erp/enquiries`);
-      if (!res.ok) return [];
-      return await res.json();
-    } catch (e) { return []; }
-  },
-
-  async createEnquiry(data: any) {
-    const res = await fetch(`${API_URL}/erp/enquiries`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    if (!res.ok) throw new Error('Failed to save enquiry');
-    return await res.json();
-  },
-
-  async updateEnquiryStatus(id: string, status: string, followUpCount?: number) {
-    const res = await fetch(`${API_URL}/erp/enquiries/${id}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status, followUpCount })
-    });
-    if (!res.ok) throw new Error('Failed to update status');
-    return await res.json();
-  },
-
-  // Academic Stats
-  async getExamResults(examId: string, batchId: string) {
-    try {
-      const res = await fetch(`${API_URL}/erp/academics/results?examId=${examId}&batchId=${batchId}`);
-      if (!res.ok) return [];
-      return await res.json();
-    } catch (e) { return []; }
-  },
-
-  async getAttendanceStats(batchId: string) {
-    try {
-      const res = await fetch(`${API_URL}/erp/academics/attendance?batchId=${batchId}`);
-      if (!res.ok) return [];
-      return await res.json();
-    } catch (e) { return []; }
-  },
-  
-  async getExams() {
-    try {
-      const res = await fetch(`${API_URL}/erp/exams`);
-      if (!res.ok) return [];
-      return await res.json();
-    } catch (e) { return []; }
-  }
+  async getResources() { try { const res = await fetch(`${API_URL}/erp/resources`); if (!res.ok) return []; return await res.json(); } catch (e) { return []; } },
+  async createResource(data: any) { const res = await fetch(`${API_URL}/erp/resources`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); if (!res.ok) throw new Error('Failed'); return await res.json(); },
+  async deleteResource(id: string) { await fetch(`${API_URL}/erp/resources/${id}`, { method: 'DELETE' }); },
+  async getNotices() { try { const res = await fetch(`${API_URL}/erp/notices`); if (!res.ok) return []; return await res.json(); } catch (e) { return []; } },
+  async createNotice(data: any) { const res = await fetch(`${API_URL}/erp/notices`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); if (!res.ok) throw new Error('Failed'); return await res.json(); },
+  async deleteNotice(id: string) { await fetch(`${API_URL}/erp/notices/${id}`, { method: 'DELETE' }); },
+  async getEnquiries() { try { const res = await fetch(`${API_URL}/erp/enquiries`); if (!res.ok) return []; return await res.json(); } catch (e) { return []; } },
+  async createEnquiry(data: any) { const res = await fetch(`${API_URL}/erp/enquiries`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); if (!res.ok) throw new Error('Failed'); return await res.json(); },
+  async updateEnquiryStatus(id: string, status: string, followUpCount?: number) { const res = await fetch(`${API_URL}/erp/enquiries/${id}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, followUpCount }) }); if (!res.ok) throw new Error('Failed'); return await res.json(); },
+  async getExamResults(examId: string, batchId: string) { try { const res = await fetch(`${API_URL}/erp/academics/results?examId=${examId}&batchId=${batchId}`); if (!res.ok) return []; return await res.json(); } catch (e) { return []; } },
+  async getAttendanceStats(batchId: string) { try { const res = await fetch(`${API_URL}/erp/academics/attendance?batchId=${batchId}`); if (!res.ok) return []; return await res.json(); } catch (e) { return []; } },
+  async getExams() { try { const res = await fetch(`${API_URL}/erp/exams`); if (!res.ok) return []; return await res.json(); } catch (e) { return []; } }
 };
 
-// --- COMPONENT: DIRECTOR BACKGROUND (Canvas) ---
+// --- COMPONENT: DIRECTOR BACKGROUND ---
 const DirectorBackground = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    let width = canvas.width = window.innerWidth;
-    let height = canvas.height = window.innerHeight;
+    const canvas = canvasRef.current; if (!canvas) return;
+    const ctx = canvas.getContext('2d'); if (!ctx) return;
+    let width = canvas.width = window.innerWidth; let height = canvas.height = window.innerHeight;
     const particles: {x: number, y: number, vx: number, vy: number, alpha: number}[] = [];
     for (let i = 0; i < 40; i++) particles.push({ x: Math.random() * width, y: Math.random() * height, vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.5) * 0.3, alpha: Math.random() });
     const animate = () => {
       ctx.clearRect(0, 0, width, height);
       particles.forEach((p, i) => {
-        p.x += p.vx; p.y += p.vy;
-        if (p.x < 0 || p.x > width) p.vx *= -1;
-        if (p.y < 0 || p.y > height) p.vy *= -1;
+        p.x += p.vx; p.y += p.vy; if (p.x < 0 || p.x > width) p.vx *= -1; if (p.y < 0 || p.y > height) p.vy *= -1;
         ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI * 2); ctx.fillStyle = `rgba(239, 68, 68, ${p.alpha * 0.5})`; ctx.fill();
         for (let j = i + 1; j < particles.length; j++) {
-          const p2 = particles[j];
-          const dx = p.x - p2.x, dy = p.y - p2.y, dist = Math.sqrt(dx*dx + dy*dy);
+          const p2 = particles[j]; const dx = p.x - p2.x, dy = p.y - p2.y, dist = Math.sqrt(dx*dx + dy*dy);
           if (dist < 200) { ctx.beginPath(); ctx.strokeStyle = `rgba(148, 163, 184, ${0.1 * (1 - dist/200)})`; ctx.lineWidth = 1; ctx.moveTo(p.x, p.y); ctx.lineTo(p2.x, p2.y); ctx.stroke(); }
         }
       });
       requestAnimationFrame(animate);
     };
     const handleResize = () => { width = canvas.width = window.innerWidth; height = canvas.height = window.innerHeight; };
-    window.addEventListener('resize', handleResize); animate();
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener('resize', handleResize); animate(); return () => window.removeEventListener('resize', handleResize);
   }, []);
   return <canvas ref={canvasRef} className="fixed inset-0 z-0 pointer-events-none opacity-60" />;
 };
 
-// --- COMPONENT: INVOICE MODAL ---
-const InvoiceModal = ({ data, onClose }: { data: any, onClose: () => void }) => {
-  const handlePrint = () => { window.print(); };
+// --- COMPONENT: A4 INVOICE MODAL (WITH GST SUPPORT) ---
+const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () => void, isGstEnabled: boolean }) => {
+  // Calculations for GST
+  const baseAmount = isGstEnabled ? Math.round(data.amount / 1.18) : data.amount;
+  const gstAmount = isGstEnabled ? data.amount - baseAmount : 0;
+  const cgst = gstAmount / 2;
+  const sgst = gstAmount / 2;
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-start pt-10 justify-center bg-black/50 backdrop-blur-sm overflow-y-auto print:bg-white print:fixed print:inset-0 print:z-[9999] print:block">
-      <div className="bg-white p-10 rounded-xl shadow-2xl w-full max-w-2xl relative my-8 mx-auto print:shadow-none print:w-full print:max-w-none print:m-0 print:p-8 print:border-none print:absolute print:top-0 print:left-0">
-        <div className="flex justify-between items-start border-b-2 border-gray-800 pb-6 mb-6">
-           <div className="flex flex-col gap-4">
-             <div className="h-16 w-40 bg-gray-50 rounded-lg flex items-center justify-center text-gray-400 font-bold border-2 border-dashed border-gray-300 text-xs tracking-wider">LOGO PLACEHOLDER</div>
-             <div><h1 className="text-3xl font-extrabold text-blue-900 uppercase tracking-widest">TAX INVOICE</h1><p className="text-gray-500 font-medium mt-1">Receipt #: <span className="font-mono text-gray-800">{data.id ? data.id.slice(0, 8).toUpperCase() : 'N/A'}</span></p><p className="text-gray-500 text-xs mt-1">Transaction ID: <span className="font-mono font-bold">{data.transactionId || 'CASH'}</span></p></div>
-           </div>
-           <div className="text-right mt-2"><h2 className="text-xl font-bold text-gray-800">AIMS Institute</h2><p className="text-sm text-gray-500">123, Knowledge City</p><p className="text-sm text-gray-500">Pimpri-Chinchwad, MH</p><p className="text-sm text-gray-500">Contact: +91 98765 43210</p></div>
+    <div className="fixed inset-0 z-[100] flex items-start justify-center bg-black/70 backdrop-blur-sm overflow-y-auto print:bg-white print:fixed print:inset-0 print:z-[9999] print:block">
+      <style jsx global>{`
+        @media print {
+          @page { size: A4; margin: 0; }
+          body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; }
+          .print-hidden { display: none !important; }
+          .print-a4 { width: 210mm !important; min-height: 297mm !important; margin: 0 auto !important; border: none !important; box-shadow: none !important; padding: 20mm !important; border-radius: 0 !important; }
+        }
+      `}</style>
+      
+      <div className="print-a4 bg-white w-[210mm] min-h-[297mm] p-[20mm] relative shadow-2xl my-8 mx-auto flex flex-col justify-between">
+        
+        {/* HEADER */}
+        <div>
+          <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6 mb-8">
+             <div className="flex flex-col gap-2">
+               <div className="h-16 w-16 bg-slate-900 text-white flex items-center justify-center font-bold text-2xl rounded-lg">AI</div>
+               <div>
+                 <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">INVOICE</h1>
+                 {isGstEnabled && <p className="text-xs font-bold text-slate-500">TAX INVOICE</p>}
+               </div>
+             </div>
+             <div className="text-right">
+               <h2 className="text-xl font-bold text-slate-900">AIMS INSTITUTE</h2>
+               <p className="text-sm text-slate-600">123, Knowledge Park, MH</p>
+               <p className="text-sm text-slate-600">contact@aimsinstitute.com</p>
+               <p className="text-sm text-slate-600">+91 98765 43210</p>
+               {isGstEnabled && <p className="text-sm font-bold text-slate-800 mt-2">GSTIN: 27AABCU9603R1ZM</p>}
+             </div>
+          </div>
+
+          {/* INFO GRID */}
+          <div className="flex justify-between mb-10">
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Billed To</p>
+              <h3 className="text-xl font-bold text-slate-900">{data.studentName}</h3>
+              <p className="text-sm text-slate-600">ID: {data.studentId}</p>
+              <p className="text-sm text-slate-600">Batch: {data.batch}</p>
+              <p className="text-sm text-slate-600 mt-1">Parent ID: <span className="font-mono font-bold">{data.parentId}</span></p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Invoice Details</p>
+              <p className="text-sm font-bold text-slate-900">No: {data.id ? data.id.slice(0, 8).toUpperCase() : 'N/A'}</p>
+              <p className="text-sm text-slate-600">Date: {new Date(data.date || Date.now()).toLocaleDateString()}</p>
+              <div className="mt-2 inline-block bg-slate-100 px-3 py-1 rounded text-xs font-bold text-slate-700 uppercase border border-slate-200">
+                Mode: {data.paymentMode}
+              </div>
+            </div>
+          </div>
+
+          {/* TABLE */}
+          <table className="w-full mb-8">
+            <thead>
+              <tr className="bg-slate-900 text-white">
+                <th className="py-3 px-4 text-left text-xs font-bold uppercase tracking-wider">Description</th>
+                <th className="py-3 px-4 text-right text-xs font-bold uppercase tracking-wider">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-slate-200">
+                <td className="py-4 px-4">
+                  <p className="font-bold text-slate-800">Tuition Fee Payment</p>
+                  <p className="text-xs text-slate-500 italic mt-1">Ref: {data.transactionId || 'N/A'}</p>
+                  <p className="text-xs text-slate-500">{data.remarks}</p>
+                </td>
+                <td className="py-4 px-4 text-right font-mono font-bold text-slate-800">
+                  ₹{baseAmount.toLocaleString()}
+                </td>
+              </tr>
+              {isGstEnabled && (
+                <>
+                  <tr className="border-b border-slate-100 text-sm">
+                    <td className="py-2 px-4 text-slate-600">CGST (9%)</td>
+                    <td className="py-2 px-4 text-right font-mono text-slate-600">₹{cgst.toLocaleString()}</td>
+                  </tr>
+                  <tr className="border-b border-slate-100 text-sm">
+                    <td className="py-2 px-4 text-slate-600">SGST (9%)</td>
+                    <td className="py-2 px-4 text-right font-mono text-slate-600">₹{sgst.toLocaleString()}</td>
+                  </tr>
+                </>
+              )}
+            </tbody>
+          </table>
+
+          {/* TOTALS */}
+          <div className="flex justify-end mb-12">
+            <div className="w-1/2 border-t-2 border-slate-900 pt-4">
+              <div className="flex justify-between items-center">
+                <span className="text-xl font-black text-slate-900 uppercase">Grand Total</span>
+                <span className="text-2xl font-black text-slate-900">₹{(data.amount || 0).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center mt-2 text-red-600">
+                <span className="text-sm font-bold">Balance Remaining</span>
+                <span className="text-sm font-bold">₹{(data.balanceAfter || 0).toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="mb-8 flex justify-between">
-          <div><h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Bill To</h3><div className="text-gray-900 font-bold text-xl">{data.studentName}</div><div className="text-gray-600">Student ID: <span className="font-mono">{data.studentId}</span></div><div className="text-gray-600">Parent ID: <span className="font-mono font-bold text-blue-600">{data.parentId}</span></div><div className="text-gray-600">Batch: {data.batch}</div></div>
-          <div className="text-right"><h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Date</h3><div className="text-gray-800 font-medium">{new Date(data.date || Date.now()).toLocaleDateString()}</div><div className="mt-2 text-xs font-bold bg-green-100 text-green-800 px-2 py-1 rounded inline-block">{data.paymentMode || 'CASH'} PAYMENT</div></div>
+
+        {/* FOOTER */}
+        <div className="border-t border-slate-200 pt-6 text-center">
+          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mb-2">Thank you for your payment</p>
+          <p className="text-[10px] text-slate-400">This is a computer-generated document. No signature required.</p>
+          <p className="text-[10px] text-slate-400">AIMS Institute • Registered Education Provider</p>
         </div>
-        <table className="w-full mb-8"><thead><tr className="bg-gray-100 border-b border-gray-200"><th className="text-left py-3 px-4 font-bold text-gray-600 uppercase text-sm">Description</th><th className="text-right py-3 px-4 font-bold text-gray-600 uppercase text-sm">Amount</th></tr></thead><tbody><tr className="border-b border-gray-100"><td className="py-4 px-4 text-gray-800">Tuition Fee Payment<br/><span className="text-xs text-gray-500 italic">Ref: {data.remarks}</span></td><td className="py-4 px-4 text-right text-gray-800 font-bold">₹{(data.amount || 0).toLocaleString()}</td></tr></tbody></table>
-        <div className="flex justify-end mb-12"><div className="w-1/2"><div className="flex justify-between py-2 border-b border-gray-200"><span className="text-gray-600">Subtotal</span><span className="font-bold text-gray-800">₹{(data.amount || 0).toLocaleString()}</span></div><div className="flex justify-between py-2 border-b-2 border-gray-800"><span className="text-xl font-bold text-gray-900">Total Paid</span><span className="text-xl font-bold text-green-600">₹{(data.amount || 0).toLocaleString()}</span></div><div className="flex justify-between py-3 mt-2 bg-red-50 px-2 rounded"><span className="text-sm font-bold text-red-700">Balance Due:</span><span className="text-sm font-bold text-red-700">₹{(data.balanceAfter || 0).toLocaleString()}</span></div></div></div>
-        <div className="text-center text-xs text-gray-400 pt-8 border-t border-gray-100"><p>This is a computer-generated invoice. No signature required.</p><p className="mt-1 font-medium text-blue-900">Thank you for investing in your future with AIMS Institute.</p></div>
-        <div className="absolute top-4 right-4 print:hidden flex space-x-2"><button onClick={() => window.print()} className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 font-bold flex items-center transition"><Printer size={16} className="mr-2"/> Print / PDF</button><button onClick={onClose} className="bg-gray-200 text-gray-700 px-3 py-2 rounded hover:bg-gray-300 transition"><X size={20}/></button></div>
+
+        {/* PRINT CONTROLS */}
+        <div className="absolute top-4 -right-16 flex flex-col gap-2 print-hidden">
+          <button onClick={() => window.print()} className="bg-blue-600 text-white p-3 rounded-full shadow-lg hover:bg-blue-700 transition" title="Print"><Printer size={20}/></button>
+          <button onClick={onClose} className="bg-white text-slate-700 p-3 rounded-full shadow-lg hover:bg-slate-100 transition" title="Close"><X size={20}/></button>
+        </div>
+
       </div>
     </div>
   );
@@ -394,7 +361,6 @@ const DirectorLogin = ({ onUnlock }: { onUnlock: () => void }) => {
 export default function DirectorPage() {
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [activeTab, setActiveTab] = useState('users');
-  const [academicsTab, setAcademicsTab] = useState<'results' | 'attendance'>('results');
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isOnline, setIsOnline] = useState(true);
@@ -414,33 +380,25 @@ export default function DirectorPage() {
   const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
   const [results, setResults] = useState<ResultRow[]>([]);
-  const [attendanceStats, setAttendanceStats] = useState<AttendanceStat[]>([]);
   
   // Invoice State
   const [showInvoice, setShowInvoice] = useState(false);
   const [currentInvoice, setCurrentInvoice] = useState<any>(null);
+  const [isGstEnabled, setIsGstEnabled] = useState(false);
   
-  // Selection
-  const [selectedBatchId, setSelectedBatchId] = useState('');
-  const [selectedExamId, setSelectedExamId] = useState('');
-
   // Forms
   const [admissionData, setAdmissionData] = useState({
     studentName: '', studentId: '', studentPassword: '', studentPhone: '', 
-    address: '', 
-    batchId: '', 
-    fees: 0, 
-    waiveOff: 0, 
-    penalty: 0, 
-    installments: 1, 
-    installmentSchedule: [] as InstallmentPlan[], 
+    address: '', batchId: '', fees: 0, waiveOff: 0, penalty: 0, 
+    installments: 1, installmentSchedule: [] as InstallmentPlan[], 
     parentId: '', parentPassword: '', parentPhone: '',
-    agreedDate: new Date().toISOString().split('T')[0]
+    agreedDate: new Date().toISOString().split('T')[0],
+    withGst: false
   });
   
   const [newBatch, setNewBatch] = useState({ name: '', startYear: '', strength: 0, fee: 0 });
   const [newExpense, setNewExpense] = useState({ title: '', amount: 0, category: 'General' });
-  const [feeForm, setFeeForm] = useState({ studentId: '', amount: 0, remarks: '', paymentMode: 'CASH', transactionId: '' });
+  const [feeForm, setFeeForm] = useState({ studentId: '', amount: 0, remarks: '', paymentMode: 'CASH', transactionId: '', withGst: false });
   const [contentForm, setContentForm] = useState({ title: '', url: '', batchId: '' });
   const [noticeForm, setNoticeForm] = useState({ title: '', content: '', batchId: '' });
   const [enquiryForm, setEnquiryForm] = useState({ studentName: '', mobile: '', course: '', allotedTo: '', remarks: '' });
@@ -457,15 +415,11 @@ export default function DirectorPage() {
 
   // --- PERSISTENCE & OFFLINE LOGIC ---
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-       const session = localStorage.getItem('director_session');
-       if (session) setIsUnlocked(true);
-    }
+    if (typeof window !== 'undefined') { const session = localStorage.getItem('director_session'); if (session) setIsUnlocked(true); }
     setIsOnline(navigator.onLine);
     const goOnline = () => { setIsOnline(true); syncOfflineQueue(); };
     const goOffline = () => setIsOnline(false);
-    window.addEventListener('online', goOnline);
-    window.addEventListener('offline', goOffline);
+    window.addEventListener('online', goOnline); window.addEventListener('offline', goOffline);
     return () => { window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline); };
   }, []);
 
@@ -526,53 +480,61 @@ export default function DirectorPage() {
     }
   }, [admissionData.batchId, batches]);
 
+  // --- LOGIC UPDATE: Calculate Installments with GST ---
   useEffect(() => {
-    const netPayable = Math.max(0, admissionData.fees - admissionData.waiveOff);
+    // 1. Calculate Base Net Payable
+    let basePayable = Math.max(0, admissionData.fees - admissionData.waiveOff);
+    
+    // 2. Add GST if selected (18% on top of base)
+    if (admissionData.withGst) {
+        basePayable = Math.round(basePayable * 1.18);
+    }
+
     const count = admissionData.installments || 1;
-    const baseAmount = Math.floor(netPayable / count);
-    const remainder = netPayable % count;
+    const baseAmount = Math.floor(basePayable / count);
+    const remainder = basePayable % count;
+    
     const newSchedule: InstallmentPlan[] = [];
     const startDate = new Date(admissionData.agreedDate);
+    
     for (let i = 0; i < count; i++) {
       const date = new Date(startDate);
       date.setMonth(startDate.getMonth() + i); 
-      newSchedule.push({ id: i + 1, amount: i === 0 ? baseAmount + remainder : baseAmount, dueDate: date.toISOString().split('T')[0] });
+      newSchedule.push({ 
+          id: i + 1, 
+          amount: i === 0 ? baseAmount + remainder : baseAmount, 
+          dueDate: date.toISOString().split('T')[0] 
+      });
     }
     setAdmissionData(prev => ({ ...prev, installmentSchedule: newSchedule }));
-  }, [admissionData.fees, admissionData.waiveOff, admissionData.installments, admissionData.agreedDate]);
+  }, [admissionData.fees, admissionData.waiveOff, admissionData.installments, admissionData.agreedDate, admissionData.withGst]);
 
   // Handlers
   const handleAdmission = async (e: React.FormEvent) => { 
     e.preventDefault(); 
     if (!isOnline) {
        saveToOfflineQueue('ADMISSION', admissionData);
-       setAdmissionData({ studentName: '', studentId: '', studentPassword: '', studentPhone: '', address: '', batchId: '', fees: 0, waiveOff: 0, penalty: 0, installments: 1, installmentSchedule: [], parentId: '', parentPassword: '', parentPhone: '', agreedDate: new Date().toISOString().split('T')[0] });
+       setAdmissionData({ studentName: '', studentId: '', studentPassword: '', studentPhone: '', address: '', batchId: '', fees: 0, waiveOff: 0, penalty: 0, installments: 1, installmentSchedule: [], parentId: '', parentPassword: '', parentPhone: '', agreedDate: new Date().toISOString().split('T')[0], withGst: false });
        return;
     }
     setStatus('Processing...'); 
     try { 
-      await erpApi.registerStudent(admissionData); 
+      // The fees sent to backend must be the FINAL amount including GST if selected
+      const finalFee = admissionData.withGst 
+        ? Math.round(admissionData.fees * 1.18) 
+        : admissionData.fees;
+
+      await erpApi.registerStudent({
+          ...admissionData,
+          fees: finalFee // Override fees with GST included amount for DB storage
+      }); 
       setStatus('Success!'); 
-      setAdmissionData({ studentName: '', studentId: '', studentPassword: '', studentPhone: '', address: '', batchId: '', fees: 0, waiveOff: 0, penalty: 0, installments: 1, installmentSchedule: [], parentId: '', parentPassword: '', parentPhone: '', agreedDate: new Date().toISOString().split('T')[0] }); 
+      setAdmissionData({ studentName: '', studentId: '', studentPassword: '', studentPhone: '', address: '', batchId: '', fees: 0, waiveOff: 0, penalty: 0, installments: 1, installmentSchedule: [], parentId: '', parentPassword: '', parentPhone: '', agreedDate: new Date().toISOString().split('T')[0], withGst: false }); 
       refreshData(); 
     } catch (e: any) { setStatus(`Error: ${e.message}`); } 
   };
 
-  const handleAddEnquiry = async (e: React.FormEvent) => { 
-    e.preventDefault(); 
-    if (!isOnline) {
-      saveToOfflineQueue('ENQUIRY', enquiryForm);
-      setEnquiryForm({ studentName: '', mobile: '', course: '', allotedTo: '', remarks: '' });
-      return;
-    }
-    try { 
-      await erpApi.createEnquiry(enquiryForm); 
-      alert("Enquiry Added"); 
-      setEnquiryForm({ studentName: '', mobile: '', course: '', allotedTo: '', remarks: '' }); 
-      refreshData(); 
-    } catch (e) { alert("Failed"); } 
-  };
-
+  const handleAddEnquiry = async (e: React.FormEvent) => { e.preventDefault(); if (!isOnline) { saveToOfflineQueue('ENQUIRY', enquiryForm); setEnquiryForm({ studentName: '', mobile: '', course: '', allotedTo: '', remarks: '' }); return; } try { await erpApi.createEnquiry(enquiryForm); alert("Enquiry Added"); setEnquiryForm({ studentName: '', mobile: '', course: '', allotedTo: '', remarks: '' }); refreshData(); } catch (e) { alert("Failed"); } };
   const handleAddBatch = async (e: React.FormEvent) => { e.preventDefault(); try { await erpApi.createBatch(newBatch); setNewBatch({ name: '', startYear: '', strength: 0, fee: 0 }); refreshData(); } catch (e) { alert("Failed"); } };
   const handleAddExpense = async (e: React.FormEvent) => { e.preventDefault(); try { await erpApi.createExpense(newExpense); setNewExpense({ title: '', amount: 0, category: 'General' }); refreshData(); } catch (e) { alert("Failed"); } };
   const handleDeleteExpense = async (id: string) => { if (!confirm("Delete?")) return; try { await erpApi.deleteExpense(id); refreshData(); } catch (e) { alert("Failed"); } };
@@ -584,17 +546,12 @@ export default function DirectorPage() {
     if (!student) return;
     try { 
       const res = await erpApi.collectFee(feeForm); 
+      setIsGstEnabled(feeForm.withGst);
       setCurrentInvoice({ id: res.id || 'INV-' + Date.now(), studentName: student.name, studentId: student.studentId, parentId: student.parentId, batch: student.batch, amount: feeForm.amount, date: new Date().toISOString(), remarks: feeForm.remarks || 'Fee Payment', paymentMode: feeForm.paymentMode, transactionId: res.transactionId || feeForm.transactionId, balanceAfter: (student.feeRemaining || 0) - feeForm.amount });
       setShowInvoice(true);
-      setFeeForm({ studentId: '', amount: 0, remarks: '', paymentMode: 'CASH', transactionId: '' }); 
+      setFeeForm({ studentId: '', amount: 0, remarks: '', paymentMode: 'CASH', transactionId: '', withGst: false }); 
       refreshData(); 
     } catch (e) { alert("Failed"); } 
-  };
-  
-  const handleDownloadReceipt = (student: StudentRecord) => {
-    if (student.feePaid <= 0) return alert("No fees paid");
-    setCurrentInvoice({ id: 'REC-TOTAL-'+student.studentId, studentName: student.name, studentId: student.studentId, parentId: student.parentId, batch: student.batch, amount: student.feePaid, date: new Date().toISOString(), remarks: 'Total Fees Paid (Statement)', paymentMode: 'MULTIPLE', balanceAfter: student.feeRemaining });
-    setShowInvoice(true);
   };
   
   const handleSaveMarks = async () => { try { await erpApi.updateMarks({ studentId: selectedStudentForMarks?.id, ...marksForm }); alert("Saved"); setIsMarksModalOpen(false); } catch (e) { alert("Failed"); } };
@@ -646,14 +603,24 @@ export default function DirectorPage() {
                       <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Batch Standard Fee</label><input type="number" className="w-full p-2 border rounded text-gray-900" required placeholder="₹" value={admissionData.fees} onChange={(e) => setAdmissionData({...admissionData, fees: parseInt(e.target.value) || 0})} /></div>
                     </div>
                     <div className="bg-blue-50 p-4 rounded border border-blue-100 space-y-4">
-                        <h4 className="text-xs font-bold text-blue-700 uppercase">Fee Agreement</h4>
+                        <h4 className="text-xs font-bold text-blue-700 uppercase flex items-center justify-between">
+                            Fee Agreement
+                            {/* --- NEW GST TOGGLE --- */}
+                            <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1 rounded border border-blue-200">
+                                <input type="checkbox" checked={admissionData.withGst} onChange={e => setAdmissionData({...admissionData, withGst: e.target.checked})} className="w-3 h-3 text-blue-600"/>
+                                <span className="text-[10px] text-slate-600">Add 18% GST</span>
+                            </label>
+                        </h4>
                         <div className="grid grid-cols-2 gap-4">
                            <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Waive Off</label><input type="number" className="w-full p-2 border rounded text-gray-900" placeholder="₹ 0" value={admissionData.waiveOff} onChange={(e) => setAdmissionData({...admissionData, waiveOff: parseInt(e.target.value) || 0})} /></div>
                            <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Late Penalty</label><input type="number" className="w-full p-2 border rounded text-gray-900" placeholder="₹ 0" value={admissionData.penalty} onChange={(e) => setAdmissionData({...admissionData, penalty: parseInt(e.target.value) || 0})} /></div>
                         </div>
                         <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Installments</label><select className="w-full p-2 border rounded text-gray-900 bg-white" value={admissionData.installments} onChange={(e) => setAdmissionData({...admissionData, installments: parseInt(e.target.value)})}>{[1,2,3,4,5,6,9,12].map(n => <option key={n} value={n}>{n} Installments</option>)}</select></div>
-                        {admissionData.installmentSchedule.length > 0 && <div className="mt-2"><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Schedule</label><div className="bg-white border rounded overflow-hidden text-sm">{admissionData.installmentSchedule.map((inst, index) => (<div key={index} className="flex border-b last:border-0"><div className="w-10 p-2 bg-gray-50 border-r text-center text-gray-500 font-bold">{index+1}</div><div className="flex-1 p-1"><input type="date" className="w-full p-1 text-gray-900 text-xs" value={inst.dueDate} onChange={(e) => { const newSchedule = [...admissionData.installmentSchedule]; newSchedule[index].dueDate = e.target.value; setAdmissionData({...admissionData, installmentSchedule: newSchedule}); }}/></div><div className="w-24 p-1 border-l"><input type="number" className="w-full p-1 text-gray-900 text-right font-bold text-xs" value={inst.amount} onChange={(e) => { const newSchedule = [...admissionData.installmentSchedule]; newSchedule[index].amount = parseInt(e.target.value) || 0; setAdmissionData({...admissionData, installmentSchedule: newSchedule}); }}/></div></div>))}</div></div>}
-                        <div className="text-right text-sm font-bold text-blue-800">Net Payable: ₹ {Math.max(0, admissionData.fees - admissionData.waiveOff).toLocaleString()}</div>
+                        {admissionData.installmentSchedule.length > 0 && <div className="mt-2"><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Schedule (Including GST if applied)</label><div className="bg-white border rounded overflow-hidden text-sm">{admissionData.installmentSchedule.map((inst, index) => (<div key={index} className="flex border-b last:border-0"><div className="w-10 p-2 bg-gray-50 border-r text-center text-gray-500 font-bold">{index+1}</div><div className="flex-1 p-1"><input type="date" className="w-full p-1 text-gray-900 text-xs" value={inst.dueDate} onChange={(e) => { const newSchedule = [...admissionData.installmentSchedule]; newSchedule[index].dueDate = e.target.value; setAdmissionData({...admissionData, installmentSchedule: newSchedule}); }}/></div><div className="w-24 p-1 border-l"><input type="number" className="w-full p-1 text-gray-900 text-right font-bold text-xs" value={inst.amount} onChange={(e) => { const newSchedule = [...admissionData.installmentSchedule]; newSchedule[index].amount = parseInt(e.target.value) || 0; setAdmissionData({...admissionData, installmentSchedule: newSchedule}); }}/></div></div>))}</div></div>}
+                        <div className="text-right text-sm font-bold text-blue-800 flex justify-end gap-2">
+                            {admissionData.withGst && <span className="text-xs text-blue-400 bg-blue-100 px-2 rounded flex items-center">+ 18% GST Applied</span>}
+                            <span>Net Payable: ₹ {admissionData.installmentSchedule.reduce((a, b) => a + b.amount, 0).toLocaleString()}</span>
+                        </div>
                     </div>
                   </div>
                   <div className="space-y-4">
@@ -669,6 +636,7 @@ export default function DirectorPage() {
           </div>
         )}
 
+        {/* ... (Other Tabs Remain Unchanged) ... */}
         {activeTab === 'batches' && (
           <div className="grid grid-cols-2 gap-8">
             <div className="bg-white p-6 rounded-xl shadow-sm border">
@@ -706,6 +674,10 @@ export default function DirectorPage() {
                     <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Amount (₹)</label><input type="number" className="w-full p-2 border rounded text-gray-900" placeholder="5000" value={feeForm.amount} onChange={e => setFeeForm({...feeForm, amount: parseInt(e.target.value) || 0})} required/></div>
                     <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Mode</label><select className="w-full p-2 border rounded text-gray-900 bg-white" value={feeForm.paymentMode} onChange={e => setFeeForm({...feeForm, paymentMode: e.target.value})}><option value="CASH">CASH</option><option value="ONLINE">ONLINE / UPI</option><option value="CHEQUE">CHEQUE</option></select></div>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <input type="checkbox" id="gstToggle" checked={feeForm.withGst} onChange={e => setFeeForm({...feeForm, withGst: e.target.checked})} className="w-4 h-4 text-blue-600 rounded" />
+                    <label htmlFor="gstToggle" className="text-xs font-bold text-gray-600 flex items-center gap-1"><Percent size={12}/> Enable GST (18%) for Invoice</label>
+                  </div>
                   <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Transaction Ref / Remarks</label><input type="text" className="w-full p-2 border rounded text-gray-900" placeholder="e.g. UPI Ref No. or Cash Receipt" value={feeForm.transactionId} onChange={e => setFeeForm({...feeForm, transactionId: e.target.value})}/></div>
                   <button className="w-full bg-green-600 text-white py-2 rounded font-bold hover:bg-green-700">Record Payment & Print Invoice</button>
                 </form>
@@ -719,7 +691,6 @@ export default function DirectorPage() {
                 </form>
               </div>
             </div>
-            {/* Fee Status Table omitted for brevity but logic exists */}
           </div>
         )}
 
@@ -763,7 +734,6 @@ export default function DirectorPage() {
           </div>
         )}
 
-        {/* --- TAB: DIRECTORY (UPDATED WITH SEARCH) --- */}
         {activeTab === 'directory' && (
           <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
             <div className="px-6 py-4 border-b bg-gray-50 flex flex-col md:flex-row justify-between items-center gap-4">
@@ -799,7 +769,7 @@ export default function DirectorPage() {
 
       </main>
       
-      {showInvoice && currentInvoice && <InvoiceModal data={currentInvoice} onClose={() => setShowInvoice(false)} />}
+      {showInvoice && currentInvoice && <InvoiceModal data={currentInvoice} onClose={() => setShowInvoice(false)} isGstEnabled={isGstEnabled} />}
     </div>
   );
 }
