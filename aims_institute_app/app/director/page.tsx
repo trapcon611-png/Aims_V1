@@ -535,7 +535,11 @@ export default function DirectorPage() {
 
       await erpApi.registerStudent({
           ...admissionData,
-          fees: finalFee // Override fees with GST included amount for DB storage
+          studentId: admissionData.studentId.trim(), // Fixes invisible space issues
+          parentId: admissionData.parentId.trim(),   // Fixes invisible space issues
+          studentPassword: admissionData.studentPassword.trim(),
+          parentPassword: admissionData.parentPassword.trim(),
+          fees: finalFee 
       }); 
       setStatus('Success!'); 
       setAdmissionData({ studentName: '', studentId: '', studentPassword: '', studentPhone: '', address: '', batchId: '', fees: 0, waiveOff: 0, penalty: 0, installments: 1, installmentSchedule: [], parentId: '', parentPassword: '', parentPhone: '', agreedDate: new Date().toISOString().split('T')[0], withGst: false, dob: '' }); 
