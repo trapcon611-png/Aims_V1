@@ -9,7 +9,8 @@ import {
   BookOpen, 
   ShieldCheck, 
   ArrowRight, 
-  ChevronRight 
+  ChevronRight,
+  ChevronDown // Added for scroll indicator
 } from 'lucide-react';
 
 const LOGO_PATH = '/logo.png';
@@ -26,11 +27,11 @@ export default function LandingPage() {
     // Trigger animation after mount
     setIsMounted(true);
     
-    // Timer for signature completion
+    // Timer to match the transition duration (2.5s) + small buffer
     const timer = setTimeout(() => {
       setIsDoneWriting(true);
     }, 2500);
-    
+
     // Interval for background color cycling (4 seconds per color for slow breathing)
     const colorInterval = setInterval(() => {
         setActiveColorIndex((prev) => (prev + 1) % 3);
@@ -57,17 +58,17 @@ export default function LandingPage() {
             
             {/* 1. Crimson Red Core */}
             <div 
-                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] bg-[#c1121f] rounded-full blur-[150px] transition-opacity duration-[3000ms] ease-in-out ${activeColorIndex === 0 ? 'opacity-60' : 'opacity-0'}`}
+                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] bg-[#c1121f] rounded-full blur-[150px] transition-opacity duration-[3000ms] ease-in-out ${activeColorIndex === 0 ? 'opacity-50' : 'opacity-0'}`}
             ></div>
             
             {/* 2. Amber Yellow Core */}
             <div 
-                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] bg-amber-500 rounded-full blur-[150px] transition-opacity duration-[3000ms] ease-in-out ${activeColorIndex === 1 ? 'opacity-50' : 'opacity-0'}`}
+                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] bg-amber-500 rounded-full blur-[150px] transition-opacity duration-[3000ms] ease-in-out ${activeColorIndex === 1 ? 'opacity-40' : 'opacity-0'}`}
             ></div>
 
             {/* 3. Royal Blue Core */}
             <div 
-                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] bg-blue-700 rounded-full blur-[150px] transition-opacity duration-[3000ms] ease-in-out ${activeColorIndex === 2 ? 'opacity-60' : 'opacity-0'}`}
+                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] bg-blue-700 rounded-full blur-[150px] transition-opacity duration-[3000ms] ease-in-out ${activeColorIndex === 2 ? 'opacity-50' : 'opacity-0'}`}
             ></div>
         </div>
 
@@ -116,10 +117,21 @@ export default function LandingPage() {
                 <span className="font-bold">JEE</span> <span className="text-slate-600 mx-3 font-light">|</span> <span className="font-bold">NEET</span> <span className="text-slate-600 mx-3 font-light">|</span> <span className="font-bold">CET</span>
             </p>
             
-            <p className="text-slate-400 max-w-2xl mx-auto text-lg leading-relaxed font-light tracking-wide">
+            <p className="text-slate-400 max-w-2xl mx-auto text-lg leading-relaxed font-light tracking-wide mb-12">
                 Your integrated learning and examination platform. <br className="hidden sm:block"/>
                 Fostering academic excellence through technology and discipline.
             </p>
+
+            {/* --- SCROLL INDICATOR --- */}
+            <div 
+              className="animate-bounce flex flex-col items-center gap-3 opacity-90 cursor-pointer group"
+              onClick={() => window.scrollTo({ top: window.innerHeight * 0.8, behavior: 'smooth' })}
+            >
+                <div className="px-5 py-2 rounded-full bg-slate-800/40 border border-slate-700/50 backdrop-blur-md shadow-lg group-hover:bg-slate-800/60 transition-colors">
+                    <p className="text-xs font-bold text-slate-300 uppercase tracking-[0.2em]">Select Your Portal</p>
+                </div>
+                <ChevronDown className="text-slate-500 group-hover:text-white transition-colors" size={24} />
+            </div>
         </div>
       </div>
 
