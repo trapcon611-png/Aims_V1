@@ -16,12 +16,12 @@ const LOGO_PATH = '/logo.png';
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-slate-50 font-sans flex flex-col selection:bg-blue-100 selection:text-blue-900">
+    <div className="min-h-screen bg-slate-50 font-sans flex flex-col selection:bg-red-100 selection:text-red-900">
       
       {/* --- HERO SECTION --- */}
       <div className="bg-white border-b border-slate-200 relative overflow-hidden">
-        {/* Subtle background pattern */}
-        <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#1e40af 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
+        {/* Subtle background pattern - Updated to Crimson Red tint */}
+        <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#c1121f 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
         
         <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8 flex flex-col items-center text-center relative z-10">
             {/* Logo */}
@@ -33,8 +33,9 @@ export default function LandingPage() {
                 AIMS INSTITUTE
             </h1>
             
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-blue-800 text-sm font-bold uppercase tracking-wider mb-6">
-                <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
+            {/* Badge - Updated to Red to match Logo */}
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-red-50 border border-red-100 text-red-800 text-sm font-bold uppercase tracking-wider mb-6">
+                <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
                 Team of IITian's & Dr's
             </div>
             
