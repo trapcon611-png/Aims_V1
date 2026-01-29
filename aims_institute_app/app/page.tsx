@@ -16,11 +16,18 @@ const LOGO_PATH = '/logo.png';
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-slate-50 font-sans flex flex-col selection:bg-red-100 selection:text-red-900">
+    <div className="min-h-screen bg-slate-50 font-sans flex flex-col selection:bg-red-100 selection:text-red-900 relative">
       
+      {/* --- BACKGROUND ACCENTS --- */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute -top-[10%] -right-[5%] w-[40%] h-[40%] rounded-full bg-red-100/50 blur-3xl opacity-60"></div>
+          <div className="absolute top-[20%] -left-[10%] w-[30%] h-[30%] rounded-full bg-blue-50/50 blur-3xl opacity-50"></div>
+          <div className="absolute bottom-[10%] right-[10%] w-[20%] h-[20%] rounded-full bg-red-50/40 blur-3xl opacity-40"></div>
+      </div>
+
       {/* --- HERO SECTION --- */}
-      <div className="bg-white border-b border-slate-200 relative overflow-hidden">
-        {/* Subtle background pattern - Updated to Crimson Red tint */}
+      <div className="bg-white/80 backdrop-blur-sm border-b border-slate-200 relative overflow-hidden z-10">
+        {/* Subtle background pattern - Crimson Red tint */}
         <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#c1121f 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
         
         <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8 flex flex-col items-center text-center relative z-10">
@@ -33,9 +40,9 @@ export default function LandingPage() {
                 AIMS INSTITUTE
             </h1>
             
-            {/* Badge - Updated to Red to match Logo */}
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-red-50 border border-red-100 text-red-800 text-sm font-bold uppercase tracking-wider mb-6">
-                <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
+            {/* Badge - Updated to Red to match Logo, Glowing part Blue */}
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-red-50 border border-red-100 text-red-800 text-sm font-bold uppercase tracking-wider mb-6 shadow-sm">
+                <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse shadow-[0_0_10px_rgba(37,99,235,0.5)]"></span>
                 Team of IITian's & Dr's
             </div>
             
@@ -51,7 +58,7 @@ export default function LandingPage() {
       </div>
 
       {/* --- MAIN NAVIGATION CARDS --- */}
-      <div className="flex-1 py-16 px-4 sm:px-6 lg:px-8">
+      <div className="flex-1 py-16 px-4 sm:px-6 lg:px-8 z-10">
         <div className="max-w-7xl mx-auto">
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 lg:gap-8">
                 
@@ -136,7 +143,7 @@ export default function LandingPage() {
       </div>
 
       {/* --- FOOTER --- */}
-      <footer className="bg-white border-t border-slate-200 py-8 mt-auto">
+      <footer className="bg-white/80 backdrop-blur-sm border-t border-slate-200 py-8 mt-auto z-10">
         <div className="max-w-7xl mx-auto px-4 text-center">
             <div className="flex items-center justify-center gap-2 mb-2 opacity-50 grayscale hover:opacity-100 hover:grayscale-0 transition-all duration-500">
                 <Image src={LOGO_PATH} alt="AIMS Logo" width={24} height={24} className="object-contain" unoptimized />
