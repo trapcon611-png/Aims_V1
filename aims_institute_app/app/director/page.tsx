@@ -13,7 +13,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-const LOGO_PATH = '/logo.jpeg'; 
+// FIX: Updated to .png as per your request
+const LOGO_PATH = '/logo.png'; 
 
 // --- TYPES ---
 interface Batch { id: string; name: string; startYear: string; strength: number; fee: number; }
@@ -141,7 +142,7 @@ const DirectorBackground = () => {
     window.addEventListener('resize', handleResize); animate(); return () => window.removeEventListener('resize', handleResize);
   }, []);
   
-  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none opacity-80" />;
+  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none opacity-80 z-0" />;
 };
 
 // --- COMPONENT: A4 INVOICE MODAL ---
