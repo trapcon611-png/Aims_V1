@@ -7,7 +7,7 @@ import {
   FileBarChart, CalendarCheck, Edit3, Save, Video, Bell, ExternalLink, Wallet, 
   PhoneCall, Printer, X, FileText, Clock, AlertTriangle, MapPin, BookOpen, 
   ShieldCheck, Cpu, Activity, Copy, ChevronLeft, ChevronRight, Wifi, WifiOff, 
-  RefreshCw, User, Percent, Cake, MessageSquare, Moon, Sun, LayoutGrid
+  RefreshCw, User, Percent, Cake, MessageSquare, LayoutGrid
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -96,27 +96,52 @@ const DirectorBackground = () => {
   useEffect(() => {
     const canvas = canvasRef.current; if (!canvas) return;
     const ctx = canvas.getContext('2d'); if (!ctx) return;
-    let width = canvas.width = window.innerWidth; let height = canvas.height = window.innerHeight;
+    
+    let width = canvas.width = window.innerWidth; 
+    let height = canvas.height = window.innerHeight;
+    
+    // Improved Red Particles
     const particles: {x: number, y: number, vx: number, vy: number, alpha: number}[] = [];
-    for (let i = 0; i < 40; i++) particles.push({ x: Math.random() * width, y: Math.random() * height, vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.5) * 0.3, alpha: Math.random() });
+    for (let i = 0; i < 50; i++) particles.push({ x: Math.random() * width, y: Math.random() * height, vx: (Math.random() - 0.5) * 0.5, vy: (Math.random() - 0.5) * 0.5, alpha: Math.random() });
+    
     const animate = () => {
       ctx.clearRect(0, 0, width, height);
       particles.forEach((p, i) => {
-        p.x += p.vx; p.y += p.vy; if (p.x < 0 || p.x > width) p.vx *= -1; if (p.y < 0 || p.y > height) p.vy *= -1;
-        ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI * 2); 
-        ctx.fillStyle = `rgba(220, 38, 38, ${p.alpha * 0.8})`; ctx.fill();
+        p.x += p.vx; p.y += p.vy; 
+        if (p.x < 0 || p.x > width) p.vx *= -1; 
+        if (p.y < 0 || p.y > height) p.vy *= -1;
+        
+        ctx.beginPath(); 
+        ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2); 
+        ctx.fillStyle = `rgba(220, 38, 38, ${p.alpha})`; 
+        ctx.fill();
+        
         for (let j = i + 1; j < particles.length; j++) {
-          const p2 = particles[j]; const dx = p.x - p2.x, dy = p.y - p2.y, dist = Math.sqrt(dx*dx + dy*dy);
-          if (dist < 200) { ctx.beginPath(); ctx.strokeStyle = `rgba(185, 28, 28, ${0.2 * (1 - dist/200)})`; ctx.lineWidth = 1; ctx.moveTo(p.x, p.y); ctx.lineTo(p2.x, p2.y); ctx.stroke(); }
+          const p2 = particles[j]; 
+          const dx = p.x - p2.x, dy = p.y - p2.y, dist = Math.sqrt(dx*dx + dy*dy);
+          if (dist < 180) { 
+            ctx.beginPath(); 
+            ctx.strokeStyle = `rgba(239, 68, 68, ${0.15 * (1 - dist/180)})`; 
+            ctx.lineWidth = 1; 
+            ctx.moveTo(p.x, p.y); 
+            ctx.lineTo(p2.x, p2.y); 
+            ctx.stroke(); 
+          }
         }
       });
       requestAnimationFrame(animate);
     };
-    const handleResize = () => { width = canvas.width = window.innerWidth; height = canvas.height = window.innerHeight; };
+    
+    const handleResize = () => { 
+        if(canvas) {
+            width = canvas.width = window.innerWidth; 
+            height = canvas.height = window.innerHeight; 
+        }
+    };
     window.addEventListener('resize', handleResize); animate(); return () => window.removeEventListener('resize', handleResize);
   }, []);
-  // Removed fixed positioning here to allow it to sit inside the relative container correctly, or use absolute.
-  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none opacity-50 z-0" />;
+  
+  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none opacity-80" />;
 };
 
 // --- COMPONENT: A4 INVOICE MODAL ---
@@ -142,7 +167,7 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
           <div className="flex justify-between items-center border-b-4 border-[#dc2626] pb-6 mb-8">
              <div className="flex flex-col gap-2">
                <div className="relative w-24 h-24">
-                  <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain" />
+                  <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain" unoptimized />
                </div>
                <div>
                  <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase font-serif">AIMS INSTITUTE</h1>
@@ -249,42 +274,42 @@ const DirectorLogin = ({ onUnlock }: { onUnlock: () => void }) => {
     try { const data = await erpApi.login(creds.id, creds.password); if (data.user?.role === 'SUPER_ADMIN') { if (typeof window !== 'undefined') { localStorage.setItem('director_session', JSON.stringify({ token: data.access_token, timestamp: Date.now() })); } onUnlock(); } else { setError('Access Denied: Directors/Admins Only'); } } catch (err: any) { setError('Invalid Director ID or Password'); } finally { setLoading(false); }
   };
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950 font-sans relative overflow-y-auto transition-colors duration-500 py-10">
-      {/* Background Container to properly layer particles */}
-      <div className="absolute inset-0 z-0 bg-slate-50 dark:bg-slate-950">
-         <DirectorBackground />
-      </div>
+    <div className="min-h-screen w-full flex flex-col justify-center items-center bg-slate-50 font-sans relative transition-colors duration-500 py-10 px-4 sm:px-6 lg:px-8">
       
-      <div className="relative z-10 w-full max-w-sm mx-4">
-        <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden ring-1 ring-white/20">
-          <div className="p-8 text-center border-b border-slate-100 dark:border-slate-800">
-            <div className="relative w-24 h-24 mx-auto mb-4">
-               <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain" />
+      {/* Background Canvas */}
+      <DirectorBackground />
+      
+      <div className="relative z-10 w-full max-w-sm">
+        <div className="bg-gradient-to-br from-red-900 to-red-800 backdrop-blur-xl border border-red-700/50 rounded-3xl shadow-2xl overflow-hidden ring-1 ring-white/10">
+          <div className="p-8 text-center border-b border-red-700/50">
+            <div className="relative w-24 h-24 mx-auto mb-4 bg-white/10 rounded-full p-4 backdrop-blur-sm">
+               {/* FIX: Added unoptimized to bypass cache for new logo */}
+               <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain" unoptimized />
             </div>
-            <h3 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Director Console</h3>
-            <p className="text-slate-500 dark:text-slate-400 text-xs mt-2 font-mono uppercase tracking-widest flex items-center justify-center gap-2">
-              <Activity size={12} className="text-[#dc2626] animate-pulse"/> System Online
+            <h3 className="text-2xl font-bold text-white tracking-tight">Director Console</h3>
+            <p className="text-red-200 text-xs mt-2 font-mono uppercase tracking-widest flex items-center justify-center gap-2">
+              <Activity size={12} className="text-white animate-pulse"/> System Online
             </p>
           </div>
           <form onSubmit={handleUnlock} className="p-8 space-y-5">
-            {error && <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-500/30 rounded-xl flex items-center gap-3 text-red-600 dark:text-red-300 text-xs font-bold"><AlertTriangle size={16} /> {error}</div>}
+            {error && <div className="p-3 bg-red-950/40 border border-red-500/50 rounded-xl flex items-center gap-3 text-red-200 text-xs font-bold"><AlertTriangle size={16} /> {error}</div>}
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider ml-1">Director ID</label>
-              <input type="text" className="w-full p-4 bg-white/50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#dc2626] transition-all font-mono placeholder:text-slate-400 dark:placeholder:text-slate-600" value={creds.id} onChange={(e) => setCreds({...creds, id: e.target.value})} placeholder="root_access"/>
+              <label className="text-xs font-bold text-red-200 uppercase tracking-wider ml-1">Director ID</label>
+              <input type="text" className="w-full p-4 bg-red-950/30 border border-red-700/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/50 transition-all font-mono placeholder:text-red-300/50" value={creds.id} onChange={(e) => setCreds({...creds, id: e.target.value})} placeholder="root_access"/>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider ml-1">Password</label>
-              <input type="password" className="w-full p-4 bg-white/50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#dc2626] transition-all font-mono placeholder:text-slate-400 dark:placeholder:text-slate-600" value={creds.password} onChange={(e) => setCreds({...creds, password: e.target.value})} placeholder="••••••••"/>
+              <label className="text-xs font-bold text-red-200 uppercase tracking-wider ml-1">Password</label>
+              <input type="password" className="w-full p-4 bg-red-950/30 border border-red-700/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/50 transition-all font-mono placeholder:text-red-300/50" value={creds.password} onChange={(e) => setCreds({...creds, password: e.target.value})} placeholder="••••••••"/>
             </div>
-            <button disabled={loading} className="w-full bg-gradient-to-r from-[#dc2626] to-red-800 hover:from-red-600 hover:to-red-700 text-white py-4 rounded-xl font-bold text-sm uppercase tracking-wider shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+            <button disabled={loading} className="w-full bg-white hover:bg-slate-100 text-red-900 py-4 rounded-xl font-bold text-sm uppercase tracking-wider shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2">
               {loading ? <Loader2 className="animate-spin" size={18} /> : <>Unlock ERP <Cpu size={16} /></>}
             </button>
-            <div className="text-center pt-4 border-t border-slate-100 dark:border-white/5">
-              <Link href="/" className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-300 transition-colors flex items-center justify-center gap-1"><ArrowLeft size={12}/> Return to Portal Hub</Link>
+            <div className="text-center pt-4 border-t border-red-700/50">
+              <Link href="/" className="text-xs text-red-200 hover:text-white transition-colors flex items-center justify-center gap-1"><ArrowLeft size={12}/> Return to Portal Hub</Link>
             </div>
           </form>
         </div>
-        <p className="text-center text-[10px] text-slate-400 dark:text-slate-600 mt-6 font-mono">SECURED CONNECTION • AIMS POWER</p>
+        <p className="text-center text-[10px] text-slate-500 mt-6 font-mono">SECURED CONNECTION • AIMS POWER</p>
       </div>
     </div>
   );
@@ -299,34 +324,6 @@ export default function DirectorPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
-  // THEME STATE WITH PERSISTENCE
-  const [darkMode, setDarkMode] = useState(false);
-
-  useEffect(() => {
-    // Initialize theme from localStorage or system preference on mount
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      setDarkMode(true);
-      document.documentElement.classList.add('dark');
-    } else {
-      setDarkMode(false);
-      document.documentElement.classList.remove('dark');
-    }
-  }, []);
-
-  // Update DOM and localStorage when state changes
-  const toggleTheme = () => {
-    const newMode = !darkMode;
-    setDarkMode(newMode);
-    if (newMode) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-    }
-  };
-
   // Data States
   const [batches, setBatches] = useState<Batch[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -399,32 +396,52 @@ export default function DirectorPage() {
   const handleSaveAttendance = async () => { if(!attendanceBatchId) return alert("Select Batch"); try { await erpApi.saveAttendance({ date: attendanceDate, batchId: attendanceBatchId, records: attendanceData }); alert("Saved"); setIsAttendanceMode(false); } catch (e) { alert("Failed"); } };
   const handlePublishVideo = async (e: React.FormEvent) => { e.preventDefault(); try { await erpApi.createResource({ ...contentForm, type: 'VIDEO' }); alert("Published"); setContentForm({ title: '', url: '', batchId: '' }); refreshData(); } catch (e) { alert("Failed"); } };
   const handlePostNotice = async (e: React.FormEvent) => { e.preventDefault(); try { await erpApi.createNotice(noticeForm); alert("Posted"); setNoticeForm({ title: '', content: '', batchId: '' }); refreshData(); } catch (e) { alert("Failed"); } };
-  const handleDeleteResource = async (id: string) => { if (confirm("Delete?")) { await erpApi.deleteResource(id); refreshData(); } };
-  const handleDeleteNotice = async (id: string) => { if (confirm("Delete?")) { await erpApi.deleteNotice(id); refreshData(); } };
+  const handleDeleteResource = async (id: string) => { 
+    if (confirm("Delete?")) { 
+      try { 
+        await erpApi.deleteResource(id); 
+        refreshData(); 
+      } catch (e) { 
+        alert("Failed"); 
+      } 
+    } 
+  };
+  const handleDeleteNotice = async (id: string) => { 
+    if (confirm("Delete?")) { 
+      try { 
+        await erpApi.deleteNotice(id); 
+        refreshData(); 
+      } catch (e) { 
+        alert("Failed"); 
+      } 
+    } 
+  };
   const handleUpdateEnquiryStatus = async (id: string, newStatus: string, followUp?: number) => { try { await erpApi.updateEnquiryStatus(id, newStatus, followUp); refreshData(); } catch (e) { alert("Failed"); } };
   const toggleAttendance = (studentId: string) => { setAttendanceData(prev => ({ ...prev, [studentId]: !prev[studentId] })); };
   const handleLogout = () => { if(typeof window !== 'undefined') localStorage.removeItem('director_session'); setIsUnlocked(false); };
 
   if (!isUnlocked) return <DirectorLogin onUnlock={() => setIsUnlocked(true)} />;
 
-  // --- THEME STYLES (RED/CRIMSON SIGNIFICANCE) ---
-  const glassPanel = "bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-white/20 dark:border-slate-800 shadow-xl rounded-2xl transition-all duration-300";
-  const inputStyle = "w-full p-3 bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-[#dc2626] dark:focus:ring-red-500 outline-none transition";
-  const labelStyle = "block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1";
+  // --- THEME STYLES (PURE LIGHT MODE) ---
+  const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl transition-all duration-300";
+  const inputStyle = "w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:ring-2 focus:ring-[#c1121f] outline-none transition";
+  const labelStyle = "block text-[10px] font-bold text-slate-500 uppercase mb-1";
 
   return (
-    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 font-sans overflow-hidden transition-colors duration-500">
+    <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
       
-      {/* SIDEBAR */}
-      <aside className={`bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-64'} shadow-lg relative z-20`}>
+      {/* SIDEBAR - DARK SLATE FOR CONTRAST */}
+      <aside className={`bg-slate-900 border-r border-slate-800 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-64'} shadow-lg relative z-20`}>
         <div className={`p-6 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
           {!isSidebarCollapsed && (
             <div className="flex items-center gap-2">
-              <div className="relative w-8 h-8"><Image src={LOGO_PATH} alt="Logo" fill className="object-contain" /></div>
-              <div><h2 className="text-lg font-bold text-slate-900 dark:text-white leading-none">AIMS</h2><p className="text-[9px] text-[#dc2626] dark:text-red-500 font-bold uppercase">Institute</p></div>
+              <div className="relative w-8 h-8">
+                 <Image src={LOGO_PATH} alt="Logo" fill className="object-contain" unoptimized />
+              </div>
+              <div><h2 className="text-lg font-bold text-white leading-none">AIMS</h2><p className="text-[9px] text-[#c1121f] font-bold uppercase">Institute</p></div>
             </div>
           )}
-          <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400">
+          <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400">
             {isSidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
         </div>
@@ -434,12 +451,11 @@ export default function DirectorPage() {
              <button key={tab} onClick={() => setActiveTab(tab)} 
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${
                   activeTab === tab 
-                  ? 'bg-gradient-to-r from-[#dc2626] to-[#b91c1c] text-white shadow-md shadow-red-200 dark:shadow-none' 
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  ? 'bg-[#c1121f] text-white shadow-md' 
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                 } ${isSidebarCollapsed ? 'justify-center' : ''}`}
                 title={tab.toUpperCase()}
              >
-                {/* Simplified icons mapping just for display logic */}
                 {tab === 'users' && <UserPlus size={18}/>}
                 {tab === 'batches' && <Layers size={18}/>}
                 {tab === 'accounts' && <Wallet size={18}/>}
@@ -452,31 +468,27 @@ export default function DirectorPage() {
           ))}
         </nav>
         
-        <div className="p-4 border-t border-slate-200 dark:border-slate-800 space-y-2">
-          <button onClick={toggleTheme} className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} w-full p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition`}>
-             {!isSidebarCollapsed && <span className="text-xs font-bold">THEME</span>}
-             {darkMode ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
-          <button onClick={handleLogout} className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 w-full p-2 rounded-lg transition`}>
+        <div className="p-4 border-t border-slate-800 space-y-2">
+          <button onClick={handleLogout} className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} text-red-500 hover:bg-red-900/20 w-full p-2 rounded-lg transition`}>
             <LogOut size={18} className={!isSidebarCollapsed ? "mr-2" : ""} /> 
             {!isSidebarCollapsed && "Logout"}
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 overflow-auto p-4 md:p-8 relative">
+      <main className="flex-1 overflow-auto p-4 md:p-8 relative bg-white/50">
         {!isOnline && <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg z-50 flex items-center gap-2"><WifiOff size={14}/> OFFLINE</div>}
-        {isOnline && status.includes('Sync') && <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-[#dc2626] text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg z-50 flex items-center gap-2"><RefreshCw size={14} className="animate-spin"/> {status}</div>}
+        {isOnline && status.includes('Sync') && <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-[#c1121f] text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg z-50 flex items-center gap-2"><RefreshCw size={14} className="animate-spin"/> {status}</div>}
 
         {activeTab === 'users' && (
           <div className="max-w-5xl mx-auto">
             <div className={glassPanel + " p-8"}>
-              <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-6 flex items-center"><UserPlus className="mr-3 text-[#dc2626] dark:text-red-500" /> New Admission</h2>
+              <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center"><UserPlus className="mr-3 text-[#c1121f]" /> New Admission</h2>
               {status && <div className={`mb-6 p-3 rounded-lg text-sm font-bold border ${status.includes('Error') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>{status}</div>}
               <form onSubmit={handleAdmission}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-4">
-                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 dark:border-slate-700 pb-2 mb-4">Student Info</h3>
+                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2 mb-4">Student Info</h3>
                     <input className={inputStyle} required placeholder="Student Name" value={admissionData.studentName} onChange={(e) => setAdmissionData({...admissionData, studentName: e.target.value})} />
                     
                     <div className="grid grid-cols-2 gap-4">
@@ -499,12 +511,12 @@ export default function DirectorPage() {
                       <div className="relative"><span className="absolute left-3 top-3 text-slate-400">₹</span><input type="number" className={`${inputStyle} pl-8 font-bold`} required placeholder="Fee" value={admissionData.fees} onChange={(e) => setAdmissionData({...admissionData, fees: parseInt(e.target.value) || 0})} /></div>
                     </div>
                     
-                    <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-xl border border-slate-100 dark:border-slate-700 space-y-4">
-                        <h4 className="text-xs font-bold text-[#dc2626] dark:text-red-400 uppercase flex items-center justify-between">
+                    <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 space-y-4">
+                        <h4 className="text-xs font-bold text-[#c1121f] uppercase flex items-center justify-between">
                             Fees & Installments
-                            <label className="flex items-center gap-2 cursor-pointer bg-white dark:bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
-                                <input type="checkbox" checked={admissionData.withGst} onChange={e => setAdmissionData({...admissionData, withGst: e.target.checked})} className="w-3 h-3 accent-[#dc2626]"/>
-                                <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">+ 18% GST</span>
+                            <label className="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 rounded-lg border border-slate-200">
+                                <input type="checkbox" checked={admissionData.withGst} onChange={e => setAdmissionData({...admissionData, withGst: e.target.checked})} className="w-3 h-3 accent-[#c1121f]"/>
+                                <span className="text-[10px] font-bold text-slate-600">+ 18% GST</span>
                             </label>
                         </h4>
                         <div className="grid grid-cols-2 gap-4">
@@ -512,23 +524,23 @@ export default function DirectorPage() {
                            <div><label className={labelStyle}>Installments</label><select className={inputStyle + " p-2"} value={admissionData.installments} onChange={(e) => setAdmissionData({...admissionData, installments: parseInt(e.target.value)})}>{[1,2,3,4,5,6,9,12].map(n => <option key={n} value={n}>{n}</option>)}</select></div>
                         </div>
                         
-                        {admissionData.installmentSchedule.length > 0 && <div className="mt-2"><div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden text-xs">{admissionData.installmentSchedule.map((inst, index) => (<div key={index} className="flex border-b border-slate-100 dark:border-slate-800 last:border-0"><div className="w-8 py-2 bg-slate-50 dark:bg-slate-800 text-center text-slate-400 font-bold">{index+1}</div><div className="flex-1 p-1"><input type="date" className="w-full p-1 bg-transparent text-slate-900 dark:text-white outline-none" value={inst.dueDate} onChange={(e) => { const newSchedule = [...admissionData.installmentSchedule]; newSchedule[index].dueDate = e.target.value; setAdmissionData({...admissionData, installmentSchedule: newSchedule}); }}/></div><div className="w-24 p-1 border-l border-slate-100 dark:border-slate-800"><input type="number" className="w-full p-1 bg-transparent text-right font-bold text-slate-700 dark:text-slate-300 outline-none" value={inst.amount} onChange={(e) => { const newSchedule = [...admissionData.installmentSchedule]; newSchedule[index].amount = parseInt(e.target.value) || 0; setAdmissionData({...admissionData, installmentSchedule: newSchedule}); }}/></div></div>))}</div></div>}
+                        {admissionData.installmentSchedule.length > 0 && <div className="mt-2"><div className="bg-white border border-slate-200 rounded-lg overflow-hidden text-xs">{admissionData.installmentSchedule.map((inst, index) => (<div key={index} className="flex border-b border-slate-100 last:border-0"><div className="w-8 py-2 bg-slate-50 text-center text-slate-400 font-bold">{index+1}</div><div className="flex-1 p-1"><input type="date" className="w-full p-1 bg-transparent text-slate-900 outline-none" value={inst.dueDate} onChange={(e) => { const newSchedule = [...admissionData.installmentSchedule]; newSchedule[index].dueDate = e.target.value; setAdmissionData({...admissionData, installmentSchedule: newSchedule}); }}/></div><div className="w-24 p-1 border-l border-slate-100"><input type="number" className="w-full p-1 bg-transparent text-right font-bold text-slate-700 outline-none" value={inst.amount} onChange={(e) => { const newSchedule = [...admissionData.installmentSchedule]; newSchedule[index].amount = parseInt(e.target.value) || 0; setAdmissionData({...admissionData, installmentSchedule: newSchedule}); }}/></div></div>))}</div></div>}
                         
-                        <div className="text-right text-sm font-bold text-slate-800 dark:text-white flex justify-end items-center gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-                            {admissionData.withGst && <span className="text-[10px] text-[#dc2626] bg-red-50 dark:bg-red-900/30 px-2 py-0.5 rounded-full font-bold">GST APPLIED</span>}
+                        <div className="text-right text-sm font-bold text-slate-800 flex justify-end items-center gap-2 pt-2 border-t border-slate-200">
+                            {admissionData.withGst && <span className="text-[10px] text-[#c1121f] bg-red-50 px-2 py-0.5 rounded-full font-bold">GST APPLIED</span>}
                             <span>Total: ₹ {admissionData.installmentSchedule.reduce((a, b) => a + b.amount, 0).toLocaleString()}</span>
                         </div>
                     </div>
                   </div>
                   <div className="space-y-4">
-                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 dark:border-slate-700 pb-2 mb-4">Parent Info</h3>
+                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2 mb-4">Parent Info</h3>
                     <input className={inputStyle} required placeholder="Parent ID" value={admissionData.parentId} onChange={(e) => setAdmissionData({...admissionData, parentId: e.target.value})} />
                     <input className={inputStyle} required placeholder="Parent Password" value={admissionData.parentPassword} onChange={(e) => setAdmissionData({...admissionData, parentPassword: e.target.value})} />
                     <input className={inputStyle} required placeholder="Parent Mobile" value={admissionData.parentPhone} onChange={(e) => handlePhoneInput(e, setAdmissionData, 'parentPhone')} maxLength={10} />
                   </div>
                 </div>
-                <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800 flex justify-end">
-                  <button className="bg-[#dc2626] hover:bg-red-800 dark:bg-red-600 dark:hover:bg-red-500 text-white dark:text-white px-8 py-3 rounded-xl font-bold shadow-lg transition-all flex items-center active:scale-95">
+                <div className="mt-8 pt-6 border-t border-slate-100 flex justify-end">
+                  <button className="bg-[#c1121f] hover:bg-red-800 text-white px-8 py-3 rounded-xl font-bold shadow-lg transition-all flex items-center active:scale-95">
                     <CheckCircle className="mr-2" size={18} /> Confirm Admission
                   </button>
                 </div>
@@ -549,13 +561,13 @@ export default function DirectorPage() {
                    <div><label className={labelStyle}>Max Students</label><input type="number" className={inputStyle} placeholder="60" value={newBatch.strength} onChange={(e) => setNewBatch({...newBatch, strength: parseInt(e.target.value) || 0})} required /></div>
                    <div><label className={labelStyle}>Standard Fee</label><input type="number" className={inputStyle} placeholder="₹" value={newBatch.fee} onChange={(e) => setNewBatch({...newBatch, fee: parseInt(e.target.value) || 0})} required /></div>
                 </div>
-                <button className="w-full bg-[#dc2626] text-white py-3 rounded-xl font-bold hover:bg-red-800 transition shadow-lg">Add Batch</button>
+                <button className="w-full bg-[#c1121f] text-white py-3 rounded-xl font-bold hover:bg-red-800 transition shadow-lg">Add Batch</button>
               </form>
             </div>
             <div className={glassPanel + " p-6"}>
-              <h3 className="font-bold text-slate-800 mb-4 flex justify-between items-center text-lg">Active Batches {isLoading && <Loader2 className="animate-spin text-[#dc2626]" size={18} />}</h3>
+              <h3 className="font-bold text-slate-800 mb-4 flex justify-between items-center text-lg">Active Batches {isLoading && <Loader2 className="animate-spin text-[#c1121f]" size={18} />}</h3>
               <div className="space-y-2">
-                {batches.length === 0 ? <p className="text-slate-400 text-sm italic">No batches found.</p> : batches.map(b => (<div key={b.id} className="flex justify-between items-center bg-white/40 dark:bg-slate-800/40 p-3 rounded-lg border border-white/50 dark:border-slate-700"><span className="font-medium text-slate-700 dark:text-slate-200">{b.name} <span className="text-xs text-slate-400 ml-1">({b.startYear})</span></span><div className="text-right"><span className="font-bold block text-sm text-slate-800 dark:text-slate-100">{b.strength} Students</span><span className="text-xs text-green-600 font-bold bg-green-50 dark:bg-green-900/30 px-2 py-0.5 rounded-full">₹{(b.fee || 0).toLocaleString()}</span></div></div>))}
+                {batches.length === 0 ? <p className="text-slate-400 text-sm italic">No batches found.</p> : batches.map(b => (<div key={b.id} className="flex justify-between items-center bg-white p-3 rounded-lg border border-slate-200"><span className="font-medium text-slate-700">{b.name} <span className="text-xs text-slate-400 ml-1">({b.startYear})</span></span><div className="text-right"><span className="font-bold block text-sm text-slate-800">{b.strength} Students</span><span className="text-xs text-green-600 font-bold bg-green-50 px-2 py-0.5 rounded-full">₹{(b.fee || 0).toLocaleString()}</span></div></div>))}
               </div>
             </div>
           </div>
@@ -564,33 +576,33 @@ export default function DirectorPage() {
         {activeTab === 'accounts' && (
           <div className="space-y-8 max-w-6xl mx-auto">
             <div className="grid grid-cols-3 gap-6">
-              <div className="bg-emerald-50/80 dark:bg-emerald-900/20 backdrop-blur-sm p-6 rounded-2xl border border-emerald-100 dark:border-emerald-900/30 shadow-sm"><div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1">Total Revenue</div><div className="text-3xl font-black text-emerald-900 dark:text-emerald-300 tracking-tight">₹ {(summary.revenue || 0).toLocaleString()}</div></div>
-              <div className="bg-red-50/80 dark:bg-red-900/20 backdrop-blur-sm p-6 rounded-2xl border border-red-100 dark:border-red-900/30 shadow-sm"><div className="text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wider mb-1">Total Expenses</div><div className="text-3xl font-black text-red-900 dark:text-red-300 tracking-tight">₹ {(summary.expenses || 0).toLocaleString()}</div></div>
-              <div className="bg-blue-50/80 dark:bg-blue-900/20 backdrop-blur-sm p-6 rounded-2xl border border-blue-100 dark:border-blue-900/30 shadow-sm"><div className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-1">Net Profit</div><div className="text-3xl font-black text-blue-900 dark:text-blue-300 tracking-tight">₹ {(summary.profit || 0).toLocaleString()}</div></div>
+              <div className="bg-emerald-50/80 backdrop-blur-sm p-6 rounded-2xl border border-emerald-100 shadow-sm"><div className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Total Revenue</div><div className="text-3xl font-black text-emerald-900 tracking-tight">₹ {(summary.revenue || 0).toLocaleString()}</div></div>
+              <div className="bg-red-50/80 backdrop-blur-sm p-6 rounded-2xl border border-red-100 shadow-sm"><div className="text-xs font-bold text-red-600 uppercase tracking-wider mb-1">Total Expenses</div><div className="text-3xl font-black text-red-900 tracking-tight">₹ {(summary.expenses || 0).toLocaleString()}</div></div>
+              <div className="bg-blue-50/80 backdrop-blur-sm p-6 rounded-2xl border border-blue-100 shadow-sm"><div className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Net Profit</div><div className="text-3xl font-black text-blue-900 tracking-tight">₹ {(summary.profit || 0).toLocaleString()}</div></div>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               <div className={glassPanel + " p-6"}>
-                <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center text-lg"><Wallet size={20} className="mr-2 text-emerald-600"/> Collect Fee</h3>
+                <h3 className="font-bold text-slate-800 mb-4 flex items-center text-lg"><Wallet size={20} className="mr-2 text-emerald-600"/> Collect Fee</h3>
                 <form onSubmit={handleCollectFee} className="space-y-4">
                   <div><label className={labelStyle}>Select Student</label><select className={inputStyle} value={feeForm.studentId} onChange={e => setFeeForm({...feeForm, studentId: e.target.value})} required><option value="">-- Choose --</option>{students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.studentId})</option>)}</select></div>
                   <div className="grid grid-cols-2 gap-4">
                     <div><label className={labelStyle}>Amount</label><input type="number" className={inputStyle} placeholder="₹ 5000" value={feeForm.amount} onChange={e => setFeeForm({...feeForm, amount: parseInt(e.target.value) || 0})} required/></div>
                     <div><label className={labelStyle}>Mode</label><select className={inputStyle} value={feeForm.paymentMode} onChange={e => setFeeForm({...feeForm, paymentMode: e.target.value})}><option value="CASH">CASH</option><option value="ONLINE">ONLINE / UPI</option><option value="CHEQUE">CHEQUE</option></select></div>
                   </div>
-                  <div className="flex items-center gap-2 p-2 bg-blue-50/50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-900/30">
-                    <input type="checkbox" id="gstToggle" checked={feeForm.withGst} onChange={e => setFeeForm({...feeForm, withGst: e.target.checked})} className="w-4 h-4 accent-[#dc2626]" />
-                    <label htmlFor="gstToggle" className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1 cursor-pointer select-none"><Percent size={12}/> Generate GST Invoice (18%)</label>
+                  <div className="flex items-center gap-2 p-2 bg-blue-50/50 rounded-lg border border-blue-100">
+                    <input type="checkbox" id="gstToggle" checked={feeForm.withGst} onChange={e => setFeeForm({...feeForm, withGst: e.target.checked})} className="w-4 h-4 accent-[#c1121f]" />
+                    <label htmlFor="gstToggle" className="text-xs font-bold text-slate-600 flex items-center gap-1 cursor-pointer select-none"><Percent size={12}/> Generate GST Invoice (18%)</label>
                   </div>
                   <div><label className={labelStyle}>Remarks / Transaction Ref</label><input type="text" className={inputStyle} placeholder="e.g. Cash Receipt No. 101" value={feeForm.transactionId} onChange={e => setFeeForm({...feeForm, transactionId: e.target.value})}/></div>
                   <button className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition shadow-lg shadow-emerald-500/20">Record Payment & Print</button>
                 </form>
               </div>
               <div className={glassPanel + " p-6"}>
-                <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center text-lg"><IndianRupee size={20} className="mr-2 text-red-600"/> Log Expense</h3>
+                <h3 className="font-bold text-slate-800 mb-4 flex items-center text-lg"><IndianRupee size={20} className="mr-2 text-red-600"/> Log Expense</h3>
                 <form onSubmit={handleAddExpense} className="space-y-4">
                    <div className="flex gap-4"><div className="flex-1"><label className={labelStyle}>Title</label><input className={inputStyle} placeholder="e.g. Electricity Bill" value={newExpense.title} onChange={e => setNewExpense({...newExpense, title: e.target.value})} required /></div><div className="w-1/3"><label className={labelStyle}>Amount</label><input type="number" className={inputStyle} placeholder="₹" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: parseInt(e.target.value) || 0})} required /></div></div>
                    <div><label className={labelStyle}>Category</label><select className={inputStyle} value={newExpense.category} onChange={e => setNewExpense({...newExpense, category: e.target.value})}><option>General</option><option>Salary</option><option>Infra</option></select></div>
-                   <button className="w-full bg-[#dc2626] text-white py-3 rounded-xl font-bold hover:bg-red-800 transition shadow-lg shadow-red-500/20">Log Expense</button>
+                   <button className="w-full bg-[#c1121f] text-white py-3 rounded-xl font-bold hover:bg-red-800 transition shadow-lg shadow-red-500/20">Log Expense</button>
                 </form>
               </div>
             </div>
@@ -600,76 +612,76 @@ export default function DirectorPage() {
         {activeTab === 'enquiries' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
             <div className={`lg:col-span-1 h-fit ${glassPanel} p-6`}>
-              <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center border-b border-slate-200 dark:border-slate-700 pb-3 text-lg"><PhoneCall size={20} className="mr-2 text-[#dc2626] dark:text-red-500"/> New Enquiry</h3>
+              <h3 className="font-bold text-slate-800 mb-4 flex items-center border-b border-slate-200 pb-3 text-lg"><PhoneCall size={20} className="mr-2 text-[#c1121f]"/> New Enquiry</h3>
               <form onSubmit={handleAddEnquiry} className="space-y-4">
                 <div><label className={labelStyle}>Student Name</label><input className={inputStyle} required placeholder="e.g. Amit Kumar" value={enquiryForm.studentName} onChange={e => setEnquiryForm({...enquiryForm, studentName: e.target.value})} /></div>
                 <div><label className={labelStyle}>Mobile (10 Digits)</label><input className={inputStyle} required placeholder="98765xxxxx" value={enquiryForm.mobile} onChange={e => handlePhoneInput(e, setEnquiryForm, 'mobile')} maxLength={10} /></div>
                 <div><label className={labelStyle}>Course</label><select className={inputStyle} required value={enquiryForm.course} onChange={e => setEnquiryForm({...enquiryForm, course: e.target.value})}><option value="">Select</option>{batches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}<option value="FOUNDATION">Foundation</option></select></div>
                 <div><label className={labelStyle}>Assign To</label><input className={inputStyle} placeholder="Counselor" value={enquiryForm.allotedTo} onChange={e => setEnquiryForm({...enquiryForm, allotedTo: e.target.value})} /></div>
                 <div><label className={labelStyle}>Remarks</label><textarea className={inputStyle} rows={2} placeholder="Notes..." value={enquiryForm.remarks} onChange={e => setEnquiryForm({...enquiryForm, remarks: e.target.value})} /></div>
-                <button className="w-full bg-[#dc2626] text-white py-3 rounded-xl font-bold hover:bg-red-800 transition shadow-lg">Save Enquiry</button>
+                <button className="w-full bg-[#c1121f] text-white py-3 rounded-xl font-bold hover:bg-red-800 transition shadow-lg">Save Enquiry</button>
               </form>
             </div>
             <div className={`lg:col-span-2 ${glassPanel} overflow-hidden flex flex-col h-[700px]`}>
-              <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex justify-between items-center"><h3 className="font-bold text-slate-800 dark:text-white">Recent Enquiries</h3><span className="bg-[#dc2626] text-white text-xs font-bold px-2 py-1 rounded">{enquiries.length} Total</span></div>
+              <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center"><h3 className="font-bold text-slate-800">Recent Enquiries</h3><span className="bg-[#c1121f] text-white text-xs font-bold px-2 py-1 rounded">{enquiries.length} Total</span></div>
               <div className="flex-1 overflow-y-auto custom-scrollbar">
                 <table className="w-full text-left">
-                  <thead className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-xs uppercase sticky top-0 z-10 backdrop-blur-sm"><tr><th className="px-6 py-3">Name / Mobile</th><th className="px-6 py-3">Details</th><th className="px-6 py-3">Status</th><th className="px-6 py-3 text-right">Action</th></tr></thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  <thead className="bg-slate-100 text-slate-500 text-xs uppercase sticky top-0 z-10 backdrop-blur-sm"><tr><th className="px-6 py-3">Name / Mobile</th><th className="px-6 py-3">Details</th><th className="px-6 py-3">Status</th><th className="px-6 py-3 text-right">Action</th></tr></thead>
+                  <tbody className="divide-y divide-slate-100">
                     {paginatedEnquiries.length === 0 ? <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-400 italic">No enquiries found.</td></tr> : paginatedEnquiries.map(enq => (
-                      <tr key={enq.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
+                      <tr key={enq.id} className="hover:bg-slate-50 transition">
                         <td className="px-6 py-4">
-                            <div className="font-bold text-slate-900 dark:text-white">{enq.studentName}</div>
+                            <div className="font-bold text-slate-900">{enq.studentName}</div>
                             <div className="text-xs text-slate-500 font-mono">{enq.mobile}</div>
                             {enq.remarks && (
-                                <div className="mt-1 text-[10px] text-slate-600 dark:text-slate-300 bg-yellow-50 dark:bg-yellow-900/20 px-2 py-1 rounded border border-yellow-100 dark:border-yellow-900/30 flex gap-1 items-start w-fit max-w-[200px]">
+                                <div className="mt-1 text-[10px] text-slate-600 bg-yellow-50 px-2 py-1 rounded border border-yellow-100 flex gap-1 items-start w-fit max-w-[200px]">
                                     <MessageSquare size={10} className="mt-0.5 shrink-0"/> <span className="line-clamp-2">{enq.remarks}</span>
                                 </div>
                             )}
                         </td>
                         <td className="px-6 py-4">
-                           <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-bold border border-slate-200 dark:border-slate-700 mb-1">
+                           <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200 mb-1">
                               <User size={10}/> {enq.allotedTo || 'Unassigned'}
                            </span>
                            <div className="text-xs text-slate-500 font-medium">{enq.course}</div>
                         </td>
-                        <td className="px-6 py-4"><div className="flex items-center gap-2"><select className="p-1 border dark:border-slate-700 rounded text-xs bg-white dark:bg-slate-900 text-slate-900 dark:text-white outline-none" value={enq.followUpCount || 0} onChange={(e) => handleUpdateEnquiryStatus(enq.id, enq.status, parseInt(e.target.value))}>{[0,1,2,3,4,5].map(n => <option key={n} value={n}>{n} Follow-ups</option>)}</select></div></td>
-                        <td className="px-6 py-4 text-right"><select className={`p-1.5 border rounded text-xs font-bold outline-none ${enq.status === 'ADMITTED' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white dark:border-slate-700'}`} value={enq.status} onChange={(e) => handleUpdateEnquiryStatus(enq.id, e.target.value, enq.followUpCount)}><option value="PENDING">Pending</option><option value="ADMITTED">Admitted</option><option value="PARTIALLY_ALLOCATED">Allocated</option><option value="UNALLOCATED">Unallocated</option><option value="CANCELLED">Cancel</option></select></td>
+                        <td className="px-6 py-4"><div className="flex items-center gap-2"><select className="p-1 border rounded text-xs bg-white text-slate-900 outline-none" value={enq.followUpCount || 0} onChange={(e) => handleUpdateEnquiryStatus(enq.id, enq.status, parseInt(e.target.value))}>{[0,1,2,3,4,5].map(n => <option key={n} value={n}>{n} Follow-ups</option>)}</select></div></td>
+                        <td className="px-6 py-4 text-right"><select className={`p-1.5 border rounded text-xs font-bold outline-none ${enq.status === 'ADMITTED' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-white text-slate-900'}`} value={enq.status} onChange={(e) => handleUpdateEnquiryStatus(enq.id, e.target.value, enq.followUpCount)}><option value="PENDING">Pending</option><option value="ADMITTED">Admitted</option><option value="PARTIALLY_ALLOCATED">Allocated</option><option value="UNALLOCATED">Unallocated</option><option value="CANCELLED">Cancel</option></select></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              {totalEnquiryPages > 1 && <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex justify-between items-center text-xs"><span className="text-slate-500">Page {enquiryPage} of {totalEnquiryPages}</span><div className="flex gap-2"><button onClick={() => setEnquiryPage(p => Math.max(1, p - 1))} disabled={enquiryPage === 1} className="p-1.5 rounded border bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"><ChevronLeft size={16}/></button><button onClick={() => setEnquiryPage(p => Math.min(totalEnquiryPages, p + 1))} disabled={enquiryPage === totalEnquiryPages} className="p-1.5 rounded border bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"><ChevronRight size={16}/></button></div></div>}
+              {totalEnquiryPages > 1 && <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center text-xs"><span className="text-slate-500">Page {enquiryPage} of {totalEnquiryPages}</span><div className="flex gap-2"><button onClick={() => setEnquiryPage(p => Math.max(1, p - 1))} disabled={enquiryPage === 1} className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50"><ChevronLeft size={16}/></button><button onClick={() => setEnquiryPage(p => Math.min(totalEnquiryPages, p + 1))} disabled={enquiryPage === totalEnquiryPages} className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50"><ChevronRight size={16}/></button></div></div>}
             </div>
           </div>
         )}
 
         {activeTab === 'directory' && (
           <div className={`${glassPanel} overflow-hidden max-w-7xl mx-auto`}>
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex flex-col md:flex-row justify-between items-center gap-4">
-              <div><h3 className="font-bold text-slate-800 dark:text-white text-lg">Student Directory</h3><div className="text-xs font-bold text-slate-500 uppercase">{filteredStudents.length} Records Found</div></div>
-              <div className="relative w-full md:w-72"><input type="text" className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-[#dc2626] dark:focus:ring-red-500 outline-none transition shadow-sm" placeholder="Search students..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /><Search size={16} className="absolute left-3 top-3 text-slate-400" /></div>
+            <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex flex-col md:flex-row justify-between items-center gap-4">
+              <div><h3 className="font-bold text-slate-800 text-lg">Student Directory</h3><div className="text-xs font-bold text-slate-500 uppercase">{filteredStudents.length} Records Found</div></div>
+              <div className="relative w-full md:w-72"><input type="text" className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-[#c1121f] outline-none transition shadow-sm" placeholder="Search students..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /><Search size={16} className="absolute left-3 top-3 text-slate-400" /></div>
             </div>
             <div className="overflow-x-auto">
               <div className="max-h-[600px] overflow-y-auto">
                 <table className="w-full text-left min-w-[1000px]">
                   <thead className="bg-slate-900 text-white text-xs uppercase sticky top-0 z-10 shadow-md"><tr><th className="px-6 py-4">Student Info</th><th className="px-6 py-4">Credentials (S)</th><th className="px-6 py-4">Parent Info</th><th className="px-6 py-4">Credentials (P)</th><th className="px-6 py-4 text-center">Mobile (Security)</th><th className="px-6 py-4 text-right">Fee Status</th></tr></thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+                  <tbody className="divide-y divide-slate-100 text-sm">
                     {paginatedStudents.length === 0 ? <tr><td colSpan={6} className="text-center py-10 text-slate-400 italic">No records match your search.</td></tr> : paginatedStudents.map(s => (
-                      <tr key={s.id} className="hover:bg-blue-50/30 dark:hover:bg-slate-800/30 transition">
-                        <td className="px-6 py-4"><div className="font-bold text-slate-900 dark:text-white text-base">{s.name}</div><div className="flex gap-2 mt-1"><span className="inline-block bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide">{s.batch}</span>{s.dob && <span className="inline-flex items-center gap-1 bg-pink-50 dark:bg-pink-900/20 text-pink-600 dark:text-pink-400 text-[10px] font-bold px-2 py-0.5 rounded border border-pink-100 dark:border-pink-900/30"><Cake size={10}/> {new Date(s.dob).toLocaleDateString(undefined, {month:'short', day:'numeric'})}</span>}</div></td>
-                        <td className="px-6 py-4 font-mono text-xs"><div className="text-slate-500 dark:text-slate-400">ID: <span className="text-[#dc2626] dark:text-red-400 font-bold">{s.studentId}</span></div><div className="text-slate-400">PW: {s.studentPassword || '****'}</div></td>
-                        <td className="px-6 py-4"><div className="font-medium text-slate-800 dark:text-slate-200">Parent of {s.name.split(' ')[0]}</div>{s.address && <div className="text-xs text-slate-400 mt-1 max-w-[150px] truncate" title={s.address}>{s.address}</div>}</td>
-                        <td className="px-6 py-4 font-mono text-xs"><div className="text-slate-500 dark:text-slate-400">ID: <span className="text-purple-600 dark:text-purple-400 font-bold">{s.parentId}</span></div><div className="text-slate-400">PW: {s.parentPassword || '****'}</div></td>
-                        <td className="px-6 py-4 text-center"><div className="flex items-center justify-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 w-fit mx-auto shadow-sm"><span className={`font-mono font-bold ${s.isMobileMasked ? 'text-slate-400' : 'text-green-600'}`}>{s.parentMobile}</span>{!s.isMobileMasked && <button onClick={() => navigator.clipboard.writeText(s.parentMobile)} className="text-slate-400 hover:text-blue-600 transition" title="Copy"><Copy size={14}/></button>}{s.isMobileMasked && <span title="Locked by Security Panel"><Lock size={12} className="text-red-400" /></span>}</div></td>
+                      <tr key={s.id} className="hover:bg-blue-50/30 transition">
+                        <td className="px-6 py-4"><div className="font-bold text-slate-900 text-base">{s.name}</div><div className="flex gap-2 mt-1"><span className="inline-block bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide">{s.batch}</span>{s.dob && <span className="inline-flex items-center gap-1 bg-pink-50 text-pink-600 text-[10px] font-bold px-2 py-0.5 rounded border border-pink-100"><Cake size={10}/> {new Date(s.dob).toLocaleDateString(undefined, {month:'short', day:'numeric'})}</span>}</div></td>
+                        <td className="px-6 py-4 font-mono text-xs"><div className="text-slate-500">ID: <span className="text-[#c1121f] font-bold">{s.studentId}</span></div><div className="text-slate-400">PW: {s.studentPassword || '****'}</div></td>
+                        <td className="px-6 py-4"><div className="font-medium text-slate-800">Parent of {s.name.split(' ')[0]}</div>{s.address && <div className="text-xs text-slate-400 mt-1 max-w-[150px] truncate" title={s.address}>{s.address}</div>}</td>
+                        <td className="px-6 py-4 font-mono text-xs"><div className="text-slate-500">ID: <span className="text-purple-600 font-bold">{s.parentId}</span></div><div className="text-slate-400">PW: {s.parentPassword || '****'}</div></td>
+                        <td className="px-6 py-4 text-center"><div className="flex items-center justify-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5 w-fit mx-auto shadow-sm"><span className={`font-mono font-bold ${s.isMobileMasked ? 'text-slate-400' : 'text-green-600'}`}>{s.parentMobile}</span>{!s.isMobileMasked && <button onClick={() => navigator.clipboard.writeText(s.parentMobile)} className="text-slate-400 hover:text-blue-600 transition" title="Copy"><Copy size={14}/></button>}{s.isMobileMasked && <span title="Locked by Security Panel"><Lock size={12} className="text-red-400" /></span>}</div></td>
                         <td className="px-6 py-4 text-right"><div className="text-slate-500 text-xs font-medium">Total: ₹{s.feeTotal.toLocaleString()}</div><div className={`font-bold text-base ${s.feeRemaining > 0 ? 'text-red-600' : 'text-green-600'}`}>Due: ₹{s.feeRemaining.toLocaleString()}</div></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              {totalDirectoryPages > 1 && <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex justify-between items-center text-xs"><span className="text-slate-500">Page {directoryPage} of {totalDirectoryPages}</span><div className="flex gap-2"><button onClick={() => setDirectoryPage(p => Math.max(1, p - 1))} disabled={directoryPage === 1} className="p-1.5 rounded border bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"><ChevronLeft size={16}/></button><button onClick={() => setDirectoryPage(p => Math.min(totalDirectoryPages, p + 1))} disabled={directoryPage === totalDirectoryPages} className="p-1.5 rounded border bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"><ChevronRight size={16}/></button></div></div>}
+              {totalDirectoryPages > 1 && <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center text-xs"><span className="text-slate-500">Page {directoryPage} of {totalDirectoryPages}</span><div className="flex gap-2"><button onClick={() => setDirectoryPage(p => Math.max(1, p - 1))} disabled={directoryPage === 1} className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50"><ChevronLeft size={16}/></button><button onClick={() => setDirectoryPage(p => Math.min(totalDirectoryPages, p + 1))} disabled={directoryPage === totalDirectoryPages} className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50"><ChevronRight size={16}/></button></div></div>}
             </div>
           </div>
         )}
