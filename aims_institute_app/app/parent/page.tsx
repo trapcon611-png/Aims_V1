@@ -10,148 +10,209 @@ import {
   Loader2, 
   Wallet, 
   Download, 
-  AlertCircle,
-  PieChart,
-  School,
-  Lock,
-  Sparkles,
-  Zap,
-  LayoutDashboard,
-  Menu,
-  ChevronUp,
-  ChevronDown,
-  Printer,
-  X,
-  FileText,
-  Calendar,
-  Clock,
-  FileCheck,
-  Receipt,
-  Sun,
-  Moon,
-  Info,
+  AlertCircle, 
+  PieChart, 
+  School, 
+  Lock, 
+  Sparkles, 
+  Zap, 
+  LayoutDashboard, 
+  Menu, 
+  ChevronUp, 
+  ChevronDown, 
+  Printer, 
+  X, 
+  FileText, 
+  Calendar, 
+  Clock, 
+  FileCheck, 
+  Receipt, 
+  Sun, 
+  Moon, 
+  Info, 
   CheckCircle
 } from 'lucide-react';
+import Image from 'next/image';
 
 // --- CONFIGURATION ---
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const LOGO_PATH = '/logo.png';
 
 // --- TYPES ---
-interface FeeRecord {
-  id: string;
-  amount: number;
-  date: string;
-  remarks: string;
+interface FeeRecord { 
+  id: string; 
+  amount: number; 
+  date: string; 
+  remarks: string; 
   transactionId?: string; 
-  paymentMode?: string;   
+  paymentMode?: string; 
 }
 
-interface Installment {
-  id: number;
-  amount: number;
-  dueDate: string;
+interface Installment { 
+  id: number; 
+  amount: number; 
+  dueDate: string; 
 }
 
-interface ChildFinancial {
-  studentId: string;
-  name: string;
-  batch: string;
+interface ChildFinancial { 
+  studentId: string; 
+  name: string; 
+  batch: string; 
   parentId?: string; 
-  totalFees: number;
-  paidFees: number;
-  pendingFees: number;
-  history: FeeRecord[];
-  installments?: Installment[];
+  totalFees: number; 
+  paidFees: number; 
+  pendingFees: number; 
+  history: FeeRecord[]; 
+  installments?: Installment[]; 
 }
 
 // --- API UTILITIES ---
 const parentApi = {
-  async login(username: string, password: string) {
-    const res = await fetch(`${API_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
-    if (!res.ok) throw new Error('Invalid Credentials');
-    return await res.json();
+  async login(username: string, password: string) { 
+    const res = await fetch(`${API_URL}/auth/login`, { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ username, password }), 
+    }); 
+    if (!res.ok) throw new Error('Invalid Credentials'); 
+    return await res.json(); 
   },
 
-  async getFinancials(token: string) {
-    const res = await fetch(`${API_URL}/finance/my-summary`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (!res.ok) throw new Error('Failed to load data');
-    return await res.json();
+  async getFinancials(token: string) { 
+    const res = await fetch(`${API_URL}/finance/my-summary`, { 
+      headers: { 'Authorization': `Bearer ${token}` } 
+    }); 
+    if (!res.ok) throw new Error('Failed to load data'); 
+    return await res.json(); 
   }
 };
 
-// --- GRAPHICS: NEURAL BACKGROUND ---
+// --- GRAPHICS: PURPLE NEURAL BACKGROUND ---
 const NeuralBackground = ({ isDark }: { isDark: boolean }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
   useEffect(() => {
-    const canvas = canvasRef.current;
+    const canvas = canvasRef.current; 
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d'); 
     if (!ctx) return;
-    let width = canvas.width = window.innerWidth;
+    
+    let width = canvas.width = window.innerWidth; 
     let height = canvas.height = window.innerHeight;
+    
     const particles: {x: number, y: number, vx: number, vy: number}[] = [];
-    for (let i = 0; i < 60; i++) particles.push({ x: Math.random()*width, y: Math.random()*height, vx: (Math.random()-0.5)*0.4, vy: (Math.random()-0.5)*0.4 });
+    for (let i = 0; i < 60; i++) {
+        particles.push({ 
+            x: Math.random() * width, 
+            y: Math.random() * height, 
+            vx: (Math.random() - 0.5) * 0.4, 
+            vy: (Math.random() - 0.5) * 0.4 
+        });
+    }
+
     const animate = () => {
       ctx.clearRect(0, 0, width, height);
       particles.forEach((p, i) => {
-        p.x += p.vx; p.y += p.vy;
-        if (p.x < 0 || p.x > width) p.vx *= -1;
+        p.x += p.vx; 
+        p.y += p.vy; 
+        
+        if (p.x < 0 || p.x > width) p.vx *= -1; 
         if (p.y < 0 || p.y > height) p.vy *= -1;
-        ctx.beginPath(); ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2); 
-        ctx.fillStyle = isDark ? 'rgba(139, 92, 246, 0.4)' : 'rgba(79, 70, 229, 0.6)'; 
+        
+        ctx.beginPath(); 
+        ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2); 
+        
+        // Purple Theme Particles
+        ctx.fillStyle = isDark ? 'rgba(192, 132, 252, 0.4)' : 'rgba(147, 51, 234, 0.6)'; 
         ctx.fill();
+        
         for (let j = i + 1; j < particles.length; j++) {
-          const p2 = particles[j];
-          const dx = p.x - p2.x, dy = p.y - p2.y, dist = Math.sqrt(dx*dx + dy*dy);
+          const p2 = particles[j]; 
+          const dx = p.x - p2.x, dy = p.y - p2.y;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          
           if (dist < 160) { 
             ctx.beginPath(); 
             ctx.strokeStyle = isDark 
-              ? `rgba(167, 139, 250, ${0.15 * (1 - dist/160)})` 
-              : `rgba(99, 102, 241, ${0.2 * (1 - dist/160)})`; 
-            ctx.lineWidth = 1.2; ctx.moveTo(p.x, p.y); ctx.lineTo(p2.x, p2.y); ctx.stroke(); 
+                ? `rgba(192, 132, 252, ${0.15 * (1 - dist/160)})` 
+                : `rgba(147, 51, 234, ${0.2 * (1 - dist/160)})`; 
+            ctx.lineWidth = 1.2; 
+            ctx.moveTo(p.x, p.y); 
+            ctx.lineTo(p2.x, p2.y); 
+            ctx.stroke(); 
           }
         }
       });
       requestAnimationFrame(animate);
     };
-    const handleResize = () => { width = canvas.width = window.innerWidth; height = canvas.height = window.innerHeight; };
-    window.addEventListener('resize', handleResize); animate();
+
+    const handleResize = () => { 
+        width = canvas.width = window.innerWidth; 
+        height = canvas.height = window.innerHeight; 
+    };
+    
+    window.addEventListener('resize', handleResize); 
+    animate(); 
     return () => window.removeEventListener('resize', handleResize);
   }, [isDark]);
+
   return <canvas ref={canvasRef} className="fixed inset-0 z-0 pointer-events-none" />;
 };
 
-// --- COMPONENT: LOGIN ---
+// --- COMPONENT: LOGIN (PURPLE THEMED) ---
 const ParentLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
   const [creds, setCreds] = useState({ username: '', password: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setLoading(true); setError('');
-    try { const data = await parentApi.login(creds.username, creds.password); if (data.user.role !== 'PARENT') throw new Error("Access Restricted"); onLogin(data); } catch (e: any) { setError(e.message || "Login failed."); } finally { setLoading(false); }
+
+  const handleSubmit = async (e: React.FormEvent) => { 
+    e.preventDefault(); 
+    setLoading(true); 
+    setError(''); 
+    try { 
+        const data = await parentApi.login(creds.username, creds.password); 
+        if (data.user.role !== 'PARENT') throw new Error("Access Restricted"); 
+        onLogin(data); 
+    } catch (e: any) { 
+        setError(e.message || "Login failed."); 
+    } finally { 
+        setLoading(false); 
+    } 
   };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 font-sans relative overflow-hidden">
-       <div className="absolute inset-0 bg-gradient-to-br from-indigo-100 via-slate-50 to-purple-100 opacity-80"></div>
+       {/* Purple Gradient Background */}
+       <div className="absolute inset-0 bg-gradient-to-br from-purple-100 via-indigo-50 to-pink-50 opacity-90"></div>
        <NeuralBackground isDark={false} />
-       <div className="w-full max-w-md bg-white/90 backdrop-blur-xl p-8 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] border border-white/60 relative z-10 mx-4">
+       
+       <div className="w-full max-w-md bg-white/80 backdrop-blur-xl p-10 rounded-3xl shadow-2xl border border-purple-100 relative z-10 mx-4">
          <div className="text-center mb-8">
-           <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-700 to-purple-700 text-white mb-6 shadow-lg shadow-indigo-500/30"><School size={32}/></div>
-           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Parent Portal</h1>
-           <p className="text-slate-500 text-sm mt-2 font-medium">AIMS Integrated Ecosystem</p>
+           <div className="relative w-24 h-24 mx-auto mb-4 p-2 bg-white rounded-full shadow-lg">
+             <Image src={LOGO_PATH} alt="Logo" fill className="object-contain" unoptimized />
+           </div>
+           <h1 className="text-3xl font-black text-slate-800 tracking-tight uppercase">Parent Portal</h1>
+           <p className="text-purple-600 text-sm mt-1 font-bold uppercase tracking-wider">AIMS Institute</p>
          </div>
-         <form onSubmit={handleSubmit} className="space-y-5">
-           {error && <div className="p-4 bg-red-50 text-red-700 text-sm rounded-xl border border-red-100 font-bold text-center flex items-center justify-center gap-2"><AlertCircle size={16}/> {error}</div>}
-           <div className="space-y-1.5"><label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Registered ID</label><input className="w-full p-4 border border-slate-200 rounded-2xl bg-slate-50/50 focus:bg-white outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all text-gray-900 font-medium placeholder:text-gray-400" placeholder="e.g., 9876500000" value={creds.username} onChange={e=>setCreds({...creds, username:e.target.value})} /></div>
-           <div className="space-y-1.5"><label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Password</label><input className="w-full p-4 border border-slate-200 rounded-2xl bg-slate-50/50 focus:bg-white outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all text-gray-900 font-medium placeholder:text-gray-400" type="password" placeholder="••••••••" value={creds.password} onChange={e=>setCreds({...creds, password:e.target.value})} /></div>
-           <button disabled={loading} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold text-lg hover:bg-slate-800 hover:shadow-xl hover:shadow-indigo-500/20 active:scale-[0.98] transition-all flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mt-2">{loading ? <Loader2 className="animate-spin"/> : <>Secure Access <Sparkles size={18} className="text-indigo-300"/></>}</button>
-           <p className="text-center text-xs text-slate-400 mt-6 font-medium">Secured by AIMS INSTITUTE DEVELOPERS</p>
+         
+         <form onSubmit={handleSubmit} className="space-y-6">
+           {error && <div className="p-4 bg-red-50 text-red-600 text-sm rounded-xl border border-red-100 font-bold text-center flex items-center justify-center gap-2"><AlertCircle size={16}/> {error}</div>}
+           
+           <div className="space-y-1.5">
+             <label className="text-xs font-bold text-purple-400 uppercase tracking-wider ml-1">Parent ID</label>
+             <input className="w-full p-4 border border-purple-100 rounded-xl bg-purple-50/30 focus:bg-white outline-none focus:ring-2 focus:ring-purple-500 transition-all font-mono text-lg text-slate-700" placeholder="P-12345" value={creds.username} onChange={e=>setCreds({...creds, username:e.target.value})} />
+           </div>
+           
+           <div className="space-y-1.5">
+             <label className="text-xs font-bold text-purple-400 uppercase tracking-wider ml-1">Password</label>
+             <input className="w-full p-4 border border-purple-100 rounded-xl bg-purple-50/30 focus:bg-white outline-none focus:ring-2 focus:ring-purple-500 transition-all font-mono text-lg text-slate-700" type="password" placeholder="••••••••" value={creds.password} onChange={e=>setCreds({...creds, password:e.target.value})} />
+           </div>
+           
+           <button disabled={loading} className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-purple-500/30 transition-all flex justify-center items-center gap-2 disabled:opacity-70 mt-4 active:scale-95">
+             {loading ? <Loader2 className="animate-spin"/> : <>Secure Login <Sparkles size={18} className="text-purple-200"/></>}
+           </button>
+           
+           <p className="text-center text-xs text-slate-400 mt-6 font-medium">Secured by AIMS INSTITUTE</p>
          </form>
        </div>
     </div>
@@ -160,105 +221,98 @@ const ParentLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
 
 // --- COMPONENT: A4 INVOICE MODAL ---
 const ParentInvoiceModal = ({ data, onClose }: { data: any, onClose: () => void }) => {
-  // Simple check to assume if amount is uneven it might include GST or if logic dictates
-  // For now, we display flat amount as stored in DB history
-  
   return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center bg-black/70 backdrop-blur-sm overflow-y-auto print:bg-white print:fixed print:inset-0 print:z-[9999] print:block">
-      <style jsx global>{`
-        @media print {
-          @page { size: A4; margin: 0; }
-          body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; }
-          .print-hidden { display: none !important; }
-          .print-a4 { width: 210mm !important; min-height: 297mm !important; margin: 0 auto !important; border: none !important; box-shadow: none !important; padding: 20mm !important; border-radius: 0 !important; }
-        }
+    <div className="fixed inset-0 z-[100] flex items-start justify-center bg-slate-900/80 backdrop-blur-sm overflow-y-auto print:bg-white print:fixed print:inset-0 print:z-[9999] print:block">
+      <style jsx global>{` 
+        @media print { 
+            @page { size: A4; margin: 0; } 
+            body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; } 
+            .print-hidden { display: none !important; } 
+            .print-a4 { width: 210mm !important; min-height: 297mm !important; margin: 0 auto !important; border: none !important; box-shadow: none !important; padding: 20mm !important; border-radius: 0 !important; } 
+        } 
       `}</style>
       
       <div className="print-a4 bg-white w-[210mm] min-h-[297mm] p-[20mm] relative shadow-2xl my-8 mx-auto flex flex-col justify-between text-slate-900">
-        
-        {/* HEADER */}
         <div>
-          <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6 mb-8">
+          {/* INVOICE HEADER */}
+          <div className="flex justify-between items-center border-b-4 border-[#c1121f] pb-6 mb-8">
              <div className="flex flex-col gap-2">
-               <div className="h-16 w-16 bg-slate-900 text-white flex items-center justify-center font-bold text-2xl rounded-lg">AI</div>
+               <div className="relative w-20 h-20">
+                  <Image src={LOGO_PATH} alt="Logo" fill className="object-contain" unoptimized />
+               </div>
                <div>
-                 <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">RECEIPT</h1>
-                 <p className="text-xs font-bold text-slate-500">OFFICIAL PAYMENT RECORD</p>
+                   <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase font-serif">RECEIPT</h1>
+                   <p className="text-xs font-bold text-[#c1121f] uppercase tracking-wide">Official Payment Record</p>
                </div>
              </div>
              <div className="text-right">
-               <h2 className="text-xl font-bold text-slate-900">AIMS INSTITUTE</h2>
-               <p className="text-sm text-slate-600">123, Knowledge City</p>
-               <p className="text-sm text-slate-600">Pimpri-Chinchwad, MH</p>
-               <p className="text-sm text-slate-600">contact@aimsinstitute.com</p>
+                <h2 className="text-xl font-bold text-slate-900">AIMS INSTITUTE</h2>
+                <p className="text-sm text-slate-600">123, Knowledge City, MH</p>
+                <p className="text-sm text-slate-600">contact@aimsinstitute.com</p>
              </div>
           </div>
 
-          {/* INFO GRID */}
-          <div className="flex justify-between mb-10">
+          {/* INVOICE INFO */}
+          <div className="flex justify-between mb-10 bg-slate-50 p-6 rounded-lg border border-slate-100">
             <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Received From</p>
-              <h3 className="text-xl font-bold text-slate-900">{data.studentName}</h3>
-              <p className="text-sm text-slate-600">Student ID: {data.studentId}</p>
-              <p className="text-sm text-slate-600">Batch: {data.batch}</p>
-              <p className="text-sm text-slate-600 mt-1">Parent ID: <span className="font-mono font-bold">{data.parentId}</span></p>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Received From</p>
+                <h3 className="text-xl font-bold text-slate-900">{data.studentName}</h3>
+                <p className="text-sm text-slate-600">ID: {data.studentId}</p>
+                <p className="text-sm text-slate-600">Batch: {data.batch}</p>
             </div>
             <div className="text-right">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Receipt Details</p>
-              <p className="text-sm font-bold text-slate-900">No: {data.id ? data.id.slice(0, 8).toUpperCase() : 'N/A'}</p>
-              <p className="text-sm text-slate-600">Date: {new Date(data.date).toLocaleDateString()}</p>
-              <div className="mt-2 inline-block bg-slate-100 px-3 py-1 rounded text-xs font-bold text-slate-700 uppercase border border-slate-200">
-                Mode: {data.paymentMode || 'CASH'}
-              </div>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Receipt Details</p>
+                <p className="text-sm font-bold text-slate-900">No: {data.id ? data.id.slice(0, 8).toUpperCase() : 'N/A'}</p>
+                <p className="text-sm text-slate-600">Date: {new Date(data.date).toLocaleDateString()}</p>
+                <div className="mt-2 inline-block bg-white px-3 py-1 rounded text-xs font-bold text-[#c1121f] uppercase border border-[#c1121f]">
+                    Mode: {data.paymentMode || 'CASH'}
+                </div>
             </div>
           </div>
 
-          {/* TABLE */}
-          <table className="w-full mb-8">
-            <thead>
-              <tr className="bg-slate-900 text-white">
-                <th className="py-3 px-4 text-left text-xs font-bold uppercase tracking-wider">Description</th>
-                <th className="py-3 px-4 text-right text-xs font-bold uppercase tracking-wider">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-slate-200">
-                <td className="py-4 px-4">
-                  <p className="font-bold text-slate-800">Tuition Fee Payment</p>
-                  <p className="text-xs text-slate-500 italic mt-1">Ref: {data.transactionId || 'N/A'}</p>
-                  <p className="text-xs text-slate-500">{data.remarks}</p>
-                </td>
-                <td className="py-4 px-4 text-right font-mono font-bold text-slate-800">
-                  ₹{(data.amount || 0).toLocaleString()}
-                </td>
-              </tr>
-            </tbody>
+          {/* INVOICE TABLE */}
+          <table className="w-full mb-8 border-collapse">
+              <thead>
+                  <tr className="bg-slate-900 text-white">
+                      <th className="py-3 px-4 text-left text-xs font-bold uppercase tracking-wider">Description</th>
+                      <th className="py-3 px-4 text-right text-xs font-bold uppercase tracking-wider">Amount</th>
+                  </tr>
+              </thead>
+              <tbody>
+                  <tr className="border-b border-slate-200">
+                      <td className="py-4 px-4">
+                          <p className="font-bold text-slate-800">Tuition Fee Payment</p>
+                          <p className="text-xs text-slate-500 italic mt-1">Ref: {data.transactionId || 'N/A'}</p>
+                          <p className="text-xs text-slate-500">{data.remarks}</p>
+                      </td>
+                      <td className="py-4 px-4 text-right font-mono font-bold text-slate-800">
+                          ₹{(data.amount || 0).toLocaleString()}
+                      </td>
+                  </tr>
+              </tbody>
           </table>
 
-          {/* TOTALS */}
+          {/* INVOICE TOTALS */}
           <div className="flex justify-end mb-12">
             <div className="w-1/2 border-t-2 border-slate-900 pt-4">
-              <div className="flex justify-between items-center">
-                <span className="text-xl font-black text-slate-900 uppercase">Total Paid</span>
-                <span className="text-2xl font-black text-emerald-600">₹{(data.amount || 0).toLocaleString()}</span>
-              </div>
+                <div className="flex justify-between items-center">
+                    <span className="text-xl font-black text-slate-900 uppercase">Total Paid</span>
+                    <span className="text-2xl font-black text-[#c1121f]">₹{(data.amount || 0).toLocaleString()}</span>
+                </div>
             </div>
           </div>
         </div>
 
-        {/* FOOTER */}
+        {/* INVOICE FOOTER */}
         <div className="border-t border-slate-200 pt-6 text-center">
-          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mb-2">Thank you for your payment</p>
-          <p className="text-[10px] text-slate-400">This is a computer-generated document. No signature required.</p>
-          <p className="text-[10px] text-slate-400">AIMS Institute • Registered Education Provider</p>
+            <p className="text-[10px] text-slate-400 uppercase font-bold">AIMS Institute • Team of IITian's & Dr's</p>
         </div>
 
         {/* PRINT CONTROLS */}
         <div className="absolute top-4 -right-16 flex flex-col gap-2 print-hidden">
-          <button onClick={() => window.print()} className="bg-blue-600 text-white p-3 rounded-full shadow-lg hover:bg-blue-700 transition" title="Print"><Printer size={20}/></button>
-          <button onClick={onClose} className="bg-white text-slate-700 p-3 rounded-full shadow-lg hover:bg-slate-100 transition" title="Close"><X size={20}/></button>
+            <button onClick={() => window.print()} className="bg-[#1d4ed8] text-white p-3 rounded-full shadow-lg hover:bg-blue-800 transition"><Printer size={20}/></button>
+            <button onClick={onClose} className="bg-white text-slate-700 p-3 rounded-full shadow-lg hover:bg-slate-100 transition"><X size={20}/></button>
         </div>
-
       </div>
     </div>
   );
@@ -268,244 +322,140 @@ const ParentInvoiceModal = ({ data, onClose }: { data: any, onClose: () => void 
 const StudentCard = ({ child, onViewInvoice, isDark }: { child: ChildFinancial, onViewInvoice: (inv: any) => void, isDark: boolean }) => {
   const [activeTab, setActiveTab] = useState<'fees' | 'invoices' | 'academics'>('fees');
 
-  // --- LOGIC FIX: Calculate CURRENT Installment amount ---
-  // If user has installments, we ONLY show the next unpaid amount.
-  const calculateCurrentPayable = () => {
-    if (!child.installments || child.installments.length === 0) return child.pendingFees;
+  // Logic to determine the NEXT payment amount
+  const calculateCurrentPayable = () => { 
+    if (!child.installments || child.installments.length === 0) return child.pendingFees; 
+    let cumulative = 0; 
+    const paid = child.paidFees; 
     
-    // We assume installments are sequential. We iterate until we exceed what is paid.
-    let cumulative = 0;
-    const paid = child.paidFees;
-    
-    for (const inst of child.installments) {
-        cumulative += inst.amount;
-        if (cumulative > paid) {
-            // This installment is partially paid or fully unpaid
-            // The amount to pay NOW is the difference (Target - Paid_So_Far)
-            // Wait, logic check: 'cumulative' is the target total at this step.
-            // If paid is 5000, and cumulative is 10000 (first inst), pay = 5000.
-            // If paid is 15000, and cumulative is 10000 (1st), loop continues.
-            // Next cumulative 20000. 20000 > 15000. pay = 20000 - 15000 = 5000.
+    for (const inst of child.installments) { 
+        cumulative += inst.amount; 
+        if (cumulative > paid) { 
+            // Return difference between cumulative target and what's paid
             return cumulative - paid; 
-        }
-    }
-    return 0; // Everything paid
+        } 
+    } 
+    return 0; // Fully paid
   };
 
   const currentPayable = calculateCurrentPayable();
 
-  const handlePayment = (amount: number, studentId: string) => {
-    alert(`[MOCK PAYMENT GATEWAY]\n\nInitiating Razorpay for Amount: ₹${amount.toLocaleString()}\nStudent ID: ${studentId}`);
+  const handlePayment = (amount: number, studentId: string) => { 
+    alert(`[MOCK PAYMENT GATEWAY]\n\nInitiating Razorpay for Amount: ₹${amount.toLocaleString()}\nStudent ID: ${studentId}`); 
   };
 
-  const getInstallmentStatus = (dueDateStr: string, index: number, instAmount: number) => {
-    const paid = child.paidFees;
-    let cumulativeBefore = 0;
-    if (child.installments) {
-        for(let i=0; i<index; i++) cumulativeBefore += child.installments[i].amount;
-    }
+  const getInstallmentStatus = (dueDateStr: string, index: number, instAmount: number) => { 
+    const paid = child.paidFees; 
+    let cumulativeBefore = 0; 
     
-    // Check if this specific installment is fully covered by the total paid
-    const fullyPaid = paid >= (cumulativeBefore + instAmount);
+    if (child.installments) { 
+        for(let i=0; i<index; i++) cumulativeBefore += child.installments[i].amount; 
+    } 
     
-    if (fullyPaid) {
-        return { color: 'text-emerald-500', bg: isDark ? 'bg-emerald-900/20 border-emerald-800' : 'bg-emerald-50 border-emerald-100', label: 'Paid', icon: CheckCircle };
-    }
-
-    const due = new Date(dueDateStr);
-    const now = new Date();
-    const isPastDue = now > due;
-    if (isPastDue) return { color: 'text-red-500', bg: isDark ? 'bg-red-900/20 border-red-800' : 'bg-red-50 border-red-100', label: 'Overdue', icon: AlertCircle };
-    return { color: isDark ? 'text-slate-400' : 'text-slate-600', bg: isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100', label: 'Upcoming', icon: Clock };
+    const fullyPaid = paid >= (cumulativeBefore + instAmount); 
+    
+    if (fullyPaid) { 
+        return { color: 'text-emerald-500', bg: 'bg-emerald-50 border-emerald-100', label: 'Paid', icon: CheckCircle }; 
+    } 
+    
+    const due = new Date(dueDateStr); 
+    const now = new Date(); 
+    const isPastDue = now > due; 
+    
+    if (isPastDue) return { color: 'text-red-500', bg: 'bg-red-50 border-red-100', label: 'Overdue', icon: AlertCircle }; 
+    return { color: 'text-slate-500', bg: 'bg-slate-50 border-slate-100', label: 'Upcoming', icon: Clock }; 
   };
 
-  // THEME CLASSES
-  const cardBg = isDark ? 'bg-slate-900/80 border-slate-800 text-white' : 'bg-white/80 border-white/60 text-slate-900';
-  const sidebarBg = isDark ? 'bg-slate-950/50 border-slate-800' : 'bg-slate-50/50 border-slate-100/50';
-  const textMain = isDark ? 'text-white' : 'text-slate-800';
-  const textSub = isDark ? 'text-slate-400' : 'text-slate-500';
-  const tabActive = isDark ? 'bg-indigo-900/50 text-indigo-300 border-indigo-800 ring-indigo-900' : 'bg-white text-indigo-700 shadow-sm border-indigo-100 ring-indigo-50';
-  const tabInactive = isDark ? 'text-slate-500 hover:bg-slate-800 hover:text-slate-300' : 'text-slate-500 hover:bg-white/60 hover:text-slate-700';
+  // THEME CLASSES (Light/Indigo)
+  const cardBg = 'bg-white border-slate-200 text-slate-900';
+  const sidebarBg = 'bg-slate-50 border-slate-200';
+  const textMain = 'text-slate-800';
+  const textSub = 'text-slate-500';
+  const tabActive = 'bg-purple-600 text-white shadow-lg shadow-purple-200';
+  const tabInactive = 'text-slate-500 hover:bg-purple-50 hover:text-purple-700';
 
   return (
-    <div className={`${cardBg} backdrop-blur-xl rounded-[2rem] shadow-sm border overflow-hidden transition-all duration-300 hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.2)] mb-8 last:mb-0 ring-1 ring-white/5 flex flex-col lg:flex-row min-h-[500px]`}>
+    <div className={`${cardBg} rounded-3xl shadow-xl border overflow-hidden transition-all duration-300 mb-8 flex flex-col lg:flex-row min-h-[500px]`}>
       
-      {/* LEFT SIDEBAR */}
-      <div className={`lg:w-72 ${sidebarBg} border-b lg:border-b-0 lg:border-r p-4 lg:p-6 flex flex-col`}>
-          <div className="flex items-center gap-4 mb-6 lg:mb-10 px-2 pt-2">
-            <div className="h-12 w-12 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-indigo-500/20 shrink-0">{child.name.charAt(0)}</div>
-            <div className="overflow-hidden"><h2 className={`text-lg font-bold ${textMain} truncate leading-tight`}>{child.name}</h2><div className="flex items-center gap-1.5 mt-0.5"><School size={12} className="text-indigo-500"/><span className={`text-xs ${textSub} font-medium truncate`}>{child.batch}</span></div></div>
+      {/* SIDEBAR */}
+      <div className={`lg:w-72 ${sidebarBg} border-b lg:border-b-0 lg:border-r p-6 flex flex-col`}>
+          <div className="flex items-center gap-4 mb-8">
+            <div className="h-12 w-12 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg">{child.name.charAt(0)}</div>
+            <div><h2 className="text-lg font-bold truncate leading-tight">{child.name}</h2><p className="text-xs font-bold mt-1 text-purple-600">{child.batch}</p></div>
           </div>
           <nav className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0">
-             <button onClick={() => setActiveTab('fees')} className={`flex-1 lg:flex-none flex items-center gap-3 p-3.5 rounded-xl transition-all duration-200 text-sm font-bold whitespace-nowrap border ${activeTab === 'fees' ? tabActive : tabInactive} ${activeTab === 'fees' ? 'ring-1' : 'border-transparent'}`}><Wallet size={18} className={activeTab === 'fees' ? 'text-indigo-500' : 'opacity-70'}/> Financials</button>
-             <button onClick={() => setActiveTab('invoices')} className={`flex-1 lg:flex-none flex items-center gap-3 p-3.5 rounded-xl transition-all duration-200 text-sm font-bold whitespace-nowrap border ${activeTab === 'invoices' ? tabActive : tabInactive} ${activeTab === 'invoices' ? 'ring-1' : 'border-transparent'}`}><FileCheck size={18} className={activeTab === 'invoices' ? 'text-indigo-500' : 'opacity-70'}/> Paid Invoices</button>
-             <button onClick={() => setActiveTab('academics')} className={`flex-1 lg:flex-none flex items-center gap-3 p-3.5 rounded-xl transition-all duration-200 text-sm font-bold whitespace-nowrap border ${activeTab === 'academics' ? tabActive : tabInactive} ${activeTab === 'academics' ? 'ring-1' : 'border-transparent'}`}><PieChart size={18} className={activeTab === 'academics' ? 'text-indigo-500' : 'opacity-70'}/> Academics</button>
+             <button onClick={() => setActiveTab('fees')} className={`flex-1 lg:flex-none flex items-center gap-3 p-3.5 rounded-xl transition-all duration-200 text-sm font-bold whitespace-nowrap ${activeTab === 'fees' ? tabActive : tabInactive}`}><Wallet size={18}/> Financials</button>
+             <button onClick={() => setActiveTab('invoices')} className={`flex-1 lg:flex-none flex items-center gap-3 p-3.5 rounded-xl transition-all duration-200 text-sm font-bold whitespace-nowrap ${activeTab === 'invoices' ? tabActive : tabInactive}`}><FileCheck size={18}/> Invoices</button>
+             <button onClick={() => setActiveTab('academics')} className={`flex-1 lg:flex-none flex items-center gap-3 p-3.5 rounded-xl transition-all duration-200 text-sm font-bold whitespace-nowrap ${activeTab === 'academics' ? tabActive : tabInactive}`}><PieChart size={18}/> Academics</button>
           </nav>
       </div>
 
-      {/* RIGHT CONTENT */}
-      <div className={`flex-1 ${isDark ? 'bg-slate-950/50' : 'bg-white'} p-6 lg:p-8 relative`}>
+      {/* CONTENT AREA */}
+      <div className="flex-1 p-6 lg:p-10 relative overflow-y-auto bg-white/50">
+        
         {activeTab === 'fees' && (
-          <div className="animate-in fade-in slide-in-from-right-4 duration-500">
-             <div className="flex items-center justify-between mb-8">
-               <h3 className={`text-xl font-bold ${textMain} flex items-center gap-2`}>Financial Overview</h3>
-               <span className={`text-[10px] font-bold ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'} px-3 py-1.5 rounded-full`}>AY 2026-27</span>
-             </div>
-
+          <div className="animate-in fade-in slide-in-from-right-4 duration-500 space-y-8">
              <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-               <div className="space-y-6">
-                 {/* HOLOGRAPHIC CARD */}
-                 <div className="p-6 rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-900 to-slate-900 text-white shadow-2xl shadow-indigo-900/20 relative overflow-hidden group isolate min-h-[220px] flex flex-col justify-between border border-white/10">
-                    <div className="absolute inset-0 -z-10 opacity-30 mix-blend-overlay bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-purple-500 via-blue-500 to-transparent"></div>
-                    <div className="flex justify-between items-start"><div><p className="text-indigo-200/80 text-xs font-medium mb-1 uppercase tracking-widest">Active Installment</p><p className="text-4xl font-black tracking-tight">₹{currentPayable.toLocaleString()}</p></div><div className="p-2.5 bg-white/10 rounded-xl backdrop-blur-md border border-white/10"><CreditCard className="text-indigo-200" size={20}/></div></div>
-                    
-                    <div className="mt-6">
-                        {currentPayable > 0 ? (
-                            <button onClick={() => handlePayment(currentPayable, child.studentId)} className="w-full bg-white text-slate-900 py-3.5 rounded-xl font-bold text-sm hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] active:scale-[0.98]">
-                                <Zap size={16} className="text-indigo-600 fill-indigo-600"/> Pay Installment
-                            </button>
-                        ) : (
-                            <div className="w-full bg-emerald-500/20 text-emerald-100 py-3 rounded-xl font-bold text-sm text-center border border-emerald-500/30 backdrop-blur-md">Fees Fully Paid</div>
-                        )}
-                    </div>
-                    {child.pendingFees > currentPayable && (
-                        <div className="mt-2 text-center text-xs text-indigo-300/80 flex items-center justify-center gap-1"><Info size={12}/> Total Outstanding: ₹{child.pendingFees.toLocaleString()}</div>
-                    )}
-                 </div>
-
-                 {/* INSTALLMENT SCHEDULE */}
-                 {child.installments && child.installments.length > 0 && (
-                   <div className={`${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50/50 border-slate-100'} rounded-2xl border p-5`}>
-                      <h4 className="text-xs font-bold text-indigo-500 uppercase tracking-widest flex items-center gap-2 mb-4"><Calendar size={14}/> Payment Schedule</h4>
-                      <div className="space-y-3">
-                        {child.installments.map((inst, idx) => {
-                          const status = getInstallmentStatus(inst.dueDate, idx, inst.amount);
-                          const StatusIcon = status.icon;
-                          return (
-                            <div key={idx} className={`flex justify-between items-center p-3 rounded-xl border text-sm transition-colors ${status.bg}`}>
-                               <div className="flex items-center gap-3">
-                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${status.color.includes('emerald') ? 'bg-emerald-100/10 text-emerald-500' : status.color.includes('red') ? 'bg-red-100/10 text-red-500' : isDark ? 'bg-slate-800 text-indigo-400' : 'bg-indigo-50 text-indigo-600'}`}>{idx + 1}</div>
-                                 <div>
-                                   <div className={`font-bold ${textMain}`}>₹{inst.amount.toLocaleString()}</div>
-                                   <div className={`text-xs ${status.color} flex items-center gap-1`}>
-                                      <StatusIcon size={10}/> {new Date(inst.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                                   </div>
-                                 </div>
-                               </div>
-                               <div className={`text-[10px] font-bold uppercase px-2 py-1 rounded ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
-                                 {status.label}
-                               </div>
-                            </div>
-                          );
-                        })}
+               
+               {/* PAYMENT CARD */}
+               <div className="p-8 rounded-3xl text-white shadow-2xl relative overflow-hidden bg-gradient-to-br from-purple-600 to-indigo-700">
+                  <div className="flex justify-between items-start mb-8">
+                      <div>
+                          <p className="text-purple-200 text-xs font-bold uppercase tracking-widest mb-1">Active Installment</p>
+                          <p className="text-4xl font-black tracking-tight">₹{currentPayable.toLocaleString()}</p>
                       </div>
-                   </div>
-                 )}
-               </div>
-
-               {/* Summary & History */}
-               <div className="space-y-6">
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className={`p-4 rounded-2xl border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-100'}`}><p className={`text-xs ${textSub} mb-1 font-semibold uppercase tracking-wide`}>Agreed Fee</p><p className={`text-lg font-extrabold ${textMain}`}>₹{child.totalFees.toLocaleString()}</p></div>
-                    <div className={`p-4 rounded-2xl border ${isDark ? 'bg-emerald-900/10 border-emerald-900/20' : 'bg-emerald-50/50 border-emerald-100/50'}`}><p className="text-xs text-emerald-600 mb-1 font-semibold uppercase tracking-wide">Paid So Far</p><p className="text-lg font-extrabold text-emerald-500">₹{child.paidFees.toLocaleString()}</p></div>
-                 </div>
-
-                 <div className={`flex flex-col h-full rounded-2xl border p-5 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50/50 border-slate-100'}`}>
-                   <h4 className={`text-xs font-bold ${textSub} uppercase tracking-widest flex items-center gap-2 mb-4`}><History size={14}/> Recent Activity</h4>
-                   <div className="space-y-3 flex-1 overflow-y-auto max-h-[600px] custom-scrollbar pr-2">
-                      {child.history.length === 0 ? (
-                        <div className={`h-full flex flex-col items-center justify-center border border-dashed rounded-xl min-h-[150px] ${isDark ? 'border-slate-800 text-slate-600' : 'border-slate-200 text-slate-400'}`}><p className="text-sm italic">No records available.</p></div>
-                      ) : (
-                        child.history.map((rec) => (
-                          <div key={rec.id} className={`flex justify-between items-center p-3.5 rounded-xl border transition-colors group ${isDark ? 'bg-slate-950 border-slate-800 hover:border-indigo-900' : 'bg-white border-slate-200/60 hover:border-indigo-200'}`}>
-                            <div className="flex items-center gap-3">
-                              <div className={`p-2 rounded-lg ${isDark ? 'bg-emerald-900/20 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}><Download size={16}/></div>
-                              <div>
-                                <p className={`font-bold text-sm ${textMain}`}>₹{rec.amount.toLocaleString()}</p>
-                                <p className={`text-xs ${textSub} font-medium`}>{new Date(rec.date).toLocaleDateString()}</p>
-                              </div>
-                            </div>
-                            <span className={`text-[10px] px-2 py-1 rounded-md font-bold uppercase ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>{rec.remarks || 'FEE'}</span>
-                          </div>
-                        ))
-                      )}
-                   </div>
-                 </div>
-               </div>
-             </div>
-          </div>
-        )}
-
-        {/* --- VIEW: INVOICES --- */}
-        {activeTab === 'invoices' && (
-          <div className="animate-in fade-in slide-in-from-right-4 duration-500">
-             <div className="flex items-center justify-between mb-8">
-               <h3 className={`text-xl font-bold ${textMain} flex items-center gap-2`}>
-                 <FileCheck className="text-indigo-600" size={24}/> Paid Invoices
-               </h3>
-               <span className={`text-xs font-medium ${isDark ? 'text-slate-400 bg-slate-800' : 'text-slate-500 bg-slate-100'} px-3 py-1 rounded-full`}>
-                 Total Paid: ₹{child.paidFees.toLocaleString()}
-               </span>
-             </div>
-
-             <div className={`rounded-2xl shadow-sm border overflow-hidden ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200/60'}`}>
-                {child.history.length === 0 ? (
-                  <div className={`p-12 text-center ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
-                    <Receipt size={48} className="mx-auto mb-4 opacity-20"/>
-                    <p>No invoices available yet.</p>
+                      <div className="p-3 bg-white/10 rounded-xl backdrop-blur-md"><CreditCard className="text-white" size={24}/></div>
                   </div>
-                ) : (
-                  <table className="w-full text-left border-collapse">
-                    <thead className={`${isDark ? 'bg-slate-950 text-slate-400' : 'bg-slate-50/80 text-slate-500'} text-xs uppercase tracking-wider`}>
-                      <tr>
-                        <th className="px-6 py-4 font-semibold">Date & Transaction ID</th>
-                        <th className="px-6 py-4 font-semibold">Description</th>
-                        <th className="px-6 py-4 font-semibold text-right">Amount</th>
-                        <th className="px-6 py-4 font-semibold text-center">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-100'}`}>
-                      {child.history.map((rec) => (
-                        <tr key={rec.id} className={`${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50/50'} transition-colors group`}>
-                          <td className="px-6 py-4">
-                            <div className={`font-bold ${textMain}`}>{new Date(rec.date).toLocaleDateString()}</div>
-                            <div className={`text-xs font-mono mt-0.5 ${textSub}`}>{rec.transactionId || 'CASH-REC'}</div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className={`text-sm font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{rec.remarks || 'Tuition Fee'}</div>
-                            <div className={`text-xs ${textSub} mt-0.5 flex items-center gap-1`}>
-                               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> {rec.paymentMode || 'CASH'}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <span className={`font-bold px-2 py-1 rounded-md ${isDark ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-900'}`}>₹{rec.amount.toLocaleString()}</span>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <button 
-                               onClick={() => onViewInvoice({ ...rec, studentName: child.name, studentId: child.studentId, parentId: child.parentId || 'N/A', batch: child.batch })}
-                               className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${isDark ? 'bg-indigo-900/30 text-indigo-300 border-indigo-800 hover:bg-indigo-900/50' : 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100'}`}
-                            >
-                              <FileText size={14}/> View Invoice
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
+                  
+                  {currentPayable > 0 ? (
+                      <button onClick={() => handlePayment(currentPayable, child.studentId)} className="w-full bg-white text-slate-900 py-4 rounded-xl font-bold text-sm hover:scale-[1.02] transition-transform flex items-center justify-center gap-2 shadow-xl">
+                          <Zap size={16} className="fill-slate-900"/> Pay Now
+                      </button>
+                  ) : (
+                      <div className="w-full bg-emerald-500/20 text-emerald-100 py-3 rounded-xl font-bold text-sm text-center border border-emerald-500/30">Fees Fully Paid</div>
+                  )}
+               </div>
+
+               {/* SUMMARY CARD */}
+               <div className="space-y-4">
+                 <div className="p-5 rounded-2xl border bg-white border-slate-200"><p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Total Agreed Fee</p><p className="text-2xl font-black text-slate-900">₹{child.totalFees.toLocaleString()}</p></div>
+                 <div className="p-5 rounded-2xl border bg-white border-slate-200"><p className="text-xs font-bold text-emerald-500 uppercase tracking-widest mb-1">Paid So Far</p><p className="text-2xl font-black text-emerald-500">₹{child.paidFees.toLocaleString()}</p></div>
+               </div>
              </div>
+
+             {/* INSTALLMENT LIST */}
+             {child.installments && child.installments.length > 0 && (
+                 <div className="space-y-3">
+                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Schedule</h4>
+                     {child.installments.map((inst, idx) => { 
+                         const status = getInstallmentStatus(inst.dueDate, idx, inst.amount); 
+                         return ( 
+                             <div key={idx} className={`flex justify-between items-center p-4 rounded-xl border transition-colors ${status.bg}`}>
+                                 <div className="flex items-center gap-4">
+                                     <span className={`font-mono font-bold text-slate-900`}>₹{inst.amount.toLocaleString()}</span>
+                                     <span className={`text-xs ${status.color}`}>{new Date(inst.dueDate).toLocaleDateString()}</span>
+                                 </div>
+                                 <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded bg-white text-slate-600`}>{status.label}</span>
+                             </div> 
+                         ); 
+                     })}
+                 </div>
+             )}
           </div>
         )}
 
-        {/* --- VIEW: ACADEMICS (Locked) --- */}
-        {activeTab === 'academics' && (
-           <div className="h-full flex flex-col items-center justify-center py-10">
-              <div className="relative bg-slate-900 p-8 rounded-[2.5rem] shadow-2xl border border-slate-800 text-center max-w-sm mx-auto">
-                 <h3 className="text-2xl font-bold text-white mb-3">Module Locked</h3>
-                 <p className="text-slate-400 text-sm leading-relaxed mb-8">Advanced analytics engine is currently aggregating exam data.</p>
-              </div>
-           </div>
+        {activeTab === 'invoices' && (
+          <div className="space-y-4">
+             {child.history.length === 0 ? <div className="p-12 text-center text-slate-400 italic">No invoices found.</div> : child.history.map((rec) => (
+                <div key={rec.id} className="flex justify-between items-center p-4 rounded-xl border transition-all hover:shadow-md bg-white border-slate-200 hover:border-purple-200">
+                   <div><p className="font-bold text-slate-900">₹{rec.amount.toLocaleString()}</p><p className="text-xs text-slate-500">{new Date(rec.date).toLocaleDateString()} • {rec.paymentMode}</p></div>
+                   <button onClick={() => onViewInvoice({ ...rec, studentName: child.name, studentId: child.studentId, parentId: child.parentId || 'N/A', batch: child.batch })} className="p-2 rounded-lg bg-slate-100 hover:bg-purple-50 text-slate-600 hover:text-purple-600 transition"><FileText size={18}/></button>
+                </div>
+             ))}
+          </div>
         )}
+
+        {activeTab === 'academics' && <div className="p-12 text-center text-slate-400 italic">Academic records module locked by admin.</div>}
       </div>
     </div>
   );
@@ -516,47 +466,35 @@ const ParentDashboard = ({ user, token, onLogout }: { user: any, token: string, 
   const [children, setChildren] = useState<ChildFinancial[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewInvoice, setViewInvoice] = useState<any>(null);
-  const [isDarkMode, setIsDarkMode] = useState(false); // THEME STATE
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const data = await parentApi.getFinancials(token);
-        setChildren(Array.isArray(data) ? data : []);
-      } catch (e) { console.error(e); } finally { setLoading(false); }
-    };
-    load();
+  useEffect(() => { 
+      const load = async () => { 
+          try { 
+              const data = await parentApi.getFinancials(token); 
+              setChildren(Array.isArray(data) ? data : []); 
+          } catch (e) { 
+              console.error(e); 
+          } finally { 
+              setLoading(false); 
+          } 
+      }; 
+      load(); 
   }, [token]);
 
-  if (loading) return <div className="h-screen flex items-center justify-center bg-slate-950"><Loader2 className="animate-spin text-indigo-500"/></div>;
+  if (loading) return <div className="h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin text-purple-600"/></div>;
 
   return (
-    <div className={`min-h-screen font-sans relative transition-colors duration-500 ${isDarkMode ? 'bg-slate-950 text-white' : 'bg-slate-50/50 text-slate-900'}`}>
-      <div className={`fixed inset-0 -z-10 ${isDarkMode ? 'bg-slate-950' : 'bg-gradient-to-br from-indigo-50/50 to-purple-50/50'}`}></div>
-      <NeuralBackground isDark={isDarkMode} />
-      
-      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
-      
-      <header className={`${isDarkMode ? 'bg-slate-900/80 border-slate-800' : 'bg-white/80 border-slate-200/50'} backdrop-blur-md border-b px-6 py-4 flex justify-between items-center sticky top-0 z-50 transition-colors duration-300`}>
+    <div className="min-h-screen font-sans bg-slate-50 text-slate-900">
+      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-50">
         <div className="flex items-center gap-3">
-           <div className={`h-8 w-8 rounded-lg flex items-center justify-center text-white ${isDarkMode ? 'bg-indigo-600' : 'bg-slate-900'}`}><School size={16}/></div>
-           <div><h1 className={`text-lg font-bold leading-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>AIMS <span className="text-indigo-500">Portal</span></h1><p className={`text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Parent Access</p></div>
+           <div className="relative w-8 h-8"><Image src={LOGO_PATH} alt="Logo" fill className="object-contain" unoptimized /></div>
+           <div><h1 className="text-lg font-black leading-none tracking-tight">AIMS PORTAL</h1><p className="text-[10px] font-bold uppercase text-purple-600">Parent Access</p></div>
         </div>
-        <div className="flex items-center gap-2">
-           <button onClick={() => setIsDarkMode(!isDarkMode)} className={`p-2 rounded-xl transition-colors ${isDarkMode ? 'text-yellow-400 hover:bg-slate-800' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'}`}>
-              {isDarkMode ? <Sun size={20}/> : <Moon size={20}/>}
-           </button>
-           <button onClick={onLogout} className={`p-2 rounded-xl transition-colors ${isDarkMode ? 'text-slate-400 hover:text-red-400 hover:bg-slate-800' : 'text-slate-400 hover:text-red-500 hover:bg-red-50'}`}><LogOut size={20}/></button>
-        </div>
+        <button onClick={onLogout} className="p-2 rounded-lg hover:bg-red-50 text-red-500 transition"><LogOut size={20}/></button>
       </header>
-
       <main className="p-4 lg:p-8 max-w-7xl mx-auto relative z-10">
-        {children.map((child) => (
-          <StudentCard key={child.studentId} child={child} onViewInvoice={setViewInvoice} isDark={isDarkMode} />
-        ))}
-        <div className={`mt-12 text-center text-xs font-medium ${isDarkMode ? 'text-slate-600' : 'text-slate-400'}`}>&copy; 2026 AIMS Institute • Secured by AIMS INSTITUTE DEVELOPERS</div>
+        {children.map((child) => ( <StudentCard key={child.studentId} child={child} onViewInvoice={setViewInvoice} isDark={false} /> ))}
       </main>
-
       {viewInvoice && <ParentInvoiceModal data={viewInvoice} onClose={() => setViewInvoice(null)} />}
     </div>
   );
@@ -566,9 +504,35 @@ export default function ParentPage() {
   const [user, setUser] = useState<any>(null);
   const [token, setToken] = useState<string>('');
   const [loading, setLoading] = useState(true);
-  useEffect(() => { const t = localStorage.getItem('parent_token'); const u = localStorage.getItem('parent_user'); if (t && u) { try { setToken(t); setUser(JSON.parse(u)); } catch (e) { localStorage.removeItem('parent_token'); } } setLoading(false); }, []);
-  const handleLogin = (data: any) => { localStorage.setItem('parent_token', data.access_token); localStorage.setItem('parent_user', JSON.stringify(data.user)); setToken(data.access_token); setUser(data.user); };
-  const handleLogout = () => { localStorage.removeItem('parent_token'); localStorage.removeItem('parent_user'); setUser(null); setToken(''); };
+
+  useEffect(() => { 
+      const t = localStorage.getItem('parent_token'); 
+      const u = localStorage.getItem('parent_user'); 
+      if (t && u) { 
+          try { 
+              setToken(t); 
+              setUser(JSON.parse(u)); 
+          } catch (e) { 
+              localStorage.removeItem('parent_token'); 
+          } 
+      } 
+      setLoading(false); 
+  }, []);
+
+  const handleLogin = (data: any) => { 
+      localStorage.setItem('parent_token', data.access_token); 
+      localStorage.setItem('parent_user', JSON.stringify(data.user)); 
+      setToken(data.access_token); 
+      setUser(data.user); 
+  };
+
+  const handleLogout = () => { 
+      localStorage.removeItem('parent_token'); 
+      localStorage.removeItem('parent_user'); 
+      setUser(null); 
+      setToken(''); 
+  };
+
   if (loading) return null;
   return user ? <ParentDashboard user={user} token={token} onLogout={handleLogout} /> : <ParentLogin onLogin={handleLogin} />;
 }
