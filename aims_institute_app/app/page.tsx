@@ -16,17 +16,18 @@ const LOGO_PATH = '/logo.png';
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-slate-50 font-sans flex flex-col selection:bg-red-100 selection:text-red-900 relative">
+    <div className="min-h-screen bg-slate-100 font-sans flex flex-col selection:bg-red-100 selection:text-red-900 relative">
       
       {/* --- BACKGROUND ACCENTS --- */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-          <div className="absolute -top-[10%] -right-[5%] w-[40%] h-[40%] rounded-full bg-red-100/50 blur-3xl opacity-60"></div>
-          <div className="absolute top-[20%] -left-[10%] w-[30%] h-[30%] rounded-full bg-blue-50/50 blur-3xl opacity-50"></div>
-          <div className="absolute bottom-[10%] right-[10%] w-[20%] h-[20%] rounded-full bg-red-50/40 blur-3xl opacity-40"></div>
+          <div className="absolute -top-[10%] -right-[5%] w-[40%] h-[40%] rounded-full bg-red-100/40 blur-3xl opacity-50"></div>
+          <div className="absolute top-[20%] -left-[10%] w-[30%] h-[30%] rounded-full bg-blue-100/40 blur-3xl opacity-40"></div>
+          <div className="absolute bottom-[10%] right-[10%] w-[20%] h-[20%] rounded-full bg-red-50/30 blur-3xl opacity-30"></div>
       </div>
 
       {/* --- HERO SECTION --- */}
-      <div className="bg-white/80 backdrop-blur-sm border-b border-slate-200 relative overflow-hidden z-10">
+      {/* Changed bg to slate-50/80 to be slightly darker/warmer than pure white for eye comfort */}
+      <div className="bg-slate-50/80 backdrop-blur-md border-b border-slate-200 relative overflow-hidden z-10 shadow-sm">
         {/* Subtle background pattern - Crimson Red tint */}
         <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#c1121f 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
         
@@ -40,8 +41,8 @@ export default function LandingPage() {
                 AIMS INSTITUTE
             </h1>
             
-            {/* Badge - Updated to Red to match Logo, Glowing part Blue */}
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-red-50 border border-red-100 text-red-800 text-sm font-bold uppercase tracking-wider mb-6 shadow-sm">
+            {/* Badge - Updated to Royal Blue as requested */}
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-blue-800 text-sm font-bold uppercase tracking-wider mb-6 shadow-sm">
                 <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse shadow-[0_0_10px_rgba(37,99,235,0.5)]"></span>
                 Team of IITian's & Dr's
             </div>
