@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { 
@@ -15,43 +15,108 @@ import {
 const LOGO_PATH = '/logo.png';
 
 export default function LandingPage() {
+  // State for the smooth signature writing effect
+  const [isMounted, setIsMounted] = useState(false);
+  const [isDoneWriting, setIsDoneWriting] = useState(false);
+  
+  // State for the color breathing cycle (0: Red, 1: Yellow, 2: Blue)
+  const [activeColorIndex, setActiveColorIndex] = useState(0);
+
+  useEffect(() => {
+    // Trigger animation after mount
+    setIsMounted(true);
+    
+    // Timer for signature completion
+    const timer = setTimeout(() => {
+      setIsDoneWriting(true);
+    }, 2500);
+    
+    // Interval for background color cycling (4 seconds per color for slow breathing)
+    const colorInterval = setInterval(() => {
+        setActiveColorIndex((prev) => (prev + 1) % 3);
+    }, 4000);
+    
+    return () => {
+        clearTimeout(timer);
+        clearInterval(colorInterval);
+    };
+  }, []);
+
+  const fullText = "AIMS INSTITUTE";
+
   return (
     <div className="min-h-screen bg-slate-100 font-sans flex flex-col selection:bg-red-100 selection:text-red-900 relative">
       
-      {/* --- BACKGROUND ACCENTS --- */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-          <div className="absolute -top-[10%] -right-[5%] w-[40%] h-[40%] rounded-full bg-red-100/40 blur-3xl opacity-50"></div>
-          <div className="absolute top-[20%] -left-[10%] w-[30%] h-[30%] rounded-full bg-blue-100/40 blur-3xl opacity-40"></div>
-          <div className="absolute bottom-[10%] right-[10%] w-[20%] h-[20%] rounded-full bg-red-50/30 blur-3xl opacity-30"></div>
-      </div>
-
-      {/* --- HERO SECTION --- */}
-      {/* Changed bg to slate-50/80 to be slightly darker/warmer than pure white for eye comfort */}
-      <div className="bg-slate-50/80 backdrop-blur-md border-b border-slate-200 relative overflow-hidden z-10 shadow-sm">
-        {/* Subtle background pattern - Crimson Red tint */}
-        <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#c1121f 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
+      {/* --- HERO SECTION (COSMIC SPACE THEME) --- */}
+      <div className="relative overflow-hidden bg-slate-950 border-b border-slate-800 shadow-2xl z-10">
         
-        <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8 flex flex-col items-center text-center relative z-10">
-            {/* Logo */}
-            <div className="relative w-28 h-28 mb-6 drop-shadow-sm">
-                <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain" unoptimized />
+        {/* Space Effect Background Layers - CENTRALIZED & SEQUENCED (NO MIXING) */}
+        <div className="absolute inset-0 pointer-events-none">
+            {/* Deep Space Base */}
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-[#0f172a] to-black opacity-95"></div>
+            
+            {/* 1. Crimson Red Core */}
+            <div 
+                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] bg-[#c1121f] rounded-full blur-[150px] transition-opacity duration-[3000ms] ease-in-out ${activeColorIndex === 0 ? 'opacity-60' : 'opacity-0'}`}
+            ></div>
+            
+            {/* 2. Amber Yellow Core */}
+            <div 
+                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] bg-amber-500 rounded-full blur-[150px] transition-opacity duration-[3000ms] ease-in-out ${activeColorIndex === 1 ? 'opacity-50' : 'opacity-0'}`}
+            ></div>
+
+            {/* 3. Royal Blue Core */}
+            <div 
+                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] bg-blue-700 rounded-full blur-[150px] transition-opacity duration-[3000ms] ease-in-out ${activeColorIndex === 2 ? 'opacity-60' : 'opacity-0'}`}
+            ></div>
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 py-16 sm:px-6 lg:px-8 flex flex-col items-center text-center relative z-20">
+            
+            {/* Logo with Smaller Circular White Container */}
+            <div className="relative w-28 h-28 mb-10 p-1 bg-white rounded-full shadow-[0_0_40px_rgba(255,255,255,0.1)] ring-4 ring-white/10">
+                <div className="relative w-full h-full bg-white rounded-full overflow-hidden">
+                    {/* Increased scale of logo image inside the circle */}
+                    <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain p-1 scale-110" unoptimized />
+                </div>
             </div>
             
-            <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-slate-900 mb-3">
-                AIMS INSTITUTE
-            </h1>
+            {/* Animated Title - Fluid Signature Style with Padding Fix */}
+            <div className="relative mb-8 inline-block">
+                {/* Ghost Text: Added px-4 to prevent Italic cut-off */}
+                <h1 className="text-5xl sm:text-7xl font-serif italic font-extrabold tracking-tight text-transparent opacity-0 select-none whitespace-nowrap px-4">
+                    {fullText}
+                </h1>
+                
+                {/* Visible Writing Text - Smooth Width Transition */}
+                <div 
+                  className={`absolute top-0 left-0 overflow-hidden whitespace-nowrap border-r-4 pr-1 transition-colors duration-500 ${isDoneWriting ? 'border-transparent' : 'border-blue-400/80'}`}
+                  style={{ 
+                    width: isMounted ? '100%' : '0%', 
+                    transitionProperty: 'width, border-color',
+                    transitionDuration: '2.5s, 0.5s',
+                    transitionTimingFunction: 'cubic-bezier(0.25, 0.46, 0.45, 0.94), ease-out'
+                  }}
+                >
+                  {/* Added px-4 here too so it aligns perfectly with ghost text */}
+                  <h1 className="text-5xl sm:text-7xl font-serif italic font-extrabold tracking-tight text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.1)] px-4">
+                      {fullText}
+                  </h1>
+                </div>
+            </div>
             
-            {/* Badge - Updated to Royal Blue as requested */}
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-blue-800 text-sm font-bold uppercase tracking-wider mb-6 shadow-sm">
-                <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse shadow-[0_0_10px_rgba(37,99,235,0.5)]"></span>
+            {/* Badge - Blue theme */}
+            <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-blue-500/10 border border-blue-400/30 text-blue-200 text-sm font-bold uppercase tracking-widest mb-8 shadow-[0_0_15px_rgba(59,130,246,0.3)] backdrop-blur-sm hover:bg-blue-500/20 transition-colors">
+                <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse shadow-[0_0_10px_#60a5fa]"></span>
                 Team of IITian's & Dr's
             </div>
             
-            <p className="text-xl sm:text-2xl font-serif text-slate-600 mb-2">
-                JEE | NEET | CET
+            {/* Clean Exam Titles - Colors Removed */}
+            <p className="text-2xl sm:text-3xl font-serif text-slate-200 mb-6 tracking-wide drop-shadow-md">
+                <span className="font-bold">JEE</span> <span className="text-slate-600 mx-3 font-light">|</span> <span className="font-bold">NEET</span> <span className="text-slate-600 mx-3 font-light">|</span> <span className="font-bold">CET</span>
             </p>
             
-            <p className="text-slate-500 max-w-2xl mx-auto text-base sm:text-lg leading-relaxed">
+            <p className="text-slate-400 max-w-2xl mx-auto text-lg leading-relaxed font-light tracking-wide">
                 Your integrated learning and examination platform. <br className="hidden sm:block"/>
                 Fostering academic excellence through technology and discipline.
             </p>
@@ -82,7 +147,7 @@ export default function LandingPage() {
                     </div>
                 </Link>
 
-                {/* 2. PARENT PORTAL (Purple/Indigo - Matches Inside Out Theme) */}
+                {/* 2. PARENT PORTAL (Purple/Indigo) */}
                 <Link href="/parent" className="group">
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 h-full transition-all duration-300 hover:shadow-xl hover:-translate-y-1 hover:border-purple-200 relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
@@ -101,7 +166,7 @@ export default function LandingPage() {
                     </div>
                 </Link>
 
-                {/* 3. ACADEMIC ADMIN (Amber/Orange - Distinction) */}
+                {/* 3. ACADEMIC ADMIN (Amber/Orange) */}
                 <Link href="/admin" className="group">
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 h-full transition-all duration-300 hover:shadow-xl hover:-translate-y-1 hover:border-amber-200 relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
@@ -120,7 +185,7 @@ export default function LandingPage() {
                     </div>
                 </Link>
 
-                {/* 4. DIRECTOR CONSOLE (Crimson Red - Authority) */}
+                {/* 4. DIRECTOR CONSOLE (Crimson Red) */}
                 <Link href="/director" className="group">
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 h-full transition-all duration-300 hover:shadow-xl hover:-translate-y-1 hover:border-red-200 relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
