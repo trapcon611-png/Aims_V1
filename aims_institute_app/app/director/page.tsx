@@ -30,7 +30,7 @@ interface StudentRecord {
   isMobileMasked?: boolean; 
   batch: string;
   address?: string; 
-  dob?: string; // Birthday Field
+  dob?: string;
   feeTotal: number;
   feePaid: number;
   feeRemaining: number;
@@ -104,7 +104,6 @@ const DirectorBackground = () => {
       particles.forEach((p, i) => {
         p.x += p.vx; p.y += p.vy; if (p.x < 0 || p.x > width) p.vx *= -1; if (p.y < 0 || p.y > height) p.vy *= -1;
         ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI * 2); 
-        // RED THEMED PARTICLES - INCREASED VISIBILITY
         ctx.fillStyle = `rgba(220, 38, 38, ${p.alpha * 0.8})`; ctx.fill();
         for (let j = i + 1; j < particles.length; j++) {
           const p2 = particles[j]; const dx = p.x - p2.x, dy = p.y - p2.y, dist = Math.sqrt(dx*dx + dy*dy);
@@ -116,12 +115,11 @@ const DirectorBackground = () => {
     const handleResize = () => { width = canvas.width = window.innerWidth; height = canvas.height = window.innerHeight; };
     window.addEventListener('resize', handleResize); animate(); return () => window.removeEventListener('resize', handleResize);
   }, []);
-  // Removed 'fixed' to allow correct stacking with absolute parents if needed, but 'fixed' is usually safer for backgrounds.
-  // Kept 'fixed' but ensured z-index is correct in parent.
-  return <canvas ref={canvasRef} className="fixed inset-0 z-0 pointer-events-none opacity-80" />;
+  // Removed fixed positioning here to allow it to sit inside the relative container correctly, or use absolute.
+  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none opacity-50 z-0" />;
 };
 
-// --- COMPONENT: A4 INVOICE MODAL (WITH RED THEME) ---
+// --- COMPONENT: A4 INVOICE MODAL ---
 const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () => void, isGstEnabled: boolean }) => {
   const baseAmount = isGstEnabled ? Math.round(data.amount / 1.18) : data.amount;
   const gstAmount = isGstEnabled ? data.amount - baseAmount : 0;
@@ -141,7 +139,6 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
       
       <div className="print-a4 bg-white w-[210mm] min-h-[297mm] p-[20mm] relative shadow-2xl my-8 mx-auto flex flex-col justify-between text-slate-900">
         <div>
-          {/* HEADER - RED THEME */}
           <div className="flex justify-between items-center border-b-4 border-[#dc2626] pb-6 mb-8">
              <div className="flex flex-col gap-2">
                <div className="relative w-24 h-24">
@@ -252,47 +249,42 @@ const DirectorLogin = ({ onUnlock }: { onUnlock: () => void }) => {
     try { const data = await erpApi.login(creds.id, creds.password); if (data.user?.role === 'SUPER_ADMIN') { if (typeof window !== 'undefined') { localStorage.setItem('director_session', JSON.stringify({ token: data.access_token, timestamp: Date.now() })); } onUnlock(); } else { setError('Access Denied: Directors/Admins Only'); } } catch (err: any) { setError('Invalid Director ID or Password'); } finally { setLoading(false); }
   };
   return (
-    // FIX: Changed h-screen to min-h-screen and added overflow-y-auto to allow scrolling on small screens
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 font-sans relative overflow-y-auto transition-colors duration-500 py-10">
-      {/* FIX: Reduced gradient opacity so DirectorBackground particles are visible */}
-      <div className="absolute inset-0 bg-gradient-to-b from-slate-900 via-slate-950 to-black opacity-80 z-0"></div>
-      {/* FIX: Particles are z-0, gradient is z-0 but has opacity. DirectorBackground is rendered after gradient in DOM order? No, before in React usually. Let's fix stacking context.
-          Actually, if DirectorBackground is fixed z-0, it stays behind everything z-10+.
-          We need to ensure the gradient doesn't cover it fully. The gradient is div absolute.
-          DirectorBackground is fixed.
-          Let's place DirectorBackground here explicitly. */}
-      <DirectorBackground />
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950 font-sans relative overflow-y-auto transition-colors duration-500 py-10">
+      {/* Background Container to properly layer particles */}
+      <div className="absolute inset-0 z-0 bg-slate-50 dark:bg-slate-950">
+         <DirectorBackground />
+      </div>
       
       <div className="relative z-10 w-full max-w-sm mx-4">
-        <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl overflow-hidden ring-1 ring-white/5">
-          <div className="p-8 text-center border-b border-white/5">
+        <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden ring-1 ring-white/20">
+          <div className="p-8 text-center border-b border-slate-100 dark:border-slate-800">
             <div className="relative w-24 h-24 mx-auto mb-4">
                <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain" />
             </div>
-            <h3 className="text-2xl font-bold text-white tracking-tight">Director Console</h3>
-            <p className="text-slate-400 text-xs mt-2 font-mono uppercase tracking-widest flex items-center justify-center gap-2">
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Director Console</h3>
+            <p className="text-slate-500 dark:text-slate-400 text-xs mt-2 font-mono uppercase tracking-widest flex items-center justify-center gap-2">
               <Activity size={12} className="text-[#dc2626] animate-pulse"/> System Online
             </p>
           </div>
           <form onSubmit={handleUnlock} className="p-8 space-y-5">
-            {error && <div className="p-3 bg-red-900/30 border border-red-500/30 rounded-xl flex items-center gap-3 text-red-300 text-xs font-bold"><AlertTriangle size={16} /> {error}</div>}
+            {error && <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-500/30 rounded-xl flex items-center gap-3 text-red-600 dark:text-red-300 text-xs font-bold"><AlertTriangle size={16} /> {error}</div>}
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Director ID</label>
-              <input type="text" className="w-full p-4 bg-black/40 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[#dc2626] transition-all font-mono placeholder:text-slate-600" value={creds.id} onChange={(e) => setCreds({...creds, id: e.target.value})} placeholder="root_access"/>
+              <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider ml-1">Director ID</label>
+              <input type="text" className="w-full p-4 bg-white/50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#dc2626] transition-all font-mono placeholder:text-slate-400 dark:placeholder:text-slate-600" value={creds.id} onChange={(e) => setCreds({...creds, id: e.target.value})} placeholder="root_access"/>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Password</label>
-              <input type="password" className="w-full p-4 bg-black/40 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[#dc2626] transition-all font-mono placeholder:text-slate-600" value={creds.password} onChange={(e) => setCreds({...creds, password: e.target.value})} placeholder="••••••••"/>
+              <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider ml-1">Password</label>
+              <input type="password" className="w-full p-4 bg-white/50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#dc2626] transition-all font-mono placeholder:text-slate-400 dark:placeholder:text-slate-600" value={creds.password} onChange={(e) => setCreds({...creds, password: e.target.value})} placeholder="••••••••"/>
             </div>
             <button disabled={loading} className="w-full bg-gradient-to-r from-[#dc2626] to-red-800 hover:from-red-600 hover:to-red-700 text-white py-4 rounded-xl font-bold text-sm uppercase tracking-wider shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2">
               {loading ? <Loader2 className="animate-spin" size={18} /> : <>Unlock ERP <Cpu size={16} /></>}
             </button>
-            <div className="text-center pt-4 border-t border-white/5">
-              <Link href="/" className="text-xs text-slate-500 hover:text-slate-300 transition-colors flex items-center justify-center gap-1"><ArrowLeft size={12}/> Return to Portal Hub</Link>
+            <div className="text-center pt-4 border-t border-slate-100 dark:border-white/5">
+              <Link href="/" className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-300 transition-colors flex items-center justify-center gap-1"><ArrowLeft size={12}/> Return to Portal Hub</Link>
             </div>
           </form>
         </div>
-        <p className="text-center text-[10px] text-slate-600 mt-6 font-mono">SECURED CONNECTION • AIMS POWER</p>
+        <p className="text-center text-[10px] text-slate-400 dark:text-slate-600 mt-6 font-mono">SECURED CONNECTION • AIMS POWER</p>
       </div>
     </div>
   );
@@ -306,13 +298,34 @@ export default function DirectorPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isOnline, setIsOnline] = useState(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [darkMode, setDarkMode] = useState(false); 
+  
+  // THEME STATE WITH PERSISTENCE
+  const [darkMode, setDarkMode] = useState(false);
 
-  // Toggle Dark Mode Logic - FIX: Ensure it runs on client mount
   useEffect(() => {
-    // Check local storage or preference if desired, currently defaulting to false (light)
-    if (darkMode) { document.documentElement.classList.add('dark'); } else { document.documentElement.classList.remove('dark'); }
-  }, [darkMode]);
+    // Initialize theme from localStorage or system preference on mount
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      setDarkMode(true);
+      document.documentElement.classList.add('dark');
+    } else {
+      setDarkMode(false);
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
+  // Update DOM and localStorage when state changes
+  const toggleTheme = () => {
+    const newMode = !darkMode;
+    setDarkMode(newMode);
+    if (newMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  };
 
   // Data States
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -440,7 +453,7 @@ export default function DirectorPage() {
         </nav>
         
         <div className="p-4 border-t border-slate-200 dark:border-slate-800 space-y-2">
-          <button onClick={() => setDarkMode(!darkMode)} className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} w-full p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition`}>
+          <button onClick={toggleTheme} className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} w-full p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition`}>
              {!isSidebarCollapsed && <span className="text-xs font-bold">THEME</span>}
              {darkMode ? <Sun size={18} /> : <Moon size={18} />}
           </button>
