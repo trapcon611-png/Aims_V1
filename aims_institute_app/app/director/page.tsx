@@ -13,7 +13,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-// FIX: Updated to .png as per your request
 const LOGO_PATH = '/logo.png'; 
 
 // --- TYPES ---
@@ -283,10 +282,11 @@ const DirectorLogin = ({ onUnlock }: { onUnlock: () => void }) => {
       <div className="relative z-10 w-full max-w-sm">
         <div className="bg-gradient-to-br from-red-900 to-red-800 backdrop-blur-xl border border-red-700/50 rounded-3xl shadow-2xl overflow-hidden ring-1 ring-white/10">
           <div className="p-8 text-center border-b border-red-700/50">
-            <div className="relative w-24 h-24 mx-auto mb-4 bg-white/10 rounded-full p-4 backdrop-blur-sm">
-               {/* FIX: Added unoptimized to bypass cache for new logo */}
-               <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain" unoptimized />
+            {/* LOGO CONTAINER: Matches Parent Panel Style */}
+            <div className="relative w-24 h-24 mx-auto mb-6 p-2 bg-white rounded-full shadow-lg">
+                <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain" unoptimized />
             </div>
+            
             <h3 className="text-2xl font-bold text-white tracking-tight">Director Console</h3>
             <p className="text-red-200 text-xs mt-2 font-mono uppercase tracking-widest flex items-center justify-center gap-2">
               <Activity size={12} className="text-white animate-pulse"/> System Online
@@ -436,8 +436,11 @@ export default function DirectorPage() {
         <div className={`p-6 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
           {!isSidebarCollapsed && (
             <div className="flex items-center gap-2">
-              <div className="relative w-8 h-8">
-                 <Image src={LOGO_PATH} alt="Logo" fill className="object-contain" unoptimized />
+              {/* LOGO CONTAINER - SIDEBAR (UPDATED) */}
+              <div className="relative w-12 h-12 p-1 bg-white rounded-full shadow-md">
+                 <div className="relative w-full h-full bg-white rounded-full overflow-hidden">
+                    <Image src={LOGO_PATH} alt="Logo" fill className="object-contain p-0.5" unoptimized />
+                 </div>
               </div>
               <div><h2 className="text-lg font-bold text-white leading-none">AIMS</h2><p className="text-[9px] text-[#c1121f] font-bold uppercase">Institute</p></div>
             </div>
