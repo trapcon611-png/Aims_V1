@@ -7,7 +7,7 @@ const csv = require('csv-parser');
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Starting Question Bank Seeding...');
+  console.log('🌱 Starting Question Bank Seeding from CSV...');
 
   // 1. Ensure System Teacher Exists
   const systemEmail = 'system_content_admin@aims.com';
@@ -32,7 +32,7 @@ async function main() {
 
   if (!fs.existsSync(filePath)) {
     console.error(`❌ CSV file not found at: ${filePath}`);
-    console.error('   Please make sure "question_bank.csv" is in the "aims_backend/prisma/" folder.');
+    console.error('   Please upload "question_bank.csv" to the aims_backend/prisma/ folder.');
     process.exit(1);
   }
 
@@ -43,39 +43,40 @@ async function main() {
 
   fs.createReadStream(filePath)
     .pipe(csv({
-      // Normalize headers to lowercase and trim spaces to avoid mismatches
+      // Normalize headers: lowercase and trim spaces (Fixes "type " issue)
       mapHeaders: ({ header }: { header: string }) => header.trim().toLowerCase()
     }))
-    .on('headers', (headers: any) => {
-        console.log('🔍 Detected Headers:', headers);
-    })
     .on('data', (row: any) => {
       rowCount++;
       try {
         // --- 1. PARSE OPTIONS ---
-        // Handles Python-style list strings: "['A', 'B']"
+        // Handles Python-style list strings: "['(A) Text', '(B) Text']"
         let rawOptions = row.options || '[]';
         let parsedOptions: string[] = [];
         
         try {
-            // Remove Python specific artifacts if simple JSON parse fails
             let cleaned = rawOptions.trim();
-            // Replace single quotes with double quotes for valid JSON
-            // Be careful not to break apostrophes inside text, but this is a heuristic
-            if (cleaned.startsWith("['") || cleaned.startsWith("[\"")) {
-                 // Simple strip and split for safety if JSON fails
-                 cleaned = cleaned.slice(1, -1); // remove brackets
-                 // Split by ', ' or ", "
-                 parsedOptions = cleaned.split(/['"],\s?['"]/).map((opt: string) => opt.replace(/^['"]|['"]$/g, ''));
-            } else {
-                 parsedOptions = JSON.parse(cleaned);
+            // Remove outer brackets
+            if (cleaned.startsWith("[") && cleaned.endsWith("]")) {
+                 cleaned = cleaned.slice(1, -1);
+            }
+            
+            // Regex to split by comma ONLY if it follows a closing quote and precedes an opening quote
+            // This handles commas inside the option text safely
+            // Matches: ', ' or '," or ", '
+            parsedOptions = cleaned.split(/['"],\s?['"]/).map(opt => {
+                // Strip remaining leading/trailing quotes
+                return opt.replace(/^['"]|['"]$/g, '').trim();
+            });
+
+            // Fallback if split failed to produce 4 options
+            if (parsedOptions.length < 2 && rawOptions.includes(',')) {
+                 // Simple split fallback
+                 parsedOptions = rawOptions.replace(/[\[\]']/g, "").split(",");
             }
         } catch (e) {
-            // Fallback for non-standard formats
-            if(rawOptions.length > 5) {
-                // Treat as simple string if parse fails but content exists
-                parsedOptions = [rawOptions, "", "", ""];
-            }
+            console.warn(`Row ${rowCount}: Option parse error, using raw fallback.`);
+            parsedOptions = ["Option A", "Option B", "Option C", "Option D"];
         }
 
         const optA = parsedOptions[0] || '';
@@ -84,32 +85,40 @@ async function main() {
         const optD = parsedOptions[3] || '';
 
         // --- 2. PARSE CORRECT ANSWER ---
-        // Format might be "[B]" or "B" or "['B']"
-        let correctKey = 'a';
+        // Format: "[B]", "[A, B]", or "B"
         const rawAnswer = row['correct-answer'] || row.answer || '';
-        const cleanAnswer = rawAnswer.toString().replace(/[\[\]'"]/g, '').toLowerCase().trim(); 
+        // Clean: remove [ ] ' " and spaces -> "b" or "a,b"
+        const cleanAnswer = rawAnswer.toString().replace(/[\[\]'"]/g, '').toLowerCase().replace(/\s/g, ''); 
         
-        if (cleanAnswer.includes('a')) correctKey = 'a';
-        else if (cleanAnswer.includes('b')) correctKey = 'b';
-        else if (cleanAnswer.includes('c')) correctKey = 'c';
-        else if (cleanAnswer.includes('d')) correctKey = 'd';
+        // Map Letters to Keys
+        // If it's multi like "a,b", this logic preserves it
+        let correctKey = cleanAnswer;
 
         // --- 3. MAPPING ---
         const qText = row.question || row.question_text || '';
         
-        // --- 4. VALIDATION ---
         if (!qText) {
              skippedCount++;
-             if (skippedCount <= 3) console.warn(`⚠️ Skipped Row ${rowCount}: No Question Text`);
              return;
         }
 
-        // Map Image Columns (normalized by mapHeaders to lowercase)
-        const qImage = row['question-image'] || row.questionimage || null;
-        const sImage = row['solution-image'] || row.solutionimage || null;
-        // Images that are just "[]" or empty strings should be null
-        const finalQImage = (qImage && qImage.length > 5) ? qImage : null;
-        const finalSImage = (sImage && sImage.length > 5) ? sImage : null;
+        // Handle Images
+        const qImage = row['question-image'] || null;
+        const sImage = row['solution-image'] || null;
+        
+        // Filter out empty brackets or invalid urls
+        const finalQImage = (qImage && qImage.length > 5 && !qImage.includes('[]')) ? qImage : null;
+        const finalSImage = (sImage && sImage.length > 5 && !sImage.includes('[]')) ? sImage : null;
+
+        // Determine Subject/Tags
+        const subject = (row.subject || 'GENERAL').toUpperCase();
+        const topic = row.topic || 'General';
+        const type = (row.type || 'single').trim().toLowerCase(); // 'single', 'multiple', 'integer'
+
+        // Add 'multiple' or 'integer' to tags for frontend detection
+        const tags = [topic];
+        if (type.includes('multi')) tags.push('MULTIPLE');
+        if (type.includes('int')) tags.push('INTEGER');
 
         questions.push({
           createdById: teacherId,
@@ -117,16 +126,16 @@ async function main() {
           questionImage: finalQImage,
           solutionImage: finalSImage,
           options: { a: optA, b: optB, c: optC, d: optD },
-          correctOption: correctKey,
+          correctOption: correctKey, // Stores "b" or "a,b"
           explanation: '',
-          subject: (row.subject || 'GENERAL').toUpperCase(),
-          topic: row.topic || 'General',
+          subject: subject,
+          topic: topic,
           difficulty: 'MEDIUM',
           marks: 4,
           negative: -1,
           expectedTime: 60,
           isActive: true,
-          tags: [row.type || 'single']
+          tags: tags
         });
 
       } catch (err) {
@@ -134,13 +143,12 @@ async function main() {
       }
     })
     .on('end', async () => {
-      console.log(`\n📊 SUMMARY:`);
-      console.log(`   Total Rows Read: ${rowCount}`);
-      console.log(`   Valid Questions: ${questions.length}`);
-      console.log(`   Skipped Rows:    ${skippedCount}`);
+      console.log(`\n📊 CSV Processing Complete:`);
+      console.log(`   - Total Rows: ${rowCount}`);
+      console.log(`   - Valid Questions: ${questions.length}`);
       
       if (questions.length === 0) {
-        console.error('❌ No valid questions found. Check the headers above ^');
+        console.error('❌ No valid questions found.');
         return;
       }
 
@@ -153,13 +161,16 @@ async function main() {
             await prisma.questionBank.createMany({ data: batch, skipDuplicates: true });
             process.stdout.write(`.`);
         }
-        console.log('\n✅ Question Bank Seeding Completed.');
+        console.log('\n✅ Question Bank Seeding Completed Successfully.');
       } catch (error) {
-        console.error('\n❌ DB Error:', error);
+        console.error('\n❌ Database Error:', error);
       } finally {
         await prisma.$disconnect();
       }
     });
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => { 
+    console.error(e); 
+    process.exit(1); 
+});
