@@ -54,7 +54,7 @@ services:
     environment:
       # PUBLIC IP ADDRESS OF YOUR VPS
       # Change 'localhost' to your VPS IP or Domain (e.g. http://123.45.67.89:3001)
-      NEXT_PUBLIC_API_URL: "http://localhost:3001"
+      NEXT_PUBLIC_API_URL: "http://147.93.110.78:3001"
     depends_on:
       - backend
     networks:

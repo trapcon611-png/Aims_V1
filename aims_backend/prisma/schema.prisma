@@ -14,7 +14,7 @@ enum Role {
   PARENT
   TEACHER
   SUPER_ADMIN
-  SECURITY_ADMIN // Added for Security Panel
+  SECURITY_ADMIN 
 }
 
 model User {
@@ -82,16 +82,16 @@ model TeacherProfile {
 // --- 2. ACADEMIC ---
 
 model Batch {
-  id         String           @id @default(uuid())
-  name       String
-  startYear  String           @default("2026")
-  strength   Int              @default(60)
-  fee        Float            @default(0)
-  students   StudentProfile[]
+  id        String         @id @default(uuid())
+  name      String
+  startYear String         @default("2026")
+  strength  Int            @default(60)
+  fee       Float          @default(0)
+  students  StudentProfile[]
   attendance Attendance[]
-  notices    Notice[]
-  resources  Resource[]
-  exams      Exam[]           
+  notices   Notice[]
+  resources Resource[]
+  exams     Exam[]            
 }
 
 model Notice {
@@ -121,20 +121,20 @@ model Resource {
 // --- 3. EXAM SYSTEM ---
 
 model Exam {
-  id          String          @id @default(uuid())
+  id          String        @id @default(uuid())
   title       String
   description String?
   durationMin Int
   totalMarks  Int
   scheduledAt DateTime
-  isPublished Boolean         @default(false)
+  isPublished Boolean       @default(false)
   createdById String?
   createdBy   TeacherProfile? @relation(fields: [createdById], references: [id])
-  batchId     String?         
-  batch       Batch?          @relation(fields: [batchId], references: [id])
+  batchId     String?       
+  batch       Batch?        @relation(fields: [batchId], references: [id])
   questions   Question[]
   attempts    TestAttempt[]
-  createdAt   DateTime        @default(now())
+  createdAt   DateTime      @default(now())
 }
 
 model QuestionBank {
@@ -142,6 +142,8 @@ model QuestionBank {
   createdById     String
   createdBy       TeacherProfile @relation(fields: [createdById], references: [id])
   questionText    String
+  questionImage   String?        // ADDED for Image-based Questions
+  solutionImage   String?        // ADDED for Solution Images
   options         Json
   correctOption   String
   explanation     String?
@@ -164,6 +166,8 @@ model Question {
   questionBankId String?
   questionBank   QuestionBank? @relation(fields: [questionBankId], references: [id])
   questionText   String
+  questionImage  String?       // ADDED to sync with QuestionBank
+  solutionImage  String?       // ADDED to sync with QuestionBank
   options        Json
   correctOption  String
   subject        String
