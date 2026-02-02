@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
-// Use require to avoid missing @types error
+// Use require to avoid missing @types error for csv-parser
 const csv = require('csv-parser');
 
 const prisma = new PrismaClient();
@@ -18,11 +18,23 @@ async function main() {
     let user = await prisma.user.findUnique({ where: { username: 'content_admin' }});
     if (!user) {
         user = await prisma.user.create({
-        data: { username: 'content_admin', password: 'secure_password_123', role: 'TEACHER', isActive: true }
+        data: { 
+            username: 'content_admin', 
+            password: 'secure_password_123', 
+            role: 'TEACHER', 
+            isActive: true 
+        }
         });
     }
     teacher = await prisma.teacherProfile.create({
-      data: { userId: user.id, fullName: 'System Content Admin', email: systemEmail, mobile: '0000000000', subject: 'GENERAL' }
+      data: { 
+          userId: user.id, 
+          fullName: 'System Content Admin', 
+          email: systemEmail, 
+          mobile: '0000000000', 
+          subject: 'GENERAL',
+          qualification: 'System AI' 
+      }
     });
   }
 
@@ -64,18 +76,20 @@ async function main() {
             // Regex to split by comma ONLY if it follows a closing quote and precedes an opening quote
             // This handles commas inside the option text safely
             // Matches: ', ' or '," or ", '
-            parsedOptions = cleaned.split(/['"],\s?['"]/).map((opt: string) => {
-                // Strip remaining leading/trailing quotes
-                return opt.replace(/^['"]|['"]$/g, '').trim();
-            });
-
-            // Fallback if split failed to produce 4 options
-            if (parsedOptions.length < 2 && rawOptions.includes(',')) {
-                 // Simple split fallback
-                 parsedOptions = rawOptions.replace(/[\[\]']/g, "").split(",");
+            if (cleaned.includes("', '") || cleaned.includes('", "')) {
+                parsedOptions = cleaned.split(/['"],\s?['"]/).map((opt: string) => {
+                    // Strip remaining leading/trailing quotes
+                    return opt.replace(/^['"]|['"]$/g, '').trim();
+                });
+            } else if (cleaned.includes(",")) {
+                 // Simple split fallback if no quotes
+                 parsedOptions = cleaned.split(",").map((opt: string) => opt.trim().replace(/^['"]|['"]$/g, ''));
+            } else {
+                 // Single item or empty
+                 parsedOptions = [cleaned.replace(/^['"]|['"]$/g, '')];
             }
         } catch (e) {
-            console.warn(`Row ${rowCount}: Option parse error, using raw fallback.`);
+            console.warn(`Row ${rowCount}: Option parse error, using fallback.`);
             parsedOptions = ["Option A", "Option B", "Option C", "Option D"];
         }
 
@@ -91,7 +105,6 @@ async function main() {
         const cleanAnswer = rawAnswer.toString().replace(/[\[\]'"]/g, '').toLowerCase().replace(/\s/g, ''); 
         
         // Map Letters to Keys
-        // If it's multi like "a,b", this logic preserves it
         let correctKey = cleanAnswer;
 
         // --- 3. MAPPING ---
