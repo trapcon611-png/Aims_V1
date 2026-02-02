@@ -64,7 +64,7 @@ async function main() {
             // Regex to split by comma ONLY if it follows a closing quote and precedes an opening quote
             // This handles commas inside the option text safely
             // Matches: ', ' or '," or ", '
-            parsedOptions = cleaned.split(/['"],\s?['"]/).map(opt => {
+            parsedOptions = cleaned.split(/['"],\s?['"]/).map((opt: string) => {
                 // Strip remaining leading/trailing quotes
                 return opt.replace(/^['"]|['"]$/g, '').trim();
             });
