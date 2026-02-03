@@ -32,7 +32,7 @@ async function main() {
           fullName: 'System Content Admin', 
           email: systemEmail, 
           mobile: '0000000000', 
-          subject: 'GENERAL',
+          subject: 'GENERAL', 
           qualification: 'System AI' 
       }
     });
@@ -62,7 +62,6 @@ async function main() {
       rowCount++;
       try {
         // --- 1. PARSE OPTIONS ---
-        // Handles Python-style list strings: "['(A) Text', '(B) Text']"
         let rawOptions = row.options || '[]';
         let parsedOptions: string[] = [];
         
@@ -74,11 +73,8 @@ async function main() {
             }
             
             // Regex to split by comma ONLY if it follows a closing quote and precedes an opening quote
-            // This handles commas inside the option text safely
-            // Matches: ', ' or '," or ", '
             if (cleaned.includes("', '") || cleaned.includes('", "')) {
                 parsedOptions = cleaned.split(/['"],\s?['"]/).map((opt: string) => {
-                    // Strip remaining leading/trailing quotes
                     return opt.replace(/^['"]|['"]$/g, '').trim();
                 });
             } else if (cleaned.includes(",")) {
@@ -99,12 +95,10 @@ async function main() {
         const optD = parsedOptions[3] || '';
 
         // --- 2. PARSE CORRECT ANSWER ---
-        // Format: "[B]", "[A, B]", or "B"
         const rawAnswer = row['correct-answer'] || row.answer || '';
         // Clean: remove [ ] ' " and spaces -> "b" or "a,b"
         const cleanAnswer = rawAnswer.toString().replace(/[\[\]'"]/g, '').toLowerCase().replace(/\s/g, ''); 
         
-        // Map Letters to Keys
         let correctKey = cleanAnswer;
 
         // --- 3. MAPPING ---
@@ -119,16 +113,14 @@ async function main() {
         const qImage = row['question-image'] || null;
         const sImage = row['solution-image'] || null;
         
-        // Filter out empty brackets or invalid urls
         const finalQImage = (qImage && qImage.length > 5 && !qImage.includes('[]')) ? qImage : null;
         const finalSImage = (sImage && sImage.length > 5 && !sImage.includes('[]')) ? sImage : null;
 
         // Determine Subject/Tags
         const subject = (row.subject || 'GENERAL').toUpperCase();
         const topic = row.topic || 'General';
-        const type = (row.type || 'single').trim().toLowerCase(); // 'single', 'multiple', 'integer'
+        const type = (row.type || 'single').trim().toLowerCase(); 
 
-        // Add 'multiple' or 'integer' to tags for frontend detection
         const tags = [topic];
         if (type.includes('multi')) tags.push('MULTIPLE');
         if (type.includes('int')) tags.push('INTEGER');
@@ -139,7 +131,7 @@ async function main() {
           questionImage: finalQImage,
           solutionImage: finalSImage,
           options: { a: optA, b: optB, c: optC, d: optD },
-          correctOption: correctKey, // Stores "b" or "a,b"
+          correctOption: correctKey,
           explanation: '',
           subject: subject,
           topic: topic,
