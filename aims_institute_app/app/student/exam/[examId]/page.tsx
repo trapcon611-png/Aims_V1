@@ -11,21 +11,26 @@ import {
   X,
   Flag,
   AlertCircle,
-  Info
+  BarChart,
+  RotateCcw,
+  CheckSquare,
+  Square,
+  Circle,
+  CheckCircle2
 } from 'lucide-react';
-import Image from 'next/image';
 
 // --- Types ---
 
-type OptionType = 'text' | 'image-list' | 'single-image';
+type OptionVisualType = 'text' | 'image-list' | 'single-image';
+type QuestionLogicType = 'single' | 'multiple' | 'integer';
 
 interface Question {
   id: string;
   text: string;
   imageUrl?: string;
-  // Options can be a list of strings (text/urls) or a single string (one image url)
   options: string[] | string; 
-  optionType: OptionType;
+  optionVisualType: OptionVisualType;
+  questionType: QuestionLogicType;
   marks: number;
 }
 
@@ -37,63 +42,18 @@ interface Exam {
   questions: Question[];
 }
 
-// --- Mock Data Service ---
-// Simulates the CSV structure you provided
-const fetchExamData = async (examId: string): Promise<Exam> => {
-  await new Promise(resolve => setTimeout(resolve, 1000));
+interface ExamResult {
+  score: number;
+  totalQuestions: number;
+  correctAnswers: number;
+  wrongAnswers: number;
+  unanswered: number;
+  percentage: number;
+  status: 'Pass' | 'Fail';
+}
 
-  return {
-    id: examId,
-    title: 'JEE (Main) Mock Test - Physics, Chemistry, Maths',
-    duration: 180,
-    totalMarks: 300,
-    questions: [
-      {
-        id: 'q-1',
-        text: 'Considering the reaction sequence given below, the correct statement(s) is(are):',
-        imageUrl: 'https://placehold.co/600x200/png?text=Reaction+Sequence+Image',
-        options: [
-          '(A) P can be reduced to a primary alcohol using NaBH₄.',
-          '(B) Treating P with conc. NH₄OH solution followed by acidification gives Q.',
-          '(C) Treating Q with a solution of NaNO₂ in aq. HCl liberates N₂.',
-          '(D) P is more acidic than CH₃CH₂COOH.'
-        ],
-        optionType: 'text',
-        marks: 4
-      },
-      {
-        id: 'q-2',
-        text: 'In the following reaction sequence, the correct structure(s) of X is (are). Identify from the options below.',
-        imageUrl: 'https://placehold.co/600x200/png?text=Chemical+Structure+Question',
-        // Example of "Option Image" where one image contains A, B, C, D choices
-        options: 'https://placehold.co/600x400/png?text=Options+A+B+C+D+Combined+Image', 
-        optionType: 'single-image',
-        marks: 4
-      },
-      {
-        id: 'q-3',
-        text: 'Which of the following graphs correctly represents the velocity-time relationship?',
-        // Example of options being individual images
-        options: [
-          'https://placehold.co/200x200/png?text=Graph+A',
-          'https://placehold.co/200x200/png?text=Graph+B',
-          'https://placehold.co/200x200/png?text=Graph+C',
-          'https://placehold.co/200x200/png?text=Graph+D'
-        ],
-        optionType: 'image-list',
-        marks: 4
-      },
-       // Add more mock questions...
-      ...Array.from({ length: 17 }).map((_, i) => ({
-        id: `q-${i + 4}`,
-        text: `Sample Question ${i + 4}: What is the value of X?`,
-        options: ['Option A', 'Option B', 'Option C', 'Option D'],
-        optionType: 'text' as OptionType,
-        marks: 4
-      }))
-    ]
-  };
-};
+// --- API Configuration ---
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 export default function ExamPage() {
   const router = useRouter();
@@ -101,7 +61,7 @@ export default function ExamPage() {
   const examId = params.examId as string;
 
   // --- State ---
-  const [view, setView] = useState<'instructions' | 'exam'>('instructions');
+  const [view, setView] = useState<'instructions' | 'exam' | 'result'>('instructions');
   const [exam, setExam] = useState<Exam | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -111,7 +71,12 @@ export default function ExamPage() {
 
   // Exam State
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>({}); // Stores option index/label
+  
+  // Answers: 
+  // - Single/Integer: string ("A", "42")
+  // - Multiple: string[] (["A", "B"])
+  const [answers, setAnswers] = useState<Record<string, string | string[]>>({}); 
+  
   const [flaggedQuestions, setFlaggedQuestions] = useState<Set<string>>(new Set());
   const [visitedQuestions, setVisitedQuestions] = useState<Set<string>>(new Set(["0"]));
   
@@ -119,24 +84,105 @@ export default function ExamPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  // Result State
+  const [result, setResult] = useState<ExamResult | null>(null);
+
+  // --- Helpers to Parse Options from DB ---
+  const parseOptions = (optionsRaw: any): { options: string[] | string, type: OptionVisualType } => {
+    // Scenario 1: It's a single string URL (Single Image Option)
+    if (typeof optionsRaw === 'string' && optionsRaw.startsWith('http') && !optionsRaw.startsWith('[')) {
+      return { options: optionsRaw, type: 'single-image' };
+    }
+
+    // Scenario 2: It's a JSON string
+    if (typeof optionsRaw === 'string' && (optionsRaw.startsWith('[') || optionsRaw.startsWith('{'))) {
+      try {
+        const parsed = JSON.parse(optionsRaw);
+        // Check if elements are URLs
+        if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string' && parsed[0].startsWith('http')) {
+           return { options: parsed, type: 'image-list' };
+        }
+        return { options: parsed, type: 'text' };
+      } catch (e) {
+        console.error("Failed to parse options JSON", e);
+        return { options: [], type: 'text' };
+      }
+    }
+
+    // Scenario 3: Already an array
+    if (Array.isArray(optionsRaw)) {
+      if (optionsRaw.length > 0 && typeof optionsRaw[0] === 'string' && optionsRaw[0].startsWith('http')) {
+        return { options: optionsRaw, type: 'image-list' };
+      }
+      return { options: optionsRaw, type: 'text' };
+    }
+
+    return { options: [], type: 'text' };
+  };
+
   // --- Effects ---
+  
+  // 1. Fetch Real Exam Data
   useEffect(() => {
     if (!examId) return;
+
     const loadExam = async () => {
       try {
         setLoading(true);
-        const data = await fetchExamData(examId);
-        setExam(data);
-        setTimeLeft(data.duration * 60);
+        const token = localStorage.getItem('accessToken'); 
+        const res = await fetch(`${API_BASE_URL}/exams/${examId}`, {
+           headers: {
+             'Authorization': `Bearer ${token}`
+           }
+        });
+
+        if (!res.ok) throw new Error('Failed to fetch exam data');
+        
+        const data = await res.json();
+        
+        // Transform Backend Data to Frontend Interface
+        const transformedExam: Exam = {
+          id: data.id,
+          title: data.name || data.title || 'Examination',
+          duration: data.duration || 180,
+          totalMarks: data.totalMarks || 100,
+          questions: data.questions.map((q: any, index: number) => {
+            const { options, type: visualType } = parseOptions(q.options);
+            
+            // Normalize Logic Type from DB
+            let logicType: QuestionLogicType = 'single';
+            if (q.type) {
+                const lowerType = q.type.toLowerCase();
+                if (lowerType.includes('multiple')) logicType = 'multiple';
+                else if (lowerType.includes('integer') || lowerType.includes('numerical')) logicType = 'integer';
+            }
+
+            return {
+              id: q.id,
+              text: q.questionText || `Question ${index + 1}`,
+              imageUrl: q.questionImage || null,
+              options: options,
+              optionVisualType: visualType,
+              questionType: logicType,
+              marks: q.marks || 4,
+            };
+          })
+        };
+
+        setExam(transformedExam);
+        setTimeLeft(transformedExam.duration * 60);
       } catch (err) {
-        setError('Failed to load exam data.');
+        console.error(err);
+        setError('Failed to load exam. Please check your connection.');
       } finally {
         setLoading(false);
       }
     };
+
     loadExam();
   }, [examId]);
 
+  // 2. Timer
   useEffect(() => {
     if (view !== 'exam' || !exam || timeLeft <= 0 || isSubmitting) return;
 
@@ -158,15 +204,39 @@ export default function ExamPage() {
   const handleStartExam = () => {
     if (agreed) {
       setView('exam');
-      // Enter fullscreen might be blocked by browser without direct user interaction event immediately on button click, 
-      // but this is the right place to request it if needed.
     } else {
       alert("Please read and agree to the instructions first.");
     }
   };
 
-  const handleOptionSelect = (questionId: string, value: string) => {
-    setAnswers(prev => ({ ...prev, [questionId]: value }));
+  const handleOptionSelect = (questionId: string, value: string, type: QuestionLogicType) => {
+    setAnswers(prev => {
+      const currentAnswer = prev[questionId];
+
+      if (type === 'multiple') {
+        // Handle Multi-Select (Toggle)
+        const currentList = Array.isArray(currentAnswer) ? currentAnswer : [];
+        if (currentList.includes(value)) {
+          // Remove
+          const newList = currentList.filter(v => v !== value);
+          return { ...prev, [questionId]: newList.length > 0 ? newList : [] }; // Keep empty array or remove key? Using empty array for now or check backend requirements
+        } else {
+          // Add
+          return { ...prev, [questionId]: [...currentList, value].sort() }; // Sort for consistency
+        }
+      } else {
+        // Handle Single Select
+        return { ...prev, [questionId]: value };
+      }
+    });
+  };
+
+  const handleIntegerInput = (questionId: string, value: string) => {
+    // Basic validation to ensure numbers (or decimals/negatives if allowed)
+    // allowing - and . for now
+    if (/^-?\d*\.?\d*$/.test(value)) {
+        setAnswers(prev => ({ ...prev, [questionId]: value }));
+    }
   };
 
   const handleNavigate = (index: number) => {
@@ -187,13 +257,46 @@ export default function ExamPage() {
 
   const handleSubmitExam = async (autoSubmit = false) => {
     if (!exam) return;
-    if (!autoSubmit && !window.confirm('Are you sure you want to submit?')) return;
+    if (!autoSubmit && !window.confirm('Are you sure you want to submit the exam?')) return;
 
     setIsSubmitting(true);
-    // Simulate submission
-    setTimeout(() => {
-      router.push('/student/dashboard'); // Replace with result page
-    }, 2000);
+
+    try {
+      const token = localStorage.getItem('accessToken');
+      
+      // Filter out empty answers before sending if needed, or send as is
+      const finalAnswers = Object.entries(answers).reduce((acc, [key, val]) => {
+          if (Array.isArray(val) && val.length === 0) return acc;
+          if (!val) return acc;
+          acc[key] = val;
+          return acc;
+      }, {} as Record<string, any>);
+
+      const res = await fetch(`${API_BASE_URL}/exams/${examId}/submit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          examId: exam.id,
+          answers: finalAnswers,
+          timeTaken: (exam.duration * 60) - timeLeft
+        })
+      });
+
+      if (!res.ok) throw new Error('Submission failed');
+
+      const resultData = await res.json();
+      setResult(resultData);
+      setView('result');
+
+    } catch (error) {
+      console.error(error);
+      alert('Failed to submit exam. Please try again or contact support.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const formatTime = (seconds: number) => {
@@ -203,12 +306,43 @@ export default function ExamPage() {
     return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  // Helper to check if an option is selected
+  const isOptionSelected = (questionId: string, value: string, type: QuestionLogicType) => {
+    const ans = answers[questionId];
+    if (type === 'multiple') {
+      return Array.isArray(ans) && ans.includes(value);
+    }
+    return ans === value;
+  };
+
   // --- Renderers ---
 
-  if (loading) return <div className="h-screen flex items-center justify-center">Loading...</div>;
-  if (error || !exam) return <div className="h-screen flex items-center justify-center text-red-500">{error}</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-600 font-medium">Loading Exam...</p>
+        </div>
+      </div>
+    );
+  }
 
+  if (error || !exam) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center p-8 bg-white rounded-2xl shadow-sm border border-red-100">
+           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+           <p className="text-lg font-bold text-slate-800">{error || 'Exam not found'}</p>
+           <button onClick={() => router.back()} className="mt-4 px-6 py-2 bg-slate-200 hover:bg-slate-300 rounded-lg font-medium transition-colors">Go Back</button>
+        </div>
+      </div>
+    );
+  }
+
+  // -----------------------
   // 1. INSTRUCTIONS VIEW
+  // -----------------------
   if (view === 'instructions') {
     return (
       <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans">
@@ -224,10 +358,9 @@ export default function ExamPage() {
             <section>
               <h2 className="text-lg font-bold text-slate-900 mb-2">1. General</h2>
               <ul className="list-disc pl-5 space-y-2">
-                <li>The examination will comprise of Objective type Multiple Choice Questions (MCQs).</li>
+                <li>The examination will comprise of <strong>{exam.questions.some(q => q.questionType === 'multiple') ? 'Multiple Choice (Single & Multi Correct)' : 'Multiple Choice Questions'}</strong> and <strong>Integer Type Questions</strong>.</li>
                 <li>Total duration of the examination is <strong>{exam.duration} minutes</strong>.</li>
                 <li>The clock will be set at the server. The countdown timer in the top right corner of screen will display the remaining time available for you to complete the examination.</li>
-                <li>When the timer reaches zero, the examination will end by itself. You will not be required to end or submit your examination.</li>
               </ul>
             </section>
 
@@ -253,23 +386,15 @@ export default function ExamPage() {
                   </div>
                   <span>Marked for Review.</span>
                 </div>
-                <div className="flex items-center gap-3">
-                   <div className="w-8 h-8 rounded-lg bg-purple-100 border border-purple-300 flex items-center justify-center text-xs font-bold text-purple-700 relative">
-                    9
-                    <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-500 rounded-full border border-white"></div>
-                  </div>
-                  <span>Answered & Marked for Review (Will be evaluated).</span>
-                </div>
               </div>
             </section>
 
-            <section>
-              <h2 className="text-lg font-bold text-slate-900 mb-2">3. Navigating to a Question</h2>
-              <p>To answer a question, do the following:</p>
-              <ul className="list-disc pl-5 space-y-1 mt-2">
-                <li>Click on the question number in the Question Palette at the right of your screen to go to that numbered question directly.</li>
-                <li>Click on <strong>Save & Next</strong> to save your answer for the current question and then go to the next question.</li>
-                <li>Click on <strong>Mark for Review & Next</strong> to save your answer for the current question, mark it for review, and then go to the next question.</li>
+             <section>
+              <h2 className="text-lg font-bold text-slate-900 mb-2">3. Answering Questions</h2>
+              <ul className="list-disc pl-5 space-y-2">
+                 <li><strong>Single Correct:</strong> Select one option. Changing selection updates the answer.</li>
+                 <li><strong>Multiple Correct:</strong> You can select one or more options. Click to toggle selection.</li>
+                 <li><strong>Integer Type:</strong> Type the numerical answer in the provided input box.</li>
               </ul>
             </section>
           </div>
@@ -300,16 +425,86 @@ export default function ExamPage() {
     );
   }
 
-  // 2. EXAM VIEW
+  // -----------------------
+  // 2. RESULTS VIEW
+  // -----------------------
+  if (view === 'result' && result) {
+    return (
+      <div className="min-h-screen bg-slate-50 p-4 md:p-8 flex items-center justify-center font-sans">
+        <div className="w-full max-w-4xl bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden animate-in fade-in duration-500">
+          <div className="bg-slate-900 p-8 text-center text-white">
+             <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white/10 mb-4 backdrop-blur-sm">
+                <BarChart className="w-10 h-10" />
+             </div>
+             <h1 className="text-3xl font-bold mb-2">Exam Results</h1>
+             <p className="text-slate-300">Here is how you performed in {exam.title}</p>
+          </div>
+
+          <div className="p-8">
+             {/* Score Cards */}
+             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-center">
+                   <p className="text-sm font-semibold text-blue-600 uppercase mb-1">Total Score</p>
+                   <p className="text-3xl font-bold text-slate-800">{result.score} <span className="text-sm text-slate-400 font-normal">/ {exam.totalMarks}</span></p>
+                </div>
+                <div className="bg-green-50 p-4 rounded-xl border border-green-100 text-center">
+                   <p className="text-sm font-semibold text-green-600 uppercase mb-1">Correct</p>
+                   <p className="text-3xl font-bold text-slate-800">{result.correctAnswers}</p>
+                </div>
+                <div className="bg-red-50 p-4 rounded-xl border border-red-100 text-center">
+                   <p className="text-sm font-semibold text-red-600 uppercase mb-1">Incorrect</p>
+                   <p className="text-3xl font-bold text-slate-800">{result.wrongAnswers}</p>
+                </div>
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center">
+                   <p className="text-sm font-semibold text-slate-500 uppercase mb-1">Percentage</p>
+                   <p className="text-3xl font-bold text-slate-800">{result.percentage}%</p>
+                </div>
+             </div>
+
+             <div className="text-center">
+                <div className={`inline-block px-6 py-2 rounded-full text-lg font-bold mb-8 ${
+                   result.status === 'Pass' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                }`}>
+                   Result: {result.status}
+                </div>
+                
+                <div className="flex justify-center gap-4">
+                  <button 
+                     onClick={() => router.push('/student/dashboard')}
+                     className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-colors"
+                  >
+                     Back to Dashboard
+                  </button>
+                  <button 
+                     onClick={() => window.location.reload()}
+                     className="px-8 py-3 border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-colors flex items-center gap-2"
+                  >
+                     <RotateCcw className="w-4 h-4" /> Retry Mock
+                  </button>
+                </div>
+             </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // -----------------------
+  // 3. EXAM VIEW
+  // -----------------------
   const currentQuestion = exam.questions[currentQuestionIndex];
-  const isAnswered = (qId: string) => !!answers[qId];
+  const isAnswered = (qId: string) => {
+     const ans = answers[qId];
+     if (Array.isArray(ans)) return ans.length > 0;
+     return !!ans;
+  };
   const isFlagged = (qId: string) => flaggedQuestions.has(qId);
   const isVisited = (idx: number) => visitedQuestions.has(idx.toString());
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col md:flex-row h-screen overflow-hidden select-none">
       
-      {/* --- Main Content Area (Left) --- */}
+      {/* Main Content Area (Left) */}
       <div className="flex-1 flex flex-col h-full overflow-hidden relative z-10">
         
         {/* Exam Header */}
@@ -324,10 +519,6 @@ export default function ExamPage() {
           </div>
           
           <div className="flex items-center gap-4">
-             <div className="hidden md:flex flex-col items-end mr-4">
-                <span className="text-xs text-slate-500 font-semibold">Candidate Name</span>
-                <span className="text-sm font-bold text-slate-800">John Doe</span>
-             </div>
              <div className={`flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xl font-bold border ${
                timeLeft < 300 ? 'bg-red-50 text-red-600 border-red-200 animate-pulse' : 'bg-slate-800 text-white border-slate-700'
              }`}>
@@ -348,7 +539,7 @@ export default function ExamPage() {
             <div className="bg-blue-600 text-white px-6 py-2 flex justify-between items-center">
                <span className="font-bold text-lg">Question {currentQuestionIndex + 1}</span>
                <div className="flex items-center gap-2 text-sm font-medium bg-white/20 px-3 py-1 rounded-full">
-                  <span>Marks: +{currentQuestion.marks}, -1</span>
+                  <span>{currentQuestion.questionType.toUpperCase()} | Marks: +{currentQuestion.marks}, -1</span>
                   <AlertCircle className="w-4 h-4" />
                </div>
             </div>
@@ -362,105 +553,139 @@ export default function ExamPage() {
                 </h2>
                 {currentQuestion.imageUrl && (
                   <div className="mt-4">
-                    {/* Constrain image height so user doesn't scroll excessively */}
                     <img 
                       src={currentQuestion.imageUrl} 
                       alt="Question" 
-                      className="max-h-[40vh] w-auto object-contain border border-slate-200 rounded-lg"
+                      className="max-h-[50vh] w-auto object-contain border border-slate-200 rounded-lg"
                     />
                   </div>
                 )}
               </div>
 
-              {/* Options Section */}
+              {/* Input Section (Based on Type) */}
               <div className="space-y-4">
-                <h3 className="font-bold text-slate-700">Options:</h3>
                 
-                {/* Case 1: Standard Text Options */}
-                {currentQuestion.optionType === 'text' && Array.isArray(currentQuestion.options) && (
-                  <div className="grid grid-cols-1 gap-3">
-                    {currentQuestion.options.map((opt, idx) => {
-                      const label = String.fromCharCode(65 + idx); // A, B, C, D
-                      const isSelected = answers[currentQuestion.id] === label;
-                      return (
-                        <button
-                          key={idx}
-                          onClick={() => handleOptionSelect(currentQuestion.id, label)}
-                          className={`w-full text-left p-4 rounded-xl border-2 transition-all flex items-start gap-4 group ${
-                            isSelected 
-                              ? 'border-blue-600 bg-blue-50' 
-                              : 'border-slate-200 hover:bg-slate-50'
-                          }`}
-                        >
-                          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 ${
-                            isSelected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-400 text-slate-500'
-                          }`}>
-                            <span className="text-xs font-bold">{label}</span>
-                          </div>
-                          <span className={`text-base ${isSelected ? 'text-blue-900 font-medium' : 'text-slate-700'}`}>
-                            {opt}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                {/* INTEGER TYPE INPUT */}
+                {currentQuestion.questionType === 'integer' ? (
+                   <div className="space-y-3">
+                      <label className="block text-slate-700 font-bold mb-2">Your Answer:</label>
+                      <input 
+                         type="text"
+                         value={answers[currentQuestion.id] as string || ''}
+                         onChange={(e) => handleIntegerInput(currentQuestion.id, e.target.value)}
+                         placeholder="Type your numerical answer here..."
+                         className="w-full md:w-1/2 p-4 text-xl border-2 border-slate-300 rounded-xl focus:border-blue-600 focus:ring-4 focus:ring-blue-100 outline-none transition-all font-mono text-center"
+                      />
+                      <p className="text-sm text-slate-500">Enter a numerical value (integers or decimals).</p>
+                   </div>
+                ) : (
+                   /* MCQ Options */
+                   <>
+                     <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                         Options: 
+                         {currentQuestion.questionType === 'multiple' && (
+                             <span className="text-xs font-normal bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">Multi-Correct</span>
+                         )}
+                     </h3>
+                     
+                     {/* Case 1: Standard Text Options */}
+                     {currentQuestion.optionVisualType === 'text' && Array.isArray(currentQuestion.options) && (
+                        <div className="grid grid-cols-1 gap-3">
+                           {currentQuestion.options.map((opt, idx) => {
+                              const label = String.fromCharCode(65 + idx); // A, B, C, D
+                              const selected = isOptionSelected(currentQuestion.id, label, currentQuestion.questionType);
+                              return (
+                                 <button
+                                    key={idx}
+                                    onClick={() => handleOptionSelect(currentQuestion.id, label, currentQuestion.questionType)}
+                                    className={`w-full text-left p-4 rounded-xl border-2 transition-all flex items-start gap-4 group ${
+                                       selected 
+                                       ? 'border-blue-600 bg-blue-50' 
+                                       : 'border-slate-200 hover:bg-slate-50'
+                                    }`}
+                                 >
+                                    <div className={`w-6 h-6 shrink-0 mt-0.5 flex items-center justify-center`}>
+                                       {currentQuestion.questionType === 'multiple' ? (
+                                           selected ? <CheckSquare className="w-6 h-6 text-blue-600 fill-blue-100" /> : <Square className="w-6 h-6 text-slate-400" />
+                                       ) : (
+                                           selected ? <CheckCircle2 className="w-6 h-6 text-blue-600 fill-blue-100" /> : <Circle className="w-6 h-6 text-slate-400" />
+                                       )}
+                                    </div>
+                                    
+                                    <div className="flex-1">
+                                       <span className="font-bold mr-2 text-slate-500">({label})</span>
+                                       <span className={`text-base ${selected ? 'text-blue-900 font-medium' : 'text-slate-700'}`}>
+                                          {opt}
+                                       </span>
+                                    </div>
+                                 </button>
+                              );
+                           })}
+                        </div>
+                     )}
 
-                {/* Case 2: Single Image Options (Options A,B,C,D embedded in one image) */}
-                {currentQuestion.optionType === 'single-image' && typeof currentQuestion.options === 'string' && (
-                  <div className="space-y-6">
-                     <div className="border border-slate-200 rounded-lg p-2 inline-block">
-                        <img 
-                           src={currentQuestion.options} 
-                           alt="Options" 
-                           className="max-h-[40vh] w-auto object-contain"
-                        />
-                     </div>
-                     <div className="flex gap-6 items-center">
-                        {['A', 'B', 'C', 'D'].map((label) => {
-                           const isSelected = answers[currentQuestion.id] === label;
-                           return (
-                              <button
-                                 key={label}
-                                 onClick={() => handleOptionSelect(currentQuestion.id, label)}
-                                 className={`w-16 h-16 rounded-full border-2 flex items-center justify-center text-xl font-bold transition-all shadow-sm ${
-                                    isSelected 
-                                    ? 'bg-blue-600 border-blue-600 text-white transform scale-110' 
-                                    : 'bg-white border-slate-300 text-slate-600 hover:border-blue-400 hover:bg-blue-50'
-                                 }`}
-                              >
-                                 {label}
-                              </button>
-                           );
-                        })}
-                     </div>
-                  </div>
-                )}
+                     {/* Case 2: Single Image Options (Embedded A,B,C,D) */}
+                     {currentQuestion.optionVisualType === 'single-image' && typeof currentQuestion.options === 'string' && (
+                        <div className="space-y-6">
+                           <div className="border border-slate-200 rounded-lg p-2 inline-block">
+                              <img 
+                                 src={currentQuestion.options} 
+                                 alt="Options" 
+                                 className="max-h-[50vh] w-auto object-contain"
+                              />
+                           </div>
+                           <div className="flex gap-6 items-center flex-wrap">
+                              {['A', 'B', 'C', 'D'].map((label) => {
+                                 const selected = isOptionSelected(currentQuestion.id, label, currentQuestion.questionType);
+                                 return (
+                                    <button
+                                       key={label}
+                                       onClick={() => handleOptionSelect(currentQuestion.id, label, currentQuestion.questionType)}
+                                       className={`w-16 h-16 rounded-xl border-2 flex items-center justify-center text-xl font-bold transition-all shadow-sm ${
+                                          selected 
+                                          ? 'bg-blue-600 border-blue-600 text-white transform scale-110' 
+                                          : 'bg-white border-slate-300 text-slate-600 hover:border-blue-400 hover:bg-blue-50'
+                                       }`}
+                                    >
+                                       {label}
+                                    </button>
+                                 );
+                              })}
+                           </div>
+                        </div>
+                     )}
 
-                {/* Case 3: List of Image Options */}
-                {currentQuestion.optionType === 'image-list' && Array.isArray(currentQuestion.options) && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                     {currentQuestion.options.map((optUrl, idx) => {
-                        const label = String.fromCharCode(65 + idx);
-                        const isSelected = answers[currentQuestion.id] === label;
-                        return (
-                           <button
-                              key={idx}
-                              onClick={() => handleOptionSelect(currentQuestion.id, label)}
-                              className={`p-3 rounded-xl border-2 transition-all flex items-center gap-4 ${
-                                 isSelected ? 'border-blue-600 bg-blue-50' : 'border-slate-200 hover:bg-slate-50'
-                              }`}
-                           >
-                              <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                                 isSelected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-400 text-slate-500'
-                              }`}>
-                                 <span className="font-bold">{label}</span>
-                              </div>
-                              <img src={optUrl} alt={`Option ${label}`} className="h-24 w-auto object-contain" />
-                           </button>
-                        );
-                     })}
-                  </div>
+                     {/* Case 3: List of Image Options */}
+                     {currentQuestion.optionVisualType === 'image-list' && Array.isArray(currentQuestion.options) && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                           {currentQuestion.options.map((optUrl, idx) => {
+                              const label = String.fromCharCode(65 + idx);
+                              const selected = isOptionSelected(currentQuestion.id, label, currentQuestion.questionType);
+                              return (
+                                 <button
+                                    key={idx}
+                                    onClick={() => handleOptionSelect(currentQuestion.id, label, currentQuestion.questionType)}
+                                    className={`p-3 rounded-xl border-2 transition-all flex items-center gap-4 ${
+                                       selected ? 'border-blue-600 bg-blue-50' : 'border-slate-200 hover:bg-slate-50'
+                                    }`}
+                                 >
+                                    <div className={`w-8 h-8 flex items-center justify-center shrink-0`}>
+                                       {currentQuestion.questionType === 'multiple' ? (
+                                           selected ? <CheckSquare className="w-8 h-8 text-blue-600 fill-blue-100" /> : <Square className="w-8 h-8 text-slate-400" />
+                                       ) : (
+                                           selected ? <CheckCircle2 className="w-8 h-8 text-blue-600 fill-blue-100" /> : <Circle className="w-8 h-8 text-slate-400" />
+                                       )}
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                       <span className="font-bold text-slate-500 text-lg">{label}</span>
+                                       <img src={optUrl} alt={`Option ${label}`} className="h-24 w-auto object-contain" />
+                                    </div>
+                                 </button>
+                              );
+                           })}
+                        </div>
+                     )}
+                   </>
                 )}
 
               </div>
@@ -512,7 +737,7 @@ export default function ExamPage() {
         </div>
       </div>
 
-      {/* --- Sidebar Palette (Right) --- */}
+      {/* Sidebar Palette (Right) */}
       <aside className={`
         fixed inset-y-0 right-0 w-80 bg-blue-50 border-l border-slate-300 transform transition-transform duration-300 ease-in-out z-30 flex flex-col
         ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'} 
@@ -523,8 +748,7 @@ export default function ExamPage() {
            <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-slate-400"></div>
               <div>
-                 <p className="font-bold text-slate-800">John Doe</p>
-                 <p className="text-xs text-slate-600">Candidate</p>
+                 <p className="font-bold text-slate-800">Candidate</p>
               </div>
            </div>
         </div>
@@ -542,7 +766,6 @@ export default function ExamPage() {
 
         {/* Palette Grid */}
         <div className="flex-1 overflow-y-auto p-4 bg-white">
-           <h4 className="font-bold text-slate-700 mb-3 pl-1 border-l-4 border-blue-500 leading-none">Mathematics</h4>
            <div className="grid grid-cols-5 gap-2">
              {exam.questions.map((q, idx) => {
                const active = idx === currentQuestionIndex;
@@ -550,16 +773,7 @@ export default function ExamPage() {
                const flagged = isFlagged(q.id);
                const visited = isVisited(idx);
 
-               // NTA Style Logic
-               let bgClass = 'bg-slate-100 border-slate-300 text-slate-600'; // Not visited
-               let shapeClass = 'rounded-md';
-
-               if (active) {
-                   // Active usually has a distinctive border or different shape in some apps, 
-                   // but standard NTA just highlights the current number. 
-                   // We'll use a ring.
-               }
-
+               let bgClass = 'bg-slate-100 border-slate-300 text-slate-600';
                if (!visited) {
                    bgClass = 'bg-slate-100 border-slate-300 text-slate-600';
                } else if (answered && !flagged) {
@@ -568,10 +782,8 @@ export default function ExamPage() {
                    bgClass = 'bg-purple-600 border-purple-700 text-white rounded-full';
                } else if (flagged && answered) {
                    bgClass = 'bg-purple-600 border-purple-700 text-white rounded-full relative';
-                   // Will add checkmark/dot via after element logic or explicit child
                } else if (visited && !answered) {
                    bgClass = 'bg-red-500 border-red-600 text-white rounded-b-lg rounded-t-lg'; 
-                   // NTA uses Red for "Not Answered" (which means visited but left blank)
                }
 
                return (
@@ -601,9 +813,12 @@ export default function ExamPage() {
         <div className="p-4 bg-blue-50 border-t border-blue-200">
            <button
              onClick={() => handleSubmitExam()}
-             className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-colors"
+             disabled={isSubmitting}
+             className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center"
            >
-             SUBMIT TEST
+             {isSubmitting ? (
+               <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+             ) : 'SUBMIT TEST'}
            </button>
         </div>
       </aside>
