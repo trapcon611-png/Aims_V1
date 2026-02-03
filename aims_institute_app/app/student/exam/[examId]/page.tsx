@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { 
   Timer, 
@@ -89,34 +89,49 @@ export default function ExamPage() {
 
   // --- Helpers to Parse Options from DB ---
   const parseOptions = (optionsRaw: any): { options: string[] | string, type: OptionVisualType } => {
-    // Scenario 1: It's a single string URL (Single Image Option)
-    if (typeof optionsRaw === 'string' && optionsRaw.startsWith('http') && !optionsRaw.startsWith('[')) {
+    // 1. Handle Single Image URL (String starting with http/https and NOT a JSON array)
+    if (typeof optionsRaw === 'string' && optionsRaw.trim().match(/^https?:\/\//) && !optionsRaw.trim().startsWith('[')) {
       return { options: optionsRaw, type: 'single-image' };
     }
 
-    // Scenario 2: It's a JSON string
-    if (typeof optionsRaw === 'string' && (optionsRaw.startsWith('[') || optionsRaw.startsWith('{'))) {
+    // 2. Handle JSON String (Arrays of text or image URLs)
+    if (typeof optionsRaw === 'string' && (optionsRaw.trim().startsWith('[') || optionsRaw.trim().startsWith('{'))) {
       try {
-        const parsed = JSON.parse(optionsRaw);
-        // Check if elements are URLs
-        if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string' && parsed[0].startsWith('http')) {
-           return { options: parsed, type: 'image-list' };
+        // Fix for potentially malformed JSON (single quotes to double quotes if simple)
+        let cleaned = optionsRaw.replace(/'/g, '"'); 
+        // Be careful with replacing all quotes if content has quotes, but standard JSON uses double quotes.
+        // If your DB saves Python-style lists like "['Option A', 'Option B']", JSON.parse might fail.
+        // Let's try parsing the raw string first, then fallback.
+        
+        let parsed;
+        try {
+           parsed = JSON.parse(optionsRaw);
+        } catch {
+           parsed = JSON.parse(cleaned);
         }
-        return { options: parsed, type: 'text' };
+
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Check if elements are URLs
+          if (typeof parsed[0] === 'string' && parsed[0].match(/^https?:\/\//)) {
+             return { options: parsed, type: 'image-list' };
+          }
+          return { options: parsed, type: 'text' };
+        }
       } catch (e) {
-        console.error("Failed to parse options JSON", e);
+        console.warn("Parsing options failed, falling back to empty text list", optionsRaw);
         return { options: [], type: 'text' };
       }
     }
 
-    // Scenario 3: Already an array
+    // 3. Already an Array (if backend parses it)
     if (Array.isArray(optionsRaw)) {
-      if (optionsRaw.length > 0 && typeof optionsRaw[0] === 'string' && optionsRaw[0].startsWith('http')) {
+      if (optionsRaw.length > 0 && typeof optionsRaw[0] === 'string' && optionsRaw[0].match(/^https?:\/\//)) {
         return { options: optionsRaw, type: 'image-list' };
       }
       return { options: optionsRaw, type: 'text' };
     }
 
+    // Default fallback
     return { options: [], type: 'text' };
   };
 
@@ -130,13 +145,23 @@ export default function ExamPage() {
       try {
         setLoading(true);
         const token = localStorage.getItem('accessToken'); 
+        
+        if (!token) {
+           setError("Authentication missing. Please login again.");
+           return;
+        }
+
         const res = await fetch(`${API_BASE_URL}/exams/${examId}`, {
            headers: {
              'Authorization': `Bearer ${token}`
            }
         });
 
-        if (!res.ok) throw new Error('Failed to fetch exam data');
+        if (!res.ok) {
+           if (res.status === 404) throw new Error('Exam not found');
+           if (res.status === 401) throw new Error('Unauthorized');
+           throw new Error('Failed to fetch exam data');
+        }
         
         const data = await res.json();
         
@@ -171,9 +196,9 @@ export default function ExamPage() {
 
         setExam(transformedExam);
         setTimeLeft(transformedExam.duration * 60);
-      } catch (err) {
+      } catch (err: any) {
         console.error(err);
-        setError('Failed to load exam. Please check your connection.');
+        setError(err.message || 'Failed to load exam. Please check your connection.');
       } finally {
         setLoading(false);
       }
@@ -190,7 +215,7 @@ export default function ExamPage() {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          handleSubmitExam(true);
+          handleSubmitExam(true); // Auto-submit when time is up
           return 0;
         }
         return prev - 1;
@@ -217,12 +242,12 @@ export default function ExamPage() {
         // Handle Multi-Select (Toggle)
         const currentList = Array.isArray(currentAnswer) ? currentAnswer : [];
         if (currentList.includes(value)) {
-          // Remove
+          // Remove if exists
           const newList = currentList.filter(v => v !== value);
-          return { ...prev, [questionId]: newList.length > 0 ? newList : [] }; // Keep empty array or remove key? Using empty array for now or check backend requirements
+          return { ...prev, [questionId]: newList }; 
         } else {
-          // Add
-          return { ...prev, [questionId]: [...currentList, value].sort() }; // Sort for consistency
+          // Add if not exists
+          return { ...prev, [questionId]: [...currentList, value].sort() }; // Sort 'A','B' for consistent checks
         }
       } else {
         // Handle Single Select
@@ -232,8 +257,7 @@ export default function ExamPage() {
   };
 
   const handleIntegerInput = (questionId: string, value: string) => {
-    // Basic validation to ensure numbers (or decimals/negatives if allowed)
-    // allowing - and . for now
+    // Basic validation to ensure numbers (integers, decimals, negatives)
     if (/^-?\d*\.?\d*$/.test(value)) {
         setAnswers(prev => ({ ...prev, [questionId]: value }));
     }
@@ -264,10 +288,10 @@ export default function ExamPage() {
     try {
       const token = localStorage.getItem('accessToken');
       
-      // Filter out empty answers before sending if needed, or send as is
+      // Clean up answers before sending (remove empty arrays/strings)
       const finalAnswers = Object.entries(answers).reduce((acc, [key, val]) => {
           if (Array.isArray(val) && val.length === 0) return acc;
-          if (!val) return acc;
+          if (val === '') return acc;
           acc[key] = val;
           return acc;
       }, {} as Record<string, any>);
@@ -333,7 +357,7 @@ export default function ExamPage() {
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center p-8 bg-white rounded-2xl shadow-sm border border-red-100">
            <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-           <p className="text-lg font-bold text-slate-800">{error || 'Exam not found'}</p>
+           <p className="text-lg font-bold text-slate-800">{error}</p>
            <button onClick={() => router.back()} className="mt-4 px-6 py-2 bg-slate-200 hover:bg-slate-300 rounded-lg font-medium transition-colors">Go Back</button>
         </div>
       </div>
