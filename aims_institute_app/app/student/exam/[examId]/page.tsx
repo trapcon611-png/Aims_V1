@@ -139,7 +139,7 @@ const LatexRenderer = React.memo(({ content }: { content: string }) => {
   }, [content]);
 
   if (!content) return null;
-  return <div ref={containerRef} dangerouslySetInnerHTML={{__html: content}} className="latex-content text-base leading-relaxed"/>;
+  return <div ref={containerRef} dangerouslySetInnerHTML={{__html: content}} className="latex-content text-sm md:text-base leading-relaxed"/>;
 });
 LatexRenderer.displayName = 'LatexRenderer';
 
@@ -148,8 +148,9 @@ const ContentRenderer = ({ content }: { content: string }) => {
     if (!content) return null;
     if (isImageUrl(content)) {
         return (
-            <div className="w-full flex justify-center my-2">
-                 <img src={content} alt="Content" className="max-w-full max-h-[30vh] object-contain rounded-md border border-slate-100" />
+            <div className="w-full flex justify-center my-1">
+                 {/* Specific sizing for option images: ~7-8cm width (approx 280-300px), ~3-4cm height (approx 120-150px) */}
+                 <img src={content} alt="Option" className="max-w-[300px] max-h-[150px] w-auto h-auto object-contain rounded-sm border border-slate-100" />
             </div>
         );
     }
@@ -479,6 +480,7 @@ export default function ExamPage() {
 
   const question = questions[currentQIndex];
   const qType = getQuestionType(question);
+  // Check if the FIRST option ('a') looks like an image URL. If so, treat all options as images in a unified view.
   const isOptionImg = isImageUrl(question.options?.a || '');
 
   const optionKeys = Object.keys(question.options || {}).sort();
@@ -509,9 +511,9 @@ export default function ExamPage() {
          <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col h-full overflow-hidden">
              
              {/* Question Header */}
-             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 min-h-[60px]">
+             <div className="px-6 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 min-h-[50px]">
                  <div className="flex items-center gap-3 flex-wrap">
-                     <span className="text-xl font-black text-slate-400">Q.{currentQIndex + 1}</span>
+                     <span className="text-lg font-black text-slate-400">Q.{currentQIndex + 1}</span>
                      <span className="px-2.5 py-1 bg-blue-100 text-blue-700 text-[10px] font-bold rounded uppercase tracking-wide">{question.subject || 'General'}</span>
                      {qType === 'INTEGER' && <span className="px-2.5 py-1 text-[10px] font-bold rounded uppercase bg-purple-100 text-purple-700 tracking-wide">INTEGER TYPE</span>}
                      {qType === 'MULTIPLE' && <span className="px-2.5 py-1 text-[10px] font-bold rounded uppercase bg-amber-100 text-amber-700 tracking-wide">MULTI CORRECT</span>}
@@ -523,25 +525,25 @@ export default function ExamPage() {
              </div>
 
              {/* Question Body */}
-             <div className="p-6 md:p-8 flex-1 overflow-y-auto custom-scrollbar">
-                 <div className="text-lg md:text-xl text-slate-800 font-medium leading-relaxed mb-6">
+             <div className="p-6 flex-1 overflow-y-auto custom-scrollbar">
+                 <div className="text-base md:text-lg text-slate-800 font-medium leading-relaxed mb-4">
                      <LatexRenderer content={question.questionText} />
                  </div>
                  {question.questionImage && (
-                     <div className="w-full flex justify-center my-6">
-                         <img src={question.questionImage} alt="Question Diagram" className="max-w-full max-h-[50vh] h-auto object-contain rounded-lg border border-slate-200 shadow-sm"/>
+                     <div className="w-full flex justify-center my-4">
+                         <img src={question.questionImage} alt="Question Diagram" className="max-w-full max-h-[40vh] h-auto object-contain rounded-lg border border-slate-200 shadow-sm"/>
                      </div>
                  )}
              </div>
 
              {/* Options / Input Area */}
-             <div className="p-4 md:p-6 bg-slate-50 border-t border-slate-200">
+             <div className="p-4 bg-slate-50 border-t border-slate-200">
                  {qType === 'INTEGER' ? (
-                     <div className="flex flex-col items-center justify-center py-8">
-                         <label className="text-xs font-bold text-slate-500 mb-3 uppercase tracking-widest">Enter Numerical Answer</label>
+                     <div className="flex flex-col items-center justify-center py-4">
+                         <label className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-widest">Enter Numerical Answer</label>
                          <input 
                             type="number" 
-                            className="text-4xl font-mono font-bold text-center w-48 p-4 border-2 border-blue-200 rounded-2xl focus:border-blue-600 focus:ring-4 focus:ring-blue-100 outline-none transition-all" 
+                            className="text-2xl font-mono font-bold text-center w-32 p-2 border-2 border-blue-200 rounded-xl focus:border-blue-600 focus:ring-4 focus:ring-blue-100 outline-none transition-all" 
                             placeholder="-" 
                             value={answers[question.id] || ''} 
                             onChange={(e) => handleIntegerInput(e.target.value)}
@@ -549,11 +551,17 @@ export default function ExamPage() {
                         />
                      </div>
                  ) : isOptionImg ? (
-                     <div className="space-y-6">
-                         <div className="w-full flex justify-center mb-6">
-                             <img src={question.options.a} alt="Options" className="max-w-full max-h-[40vh] h-auto object-contain rounded-lg border border-slate-200 bg-white" />
+                     <div className="flex flex-col items-center">
+                         {/* Option Image: Constrained to ~300-400px width and ~150-200px height per request */}
+                         <div className="mb-4 bg-white p-2 rounded border border-slate-200 shadow-sm">
+                             <img 
+                                src={question.options.a} 
+                                alt="Options" 
+                                className="max-w-[400px] w-full max-h-[200px] h-auto object-contain" 
+                             />
                          </div>
-                         <div className="grid grid-cols-4 gap-4 max-w-2xl mx-auto">
+                         {/* Small Option Tabs */}
+                         <div className="flex gap-3 justify-center">
                              {displayOptionKeys.map(key => {
                                  const isSelected = qType === 'MULTIPLE' 
                                     ? answers[question.id]?.split(',').includes(key)
@@ -563,7 +571,7 @@ export default function ExamPage() {
                                     <button 
                                         key={key} 
                                         onClick={() => handleOptionSelect(key, qType)} 
-                                        className={`py-4 rounded-xl font-black text-xl border-2 transition-all shadow-sm ${isSelected ? 'bg-blue-600 border-blue-600 text-white shadow-blue-200' : 'bg-white border-slate-200 text-slate-400 hover:border-blue-300 hover:text-blue-500'}`}
+                                        className={`w-10 h-10 rounded-full font-bold text-sm border-2 transition-all flex items-center justify-center shadow-sm ${isSelected ? 'bg-blue-600 border-blue-600 text-white shadow-blue-200 scale-110' : 'bg-white border-slate-300 text-slate-500 hover:border-blue-400 hover:text-blue-600'}`}
                                     >
                                         {key.toUpperCase()}
                                     </button>
@@ -572,7 +580,7 @@ export default function ExamPage() {
                          </div>
                      </div>
                  ) : (
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {displayOptionKeys.map((key) => {
                             const isSelected = qType === 'MULTIPLE' 
                                 ? answers[question.id]?.split(',').includes(key)
@@ -582,15 +590,15 @@ export default function ExamPage() {
                                 <div 
                                     key={key} 
                                     onClick={() => handleOptionSelect(key, qType)} 
-                                    className={`cursor-pointer p-4 rounded-xl border-2 transition-all duration-200 flex items-center gap-4 relative group ${isSelected ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100' : 'bg-white border-slate-200 text-slate-700 hover:border-blue-300 hover:shadow-md'}`}
+                                    className={`cursor-pointer px-4 py-2 rounded-lg border transition-all duration-200 flex items-center gap-3 relative group ${isSelected ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-100' : 'bg-white border-slate-200 text-slate-700 hover:border-blue-300 hover:shadow-sm'}`}
                                 >
-                                    <span className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 border-2 transition-colors ${isSelected ? 'bg-white text-blue-600 border-white' : 'bg-slate-50 text-slate-400 border-slate-200 group-hover:border-blue-200'}`}>
+                                    <span className={`w-8 h-8 rounded-md flex items-center justify-center font-bold text-xs shrink-0 border transition-colors ${isSelected ? 'bg-white text-blue-600 border-white' : 'bg-slate-50 text-slate-400 border-slate-200 group-hover:border-blue-200'}`}>
                                         {key.toUpperCase()}
                                     </span>
                                     <div className={`text-sm font-medium flex-1 ${isSelected ? 'text-white' : 'text-slate-700'}`}>
                                         <ContentRenderer content={(question.options as any)[key]} />
                                     </div>
-                                    {isSelected && <div className="absolute top-4 right-4"><CheckCircle size={20} className="text-white fill-white stroke-blue-600"/></div>}
+                                    {isSelected && <div className="absolute top-2 right-2"><CheckCircle size={16} className="text-white fill-white stroke-blue-600"/></div>}
                                 </div>
                             );
                         })}
@@ -599,33 +607,33 @@ export default function ExamPage() {
              </div>
 
              {/* Footer Navigation */}
-             <div className="p-4 border-t border-slate-200 bg-white flex justify-between items-center gap-4">
-                 <button onClick={() => setCurrentQIndex(prev => Math.max(0, prev - 1))} disabled={currentQIndex === 0} className="px-6 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2 transition"><ChevronLeft size={18}/> Prev</button>
+             <div className="p-3 border-t border-slate-200 bg-white flex justify-between items-center gap-3">
+                 <button onClick={() => setCurrentQIndex(prev => Math.max(0, prev - 1))} disabled={currentQIndex === 0} className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg font-bold hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2 transition text-sm"><ChevronLeft size={16}/> Prev</button>
                  
                  <div className="flex gap-2">
-                    <button onClick={handleMarkReview} className={`px-4 py-3 rounded-xl font-bold transition flex items-center gap-2 ${markedForReview[question.id] ? 'bg-orange-100 text-orange-700 border border-orange-200' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                        <Flag size={18} className={markedForReview[question.id] ? 'fill-current' : ''}/> <span className="hidden sm:inline">{markedForReview[question.id] ? 'Marked' : 'Review'}</span>
+                    <button onClick={handleMarkReview} className={`px-3 py-2 rounded-lg font-bold transition flex items-center gap-2 text-sm ${markedForReview[question.id] ? 'bg-orange-100 text-orange-700 border border-orange-200' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                        <Flag size={16} className={markedForReview[question.id] ? 'fill-current' : ''}/> <span className="hidden sm:inline">{markedForReview[question.id] ? 'Marked' : 'Review'}</span>
                     </button>
-                    <button onClick={clearResponse} className="px-4 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold hover:text-red-600 hover:border-red-200 transition">Clear</button>
+                    <button onClick={clearResponse} className="px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg font-bold hover:text-red-600 hover:border-red-200 transition text-sm">Clear</button>
                  </div>
 
                  {currentQIndex === questions.length - 1 ? (
-                     <button onClick={() => handleSubmit(false)} className="px-8 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold shadow-lg shadow-green-200 flex items-center gap-2 transition transform active:scale-95">Submit <CheckCircle size={18}/></button>
+                     <button onClick={() => handleSubmit(false)} className="px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold shadow-md shadow-green-200 flex items-center gap-2 transition transform active:scale-95 text-sm">Submit <CheckCircle size={16}/></button>
                  ) : (
-                     <button onClick={() => setCurrentQIndex(prev => Math.min(questions.length - 1, prev + 1))} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-200 flex items-center gap-2 transition transform active:scale-95">Next <ChevronRight size={18}/></button>
+                     <button onClick={() => setCurrentQIndex(prev => Math.min(questions.length - 1, prev + 1))} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-md shadow-blue-200 flex items-center gap-2 transition transform active:scale-95 text-sm">Next <ChevronRight size={16}/></button>
                  )}
              </div>
          </div>
 
          {/* SIDEBAR (Question Palette) */}
          <aside className={`fixed inset-y-0 right-0 w-80 bg-white border-l border-slate-200 shadow-2xl transform transition-transform duration-300 z-40 flex flex-col ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'} md:translate-x-0 md:static md:shadow-none md:border-none md:w-72 rounded-2xl overflow-hidden`}>
-             <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 mt-16 md:mt-0">
-                 <h3 className="font-bold text-slate-800 flex items-center gap-2"><LayoutDashboard size={18}/> Question Palette</h3>
-                 <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400"><X size={20}/></button>
+             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 mt-16 md:mt-0">
+                 <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm"><LayoutDashboard size={16}/> Question Palette</h3>
+                 <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400"><X size={18}/></button>
              </div>
              
              {/* Legend */}
-             <div className="px-5 py-4 grid grid-cols-2 gap-y-3 gap-x-2 text-[10px] font-bold text-slate-500 border-b border-slate-100 bg-white">
+             <div className="px-4 py-3 grid grid-cols-2 gap-y-2 gap-x-2 text-[10px] font-bold text-slate-500 border-b border-slate-100 bg-white">
                  <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-green-500"></span> Answered</div>
                  <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-orange-400"></span> Review</div>
                  <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-slate-200 border border-slate-300"></span> Not Visited</div>
@@ -633,8 +641,8 @@ export default function ExamPage() {
              </div>
 
              {/* Grid */}
-             <div className="flex-1 overflow-y-auto p-5 custom-scrollbar bg-white">
-                 <div className="grid grid-cols-5 gap-2.5">
+             <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-white">
+                 <div className="grid grid-cols-5 gap-2">
                      {questions.map((q, idx) => { 
                          let statusClass = 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-300'; 
                          if (idx === currentQIndex) statusClass = 'ring-2 ring-blue-600 border-transparent bg-blue-50 text-blue-700 z-10'; 
@@ -645,7 +653,7 @@ export default function ExamPage() {
                              <button 
                                 key={q.id} 
                                 onClick={() => { setCurrentQIndex(idx); setIsSidebarOpen(false); }} 
-                                className={`aspect-square rounded-lg border text-xs font-medium flex items-center justify-center transition-all ${statusClass}`}
+                                className={`aspect-square rounded-md border text-xs font-medium flex items-center justify-center transition-all ${statusClass}`}
                              >
                                  {idx + 1}
                                  {markedForReview[q.id] && <div className="absolute top-0 right-0 w-2 h-2 bg-orange-500 rounded-full -mr-0.5 -mt-0.5"/>}
@@ -657,7 +665,7 @@ export default function ExamPage() {
              
              {/* Submit Button Sidebar */}
              <div className="p-4 border-t border-slate-100 bg-slate-50">
-                 <button onClick={() => handleSubmit(false)} className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition shadow-lg shadow-slate-300 flex items-center justify-center gap-2">
+                 <button onClick={() => handleSubmit(false)} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-bold hover:bg-slate-800 transition shadow-lg shadow-slate-300 flex items-center justify-center gap-2 text-sm">
                      Submit Test
                  </button>
              </div>
