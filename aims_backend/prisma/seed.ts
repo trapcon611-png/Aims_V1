@@ -36,11 +36,12 @@ async function main() {
 
   console.log('🗑️  All previous data deleted.');
 
-  // --- 2. RE-CREATE DIRECTOR ---
-  
-  console.log('🌱 Seeding Director Account...');
+  // --- 2. HASH PASSWORDS ---
+  const commonPassword = await bcrypt.hash('password123', 10);
   const adminPassword = await bcrypt.hash('admin123', 10);
 
+  // --- 3. RE-CREATE DIRECTOR ---
+  console.log('🌱 Seeding Director Account...');
   await prisma.user.create({
     data: {
       username: 'director',
@@ -59,9 +60,98 @@ async function main() {
     },
   });
 
-  console.log('✅ SYSTEM RESET COMPLETE');
-  console.log('👉 Username: director');
-  console.log('👉 Password: admin123');
+  // --- 4. CREATE ACADEMIC ADMIN (TEACHER) ---
+  console.log('🌱 Seeding Academic Admin...');
+  await prisma.user.create({
+    data: {
+      username: 'teacher',
+      password: commonPassword,
+      role: Role.TEACHER,
+      isActive: true,
+      teacherProfile: {
+        create: {
+          fullName: 'Rahul Sir (Physics)',
+          email: 'rahul@aims.edu',
+          mobile: '9876543210',
+          qualification: 'M.Sc Physics',
+          subject: 'PHYSICS'
+        }
+      }
+    }
+  });
+
+  // --- 5. CREATE BATCH ---
+  console.log('🌱 Seeding Batch...');
+  const batch = await prisma.batch.create({
+    data: {
+      name: 'JEE Droppers 2026',
+      startYear: '2025',
+      strength: 60,
+      fee: 150000
+    }
+  });
+
+  // --- 6. CREATE PARENT ---
+  console.log('🌱 Seeding Parent...');
+  const parentUser = await prisma.user.create({
+    data: {
+      username: 'parent01',
+      password: commonPassword,
+      visiblePassword: 'password123',
+      role: Role.PARENT,
+      isActive: true,
+      parentProfile: {
+        create: {
+          mobile: '9000012345',
+          isMobileVisible: true
+        }
+      }
+    },
+    include: { // <--- Added this to return the profile
+      parentProfile: true
+    }
+  });
+
+  if (!parentUser.parentProfile) {
+      throw new Error("Failed to create parent profile");
+  }
+
+  // --- 7. CREATE STUDENT ---
+  console.log('🌱 Seeding Student...');
+  await prisma.user.create({
+    data: {
+      username: 'student01',
+      password: commonPassword,
+      visiblePassword: 'password123',
+      role: Role.STUDENT,
+      isActive: true,
+      studentProfile: {
+        create: {
+          fullName: 'Arjun Sharma',
+          mobile: '7000012345',
+          address: '123, Gandhi Nagar, Mumbai',
+          batchId: batch.id,
+          parentId: parentUser.parentProfile.id, 
+          // Fee Details
+          feeAgreed: 150000,
+          installments: 3,
+          installmentSchedule: [
+            { id: 1, amount: 50000, dueDate: new Date().toISOString().split('T')[0] },
+            { id: 2, amount: 50000, dueDate: new Date(Date.now() + 86400000 * 30).toISOString().split('T')[0] }, // +30 days
+            { id: 3, amount: 50000, dueDate: new Date(Date.now() + 86400000 * 60).toISOString().split('T')[0] }  // +60 days
+          ]
+        }
+      }
+    }
+  });
+
+  console.log('✅ SYSTEM RESET & POPULATION COMPLETE');
+  console.log('------------------------------------------------');
+  console.log('👉 Director: director / admin123');
+  console.log('👉 Teacher:  teacher / password123');
+  console.log('👉 Student:  student01 / password123');
+  console.log('👉 Parent:   parent01 / password123');
+  console.log('------------------------------------------------');
 }
 
 main()
