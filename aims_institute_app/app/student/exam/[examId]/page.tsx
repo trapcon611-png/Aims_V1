@@ -57,18 +57,14 @@ interface ExamData {
 
 /**
  * Determines the question interaction type based on Exam Type rules and Question attributes.
- * Rules:
- * 1. Integer/Numerical questions always remain Integer type.
- * 2. JEE Advanced -> All MCQs are treated as Multiple Correct (Checkboxes).
- * 3. JEE Mains / NEET -> All MCQs are treated as Single Correct (Radio buttons).
  */
 const getQuestionType = (q: Question, examTypeRaw: string = '') => {
     const examType = examTypeRaw.toUpperCase();
 
     // 1. Check for Integer Type (Priority)
-    // Checks DB 'type' field, 'tags', or if options are empty
+    // Checks DB 'type' field, 'tags', or if options are empty/null/undefined
     const isInteger = 
-        (!q.options || Object.keys(q.options).length === 0) ||
+        (!q.options || (typeof q.options === 'object' && Object.keys(q.options).length === 0)) ||
         (q.type && (q.type.toLowerCase().includes('integer') || q.type.toLowerCase().includes('numerical'))) ||
         (q.tags && q.tags.some(t => t.toLowerCase().includes('integer') || t.toLowerCase().includes('numerical')));
 
@@ -177,14 +173,13 @@ const ContentRenderer = ({ content, isOption = false }: { content: string, isOpt
     if (isImageUrl(content)) {
         return (
             <div className={`w-full flex justify-center my-1 ${isOption ? 'bg-white p-1 rounded' : ''}`}>
-                 {/* Specific sizing for option images: ~7-8cm width (approx 300px), ~3-4cm height (approx 150px) */}
                  <img 
                     src={content} 
                     alt="Content" 
                     className={
                         isOption 
-                        ? "max-w-[300px] max-h-[150px] w-auto h-auto object-contain" // Strict size for options
-                        : "max-w-[90%] max-h-[40vh] h-auto object-contain rounded-md border border-slate-100" // Zoomed out for questions
+                        ? "max-w-[300px] max-h-[150px] w-auto h-auto object-contain" 
+                        : "max-w-[90%] max-h-[40vh] h-auto object-contain rounded-md border border-slate-100"
                     } 
                  />
             </div>
@@ -426,9 +421,6 @@ export default function ExamPage() {
         return;
     }
 
-    // Format answers: Multi-select might need array or string depending on backend expectation.
-    // Based on 'add-student.ts' or 'exam' logic, standardizing on what backend expects.
-    // Here we send the raw value (string or comma-sep string). Backend should parse.
     const payload = Object.entries(answers).map(([qId, opt]) => ({ 
         questionId: qId, 
         selectedOption: opt, 
@@ -597,16 +589,19 @@ export default function ExamPage() {
 
              {/* Options / Input Area */}
              <div className="p-4 bg-slate-50 border-t border-slate-200">
+                 {/* Explicitly Check for INTEGER Type First */}
                  {qType === 'INTEGER' ? (
                      <div className="flex flex-col items-center justify-center py-6">
                          <label className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-widest">Numerical Answer</label>
                          <input 
                             type="text" 
-                            className="text-2xl font-mono font-bold text-center w-40 p-3 border-2 border-blue-200 rounded-xl focus:border-blue-600 focus:ring-4 focus:ring-blue-100 outline-none transition-all" 
+                            className="text-2xl font-mono font-bold text-center w-40 p-3 border-2 border-blue-200 rounded-xl focus:border-blue-600 focus:ring-4 focus:ring-blue-100 outline-none transition-all text-slate-900 bg-white shadow-sm" 
                             placeholder="-" 
                             value={answers[question.id] || ''} 
                             onChange={(e) => handleIntegerInput(e.target.value)}
+                            autoFocus
                         />
+                         <p className="text-[10px] text-slate-400 mt-2 font-medium">Enter integers or decimal values.</p>
                      </div>
                  ) : isOptionImg ? (
                      <div className="flex flex-col items-center">

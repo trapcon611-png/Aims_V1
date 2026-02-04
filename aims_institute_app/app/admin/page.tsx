@@ -33,7 +33,8 @@ import {
   Settings,
   Image as ImageIcon,
   Hash,
-  Printer
+  Printer,
+  Eye
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -474,6 +475,7 @@ const QuestionSelectorModal = ({
     const [difficulty, setDifficulty] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [page, setPage] = useState(1);
+    const [viewMode, setViewMode] = useState<'SELECT' | 'CONFIRM'>('SELECT'); // Add view mode state
     
     // Pattern Tracking
     const typeMatch = exam.title.match(/^\[(.*?)\]/);
@@ -585,138 +587,192 @@ const QuestionSelectorModal = ({
                 </div>
 
                 <div className="flex-1 flex overflow-hidden">
-                    {/* LEFT: REPOSITORY */}
-                    <div className="flex-1 flex flex-col border-r border-slate-200 bg-slate-50/50">
-                        <div className="p-4 border-b border-slate-200 bg-white flex gap-2">
-                             <div className="relative flex-1">
-                                <Search size={16} className="absolute left-3 top-3 text-slate-400"/>
-                                <input className="w-full pl-10 p-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-amber-500" placeholder="Search repository..." value={search} onChange={e => setSearch(e.target.value)}/>
-                             </div>
-                             <select className="p-2 border rounded-lg text-sm bg-white outline-none" value={subject} onChange={e => setSubject(e.target.value)}>
-                                <option value="">All Subjects</option>
-                                <option value="PHYSICS">Physics</option>
-                                <option value="CHEMISTRY">Chemistry</option>
-                                <option value="MATHS">Maths</option>
-                                <option value="BIOLOGY">Biology</option>
-                             </select>
-                             <select className="p-2 border rounded-lg text-sm bg-white outline-none" value={difficulty} onChange={e => setDifficulty(e.target.value)}>
-                                <option value="">Any Difficulty</option>
-                                <option value="EASY">Easy</option>
-                                <option value="MEDIUM">Medium</option>
-                                <option value="HARD">Hard</option>
-                             </select>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-                            {paginatedQuestions.map(q => {
-                                const isSelected = selectedIds.includes(q.id);
-                                const qType = getQuestionType(q);
-                                const isOptionImg = isImageUrl(q.options?.a || '');
-
-                                return (
-                                    <div key={q.id} onClick={() => toggleSelection(q.id)} className={`p-4 rounded-xl border transition cursor-pointer group ${isSelected ? 'bg-amber-50 border-amber-500 shadow-sm' : 'bg-white border-slate-200 hover:border-amber-300'}`}>
-                                            <div className="flex justify-between items-start gap-4">
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${qType === 'INTEGER' ? 'bg-purple-100 text-purple-700' : qType === 'MULTIPLE' ? 'bg-orange-100 text-orange-700' : 'bg-blue-50 text-blue-700'}`}>
-                                                            {qType === 'INTEGER' ? 'Integer' : qType === 'MULTIPLE' ? 'Multi' : 'Single'}
-                                                        </span>
-                                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${q.difficulty === 'HARD' ? 'bg-red-50 text-red-600' : q.difficulty === 'MEDIUM' ? 'bg-yellow-50 text-yellow-600' : 'bg-green-50 text-green-600'}`}>{q.difficulty}</span>
-                                                    </div>
-                                                    <div className="text-sm font-medium text-slate-800 line-clamp-3 mb-2"><LatexRenderer content={q.questionText} /></div>
-                                                    {/* RICH CONTENT RENDERER - MOVED BELOW TEXT */}
-                                                    {q.questionImage && (
-                                                        <div className="mb-2 w-full max-w-md h-32 relative border rounded bg-slate-50">
-                                                            <img src={q.questionImage} alt="Question Image" className="w-full h-full object-contain" />
-                                                        </div>
-                                                    )}
-                                                    
-                                                    {/* PREVIEW OPTIONS */}
-                                                    {qType === 'INTEGER' ? (
-                                                        <div className="mt-2 text-xs font-bold text-slate-600 border px-3 py-1 rounded bg-slate-50 inline-block">
-                                                            Answer: {getIntegerAnswer(q.correctOption)}
-                                                        </div>
-                                                    ) : isOptionImg ? (
-                                                        <div className="mt-2 text-xs text-slate-500 italic">Image Options available</div>
-                                                    ) : (
-                                                         <div className="mt-2 grid grid-cols-2 gap-2">
-                                                            {['a','b','c','d'].map(key => (
-                                                                <div key={key} className="text-xs text-slate-500 truncate border px-2 py-1 rounded">
-                                                                    <span className="uppercase font-bold mr-1">{key}.</span> 
-                                                                    <ContentRenderer content={String(q.options[key] || '')} />
-                                                                </div>
-                                                            ))}
-                                                            {Object.keys(q.options).length > 2 && <div className="text-xs text-slate-400 pl-1">...</div>}
-                                                         </div>
-                                                    )}
-                                                </div>
-                                                <div className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-amber-500 border-amber-500 text-white' : 'border-slate-300'}`}>
-                                                    {isSelected && <CheckCircle size={14} className="fill-current"/>}
-                                                </div>
-                                            </div>
-                                            <div className="mt-2 flex items-center gap-2 text-xs border-t pt-2 border-slate-100">
-                                                <span className="font-bold text-slate-500">{q.subject}</span>
-                                                <span className="text-slate-300">•</span>
-                                                <span className="font-mono text-slate-400">ID: {q.id.slice(0,6)}</span>
-                                            </div>
+                    {viewMode === 'SELECT' ? (
+                        <>
+                            {/* LEFT: REPOSITORY */}
+                            <div className="flex-1 flex flex-col border-r border-slate-200 bg-slate-50/50">
+                                <div className="p-4 border-b border-slate-200 bg-white flex gap-2">
+                                    <div className="relative flex-1">
+                                        <Search size={16} className="absolute left-3 top-3 text-slate-400"/>
+                                        <input className="w-full pl-10 p-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-amber-500" placeholder="Search repository..." value={search} onChange={e => setSearch(e.target.value)}/>
                                     </div>
-                                );
-                            })}
-                            {paginatedQuestions.length === 0 && (
-                                <div className="p-8 text-center text-slate-400">No questions found matching criteria.</div>
-                            )}
-                        </div>
-                        
-                        {/* PAGINATION CONTROLS */}
-                        {totalPages > 1 && (
-                            <div className="p-3 border-t border-slate-200 bg-white flex justify-between items-center text-xs">
-                                <span className="text-slate-500">Page {page} of {totalPages}</span>
-                                <div className="flex gap-2">
-                                    <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1} className="p-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"><ChevronLeft size={16}/></button>
-                                    <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages} className="p-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"><ChevronRight size={16}/></button>
+                                    <select className="p-2 border rounded-lg text-sm bg-white outline-none" value={subject} onChange={e => setSubject(e.target.value)}>
+                                        <option value="">All Subjects</option>
+                                        <option value="PHYSICS">Physics</option>
+                                        <option value="CHEMISTRY">Chemistry</option>
+                                        <option value="MATHS">Maths</option>
+                                        <option value="BIOLOGY">Biology</option>
+                                    </select>
+                                    <select className="p-2 border rounded-lg text-sm bg-white outline-none" value={difficulty} onChange={e => setDifficulty(e.target.value)}>
+                                        <option value="">Any Difficulty</option>
+                                        <option value="EASY">Easy</option>
+                                        <option value="MEDIUM">Medium</option>
+                                        <option value="HARD">Hard</option>
+                                    </select>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                                    {paginatedQuestions.map(q => {
+                                        const isSelected = selectedIds.includes(q.id);
+                                        const qType = getQuestionType(q);
+                                        const isOptionImg = isImageUrl(q.options?.a || '');
+
+                                        return (
+                                            <div key={q.id} onClick={() => toggleSelection(q.id)} className={`p-4 rounded-xl border transition cursor-pointer group ${isSelected ? 'bg-amber-50 border-amber-500 shadow-sm' : 'bg-white border-slate-200 hover:border-amber-300'}`}>
+                                                    <div className="flex justify-between items-start gap-4">
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center gap-2 mb-2">
+                                                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${qType === 'INTEGER' ? 'bg-purple-100 text-purple-700' : qType === 'MULTIPLE' ? 'bg-orange-100 text-orange-700' : 'bg-blue-50 text-blue-700'}`}>
+                                                                    {qType === 'INTEGER' ? 'Integer' : qType === 'MULTIPLE' ? 'Multi' : 'Single'}
+                                                                </span>
+                                                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${q.difficulty === 'HARD' ? 'bg-red-50 text-red-600' : q.difficulty === 'MEDIUM' ? 'bg-yellow-50 text-yellow-600' : 'bg-green-50 text-green-600'}`}>{q.difficulty}</span>
+                                                            </div>
+                                                            <div className="text-sm font-medium text-slate-800 line-clamp-3 mb-2"><LatexRenderer content={q.questionText} /></div>
+                                                            {/* RICH CONTENT RENDERER - MOVED BELOW TEXT */}
+                                                            {q.questionImage && (
+                                                                <div className="mb-2 w-full max-w-md h-32 relative border rounded bg-slate-50">
+                                                                    <img src={q.questionImage} alt="Question Image" className="w-full h-full object-contain" />
+                                                                </div>
+                                                            )}
+                                                            
+                                                            {/* PREVIEW OPTIONS */}
+                                                            {qType === 'INTEGER' ? (
+                                                                <div className="mt-2 text-xs font-bold text-slate-600 border px-3 py-1 rounded bg-slate-50 inline-block">
+                                                                    Answer: {getIntegerAnswer(q.correctOption)}
+                                                                </div>
+                                                            ) : isOptionImg ? (
+                                                                <div className="mt-2 text-xs text-slate-500 italic">Image Options available</div>
+                                                            ) : (
+                                                                <div className="mt-2 grid grid-cols-2 gap-2">
+                                                                    {['a','b','c','d'].map(key => (
+                                                                        <div key={key} className="text-xs text-slate-500 truncate border px-2 py-1 rounded">
+                                                                            <span className="uppercase font-bold mr-1">{key}.</span> 
+                                                                            <ContentRenderer content={String(q.options[key] || '')} />
+                                                                        </div>
+                                                                    ))}
+                                                                    {Object.keys(q.options).length > 2 && <div className="text-xs text-slate-400 pl-1">...</div>}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-amber-500 border-amber-500 text-white' : 'border-slate-300'}`}>
+                                                            {isSelected && <CheckCircle size={14} className="fill-current"/>}
+                                                        </div>
+                                                    </div>
+                                                    <div className="mt-2 flex items-center gap-2 text-xs border-t pt-2 border-slate-100">
+                                                        <span className="font-bold text-slate-500">{q.subject}</span>
+                                                        <span className="text-slate-300">•</span>
+                                                        <span className="font-mono text-slate-400">ID: {q.id.slice(0,6)}</span>
+                                                    </div>
+                                            </div>
+                                        );
+                                    })}
+                                    {paginatedQuestions.length === 0 && (
+                                        <div className="p-8 text-center text-slate-400">No questions found matching criteria.</div>
+                                    )}
+                                </div>
+                                
+                                {/* PAGINATION CONTROLS */}
+                                {totalPages > 1 && (
+                                    <div className="p-3 border-t border-slate-200 bg-white flex justify-between items-center text-xs">
+                                        <span className="text-slate-500">Page {page} of {totalPages}</span>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1} className="p-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"><ChevronLeft size={16}/></button>
+                                            <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages} className="p-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"><ChevronRight size={16}/></button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* RIGHT: SELECTED LIST */}
+                            <div className="w-1/3 flex flex-col bg-white">
+                                <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                                    <h3 className="font-bold text-slate-700">Selected Questions</h3>
+                                    <button onClick={() => setSelectedIds([])} className="text-xs text-red-500 hover:underline">Clear All</button>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                                    {selectedQuestions.length === 0 ? (
+                                        <div className="h-full flex flex-col items-center justify-center text-slate-400 text-sm">
+                                            <FileQuestion size={48} className="mb-2 opacity-20"/>
+                                            <p>No questions selected.</p>
+                                        </div>
+                                    ) : (
+                                        selectedQuestions.map((q, idx) => (
+                                            <div key={q.id} className="p-3 rounded-lg border border-amber-100 bg-amber-50/30 flex justify-between items-start gap-2">
+                                                <div className="flex-1 min-w-0">
+                                                    <span className="text-[10px] font-bold text-amber-700 mr-2 block">Q{idx+1}</span>
+                                                    <div className="text-xs text-slate-700 line-clamp-2 mb-1"><LatexRenderer content={q.questionText}/></div>
+                                                    {q.questionImage && (
+                                                        <div className="w-full h-16 relative border rounded bg-white">
+                                                            <img src={q.questionImage} alt="Preview" className="w-full h-full object-contain" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <button onClick={() => toggleSelection(q.id)} className="text-slate-400 hover:text-red-500"><X size={14}/></button>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                                <div className="p-4 border-t border-slate-200 bg-slate-50">
+                                    <button 
+                                        onClick={() => setViewMode('CONFIRM')}
+                                        disabled={selectedIds.length === 0}
+                                        className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition shadow-lg flex items-center justify-center gap-2"
+                                    >
+                                        <Eye size={18}/> Review & Finalize
+                                    </button>
                                 </div>
                             </div>
-                        )}
-                    </div>
-
-                    {/* RIGHT: SELECTED LIST */}
-                    <div className="w-1/3 flex flex-col bg-white">
-                        <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-                            <h3 className="font-bold text-slate-700">Selected Questions</h3>
-                            <button onClick={() => setSelectedIds([])} className="text-xs text-red-500 hover:underline">Clear All</button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-                            {selectedQuestions.length === 0 ? (
-                                <div className="h-full flex flex-col items-center justify-center text-slate-400 text-sm">
-                                    <FileQuestion size={48} className="mb-2 opacity-20"/>
-                                    <p>No questions selected.</p>
-                                </div>
-                            ) : (
-                                selectedQuestions.map((q, idx) => (
-                                    <div key={q.id} className="p-3 rounded-lg border border-amber-100 bg-amber-50/30 flex justify-between items-start gap-2">
-                                        <div className="flex-1 min-w-0">
-                                            <span className="text-[10px] font-bold text-amber-700 mr-2 block">Q{idx+1}</span>
-                                            <div className="text-xs text-slate-700 line-clamp-2 mb-1"><LatexRenderer content={q.questionText}/></div>
+                        </>
+                    ) : (
+                        <div className="flex-1 flex flex-col bg-white">
+                            {/* CONFIRMATION VIEW */}
+                            <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                                <h3 className="font-bold text-slate-800 text-lg">Confirm Question Paper</h3>
+                                <button onClick={() => setViewMode('SELECT')} className="px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-600 hover:bg-white">Back to Selection</button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+                                <div className="max-w-4xl mx-auto space-y-6">
+                                    {selectedQuestions.map((q, idx) => (
+                                        <div key={q.id} className="p-6 border border-slate-200 rounded-xl bg-white shadow-sm">
+                                            <div className="flex justify-between items-start mb-4">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-700 text-sm">{idx + 1}</span>
+                                                    <span className="text-xs font-bold bg-amber-50 text-amber-700 px-2 py-0.5 rounded uppercase">{q.subject}</span>
+                                                </div>
+                                                <span className="text-xs font-bold text-slate-400">Marks: {q.marks}</span>
+                                            </div>
+                                            <div className="mb-4 text-slate-800"><LatexRenderer content={q.questionText} /></div>
                                             {q.questionImage && (
-                                                <div className="w-full h-16 relative border rounded bg-white">
-                                                     <img src={q.questionImage} alt="Preview" className="w-full h-full object-contain" />
+                                                <div className="mb-4 w-full max-w-lg h-48 relative border rounded bg-slate-50">
+                                                    <img src={q.questionImage} alt="Question" className="w-full h-full object-contain" />
                                                 </div>
                                             )}
+                                            
+                                            {/* Options Display for Review */}
+                                             <div className="grid grid-cols-2 gap-4">
+                                                {Object.entries(q.options || {}).map(([key, val]) => {
+                                                    if (!val) return null;
+                                                    return (
+                                                        <div key={key} className="p-2 border rounded bg-slate-50 text-sm flex items-start gap-2">
+                                                            <span className="font-bold uppercase text-slate-500">{key}.</span>
+                                                            <ContentRenderer content={String(val)} />
+                                                        </div>
+                                                    )
+                                                })}
+                                             </div>
                                         </div>
-                                        <button onClick={() => toggleSelection(q.id)} className="text-slate-400 hover:text-red-500"><X size={14}/></button>
-                                    </div>
-                                ))
-                            )}
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="p-6 border-t border-slate-200 bg-slate-50 flex justify-end">
+                                <button 
+                                    onClick={() => onFinalize(selectedIds)}
+                                    className="px-8 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg flex items-center gap-2 transition"
+                                >
+                                    <Save size={18}/> Publish Final Paper
+                                </button>
+                            </div>
                         </div>
-                        <div className="p-4 border-t border-slate-200 bg-slate-50">
-                             <button 
-                                onClick={() => onFinalize(selectedIds)}
-                                disabled={selectedIds.length === 0}
-                                className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition shadow-lg flex items-center justify-center gap-2"
-                             >
-                                <Save size={18}/> Finalize & Publish Paper
-                             </button>
-                        </div>
-                    </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -861,7 +917,7 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
       }
   };
 
-  // --- ADDED: PDF Download Functionality for NEET ---
+  // --- ADDED: PDF Download Functionality for ALL exams ---
   const handleDownloadPDF = async (e: React.MouseEvent, exam: Exam) => {
       e.stopPropagation();
       try {
@@ -1340,16 +1396,14 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
                                     <span className="text-[10px] text-slate-400 font-mono">{new Date(exam.scheduledAt).toLocaleDateString()}</span>
                                     
                                     <div className="flex items-center gap-2">
-                                        {/* Added PDF Download Button for NEET */}
-                                        {exam.examType && exam.examType.includes('NEET') && (
-                                            <button 
-                                                className="p-1.5 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded transition" 
-                                                onClick={(e) => handleDownloadPDF(e, exam)}
-                                                title="Download PDF"
-                                            >
-                                                <Printer size={12}/>
-                                            </button>
-                                        )}
+                                        {/* Updated: PDF Download Button for ALL Exams */}
+                                        <button 
+                                            className="p-1.5 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded transition" 
+                                            onClick={(e) => handleDownloadPDF(e, exam)}
+                                            title="Download PDF"
+                                        >
+                                            <Printer size={12}/>
+                                        </button>
 
                                         <span className="text-[10px] text-blue-600 font-bold flex items-center gap-1">Manage <ChevronRight size={10}/></span>
                                         <button 
@@ -1438,7 +1492,7 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
             exam={exams.find(e => e.id === selectedExamId)!} 
             allQuestions={questions}
             onClose={() => setSelectedExamId(null)}
-            onFinalize={handleFinalizePaper} // Updated to call the new handler
+            onFinalize={handleFinalizePaper} 
         />
       )}
     </div>
