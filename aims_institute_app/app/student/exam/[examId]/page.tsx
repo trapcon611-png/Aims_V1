@@ -62,7 +62,7 @@ const getQuestionType = (q: Question, examTypeRaw: string = '') => {
     const examType = examTypeRaw.toUpperCase();
 
     // 1. Check for Integer Type (Priority)
-    // Checks DB 'type' field, 'tags', or if options are empty/null/undefined
+    // Checks DB 'type' field, 'tags', or if options are empty/null/undefined/empty object
     const isInteger = 
         (!q.options || (typeof q.options === 'object' && Object.keys(q.options).length === 0)) ||
         (q.type && (q.type.toLowerCase().includes('integer') || q.type.toLowerCase().includes('numerical'))) ||
@@ -531,7 +531,9 @@ export default function ExamPage() {
   const question = questions[currentQIndex];
   const examType = examData?.exam.examType || examData?.exam.title || '';
   const qType = getQuestionType(question, examType);
+  // Check if the FIRST option ('a') looks like an image URL. If so, treat all options as images in a unified view.
   const isOptionImg = isImageUrl(question.options?.a || '');
+
   const optionKeys = Object.keys(question.options || {}).sort();
   const displayOptionKeys = optionKeys.length > 0 ? optionKeys : ['a', 'b', 'c', 'd'];
 
