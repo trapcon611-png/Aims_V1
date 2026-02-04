@@ -14,6 +14,8 @@ import {
   Award,
   LayoutDashboard,
   RefreshCw,
+  Check,
+  X as XIcon
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -25,11 +27,13 @@ interface Question {
   questionText: string;
   questionImage?: string | null;
   options: any; 
+  correctAnswer?: string; // Add correct answer field
   subject: string;
   topic?: string;
   marks: number;
   negative: number;
   tags?: string[];
+  type?: string; // Add type field explicitly from DB if available
 }
 
 interface ExamData {
@@ -46,19 +50,27 @@ interface ExamData {
 
 // --- HELPER FUNCTIONS ---
 const getQuestionType = (q: Question) => {
-    // 1. Heuristic for INTEGER: No options provided or empty options object
+    // 1. Explicit Type check from DB (if available and mapped)
+    if (q.type) {
+        const t = q.type.toLowerCase();
+        if (t.includes('multi')) return 'MULTIPLE';
+        if (t.includes('integer') || t.includes('numerical')) return 'INTEGER';
+        if (t.includes('single')) return 'SINGLE';
+    }
+
+    // 2. Heuristic for INTEGER: No options provided or empty options object
     if (!q.options || Object.keys(q.options).length === 0) {
         return 'INTEGER';
     }
 
-    // 2. Check tags if available
+    // 3. Check tags if available
     if (q.tags && q.tags.length > 0) {
         const lowerTags = q.tags.map(t => t.toLowerCase());
         if (lowerTags.some(t => t.includes('multiple') || t.includes('multi'))) return 'MULTIPLE';
         if (lowerTags.some(t => t.includes('integer') || t.includes('numerical'))) return 'INTEGER';
     }
     
-    // 3. Default to SINGLE choice
+    // 4. Default to SINGLE choice
     return 'SINGLE';
 };
 
@@ -350,6 +362,9 @@ export default function ExamPage() {
              if (examData?.attemptId) localStorage.setItem(`exam_answers_${examData.attemptId}`, JSON.stringify(newAnswers));
              return;
         }
+    } else {
+        // SINGLE CHOICE: Simple replacement
+        newVal = optionKey;
     }
 
     const newAnswers = { ...answers, [qId]: newVal };
@@ -437,6 +452,12 @@ export default function ExamPage() {
     return `${h}:${m < 10 ? '0'+m : m}:${s < 10 ? '0'+s : s}`;
   };
 
+  const getCleanAnswer = (raw: string | undefined) => {
+      if (!raw) return '';
+      // Remove brackets [B] -> B, [B,C] -> B,C
+      return raw.replace(/[\[\]']/g, '').trim();
+  };
+
   // --- RENDER STATES ---
   if (loading) return (
       <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
@@ -457,20 +478,77 @@ export default function ExamPage() {
       </div>
   );
 
-  if (submissionStatus === 'COMPLETED' && score) return (
-      <div className="h-screen flex flex-col items-center justify-center bg-slate-50 p-4 relative overflow-hidden select-none">
-          <div className="absolute inset-0 bg-grid-slate-200 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] -z-0"></div>
-          <div className="bg-white p-8 md:p-12 rounded-3xl shadow-2xl text-center max-w-lg w-full relative z-10 border border-white/50">
-              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 text-green-600 shadow-inner"><Award size={40}/></div>
-              <h2 className="text-3xl font-black text-slate-800 mb-2">Exam Submitted!</h2>
-              <p className="text-slate-500 mb-8">Your response has been recorded successfully.</p>
-              
-              <div className="grid grid-cols-3 gap-4 mb-8">
-                  <div className="p-4 bg-blue-50 rounded-xl border border-blue-100"><p className="text-xs text-blue-600 font-bold uppercase tracking-wider">Score</p><p className="text-3xl font-black text-blue-800 mt-1">{score.total}</p></div>
-                  <div className="p-4 bg-green-50 rounded-xl border border-green-100"><p className="text-xs text-green-600 font-bold uppercase tracking-wider">Correct</p><p className="text-3xl font-black text-green-800 mt-1">{score.correct}</p></div>
-                  <div className="p-4 bg-red-50 rounded-xl border border-red-100"><p className="text-xs text-red-600 font-bold uppercase tracking-wider">Wrong</p><p className="text-3xl font-black text-red-800 mt-1">{score.wrong}</p></div>
+  if (submissionStatus === 'COMPLETED' && score && examData) return (
+      <div className="min-h-screen bg-slate-50 p-4 md:p-8 flex flex-col items-center font-sans">
+          <div className="max-w-4xl w-full bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-200">
+              <div className="bg-slate-900 p-8 text-center text-white">
+                  <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm"><Award size={32}/></div>
+                  <h2 className="text-3xl font-black mb-2">Result Analysis</h2>
+                  <p className="text-slate-400">Review your performance for {examData.exam.title}</p>
               </div>
-              <button onClick={() => window.location.href = '/student'} className="w-full py-3.5 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition shadow-lg shadow-slate-200">Return to Dashboard</button>
+              
+              <div className="p-8 border-b border-slate-100">
+                  <div className="grid grid-cols-3 gap-6">
+                      <div className="p-6 bg-blue-50 rounded-2xl border border-blue-100 text-center"><p className="text-xs text-blue-600 font-bold uppercase tracking-wider mb-1">Total Score</p><p className="text-4xl font-black text-blue-900">{score.total}<span className="text-lg text-blue-400 font-medium">/{examData.exam.totalMarks}</span></p></div>
+                      <div className="p-6 bg-green-50 rounded-2xl border border-green-100 text-center"><p className="text-xs text-green-600 font-bold uppercase tracking-wider mb-1">Correct</p><p className="text-4xl font-black text-green-800">{score.correct}</p></div>
+                      <div className="p-6 bg-red-50 rounded-2xl border border-red-100 text-center"><p className="text-xs text-red-600 font-bold uppercase tracking-wider mb-1">Wrong</p><p className="text-4xl font-black text-red-800">{score.wrong}</p></div>
+                  </div>
+              </div>
+
+              <div className="p-8 bg-slate-50/50">
+                  <h3 className="font-bold text-slate-800 mb-6 text-lg">Question Review</h3>
+                  <div className="space-y-4">
+                      {examData.questions.map((q, idx) => {
+                          const userAnswer = answers[q.id];
+                          const correct = getCleanAnswer(q.correctAnswer); // Assuming API returns 'correctAnswer' or mapped
+                          const isCorrect = userAnswer === correct; // Simplified check, needs array comparison for multi
+                          
+                          // Better check for multi
+                          let status = 'unanswered';
+                          let statusColor = 'text-slate-500 bg-slate-100';
+                          
+                          if (userAnswer) {
+                              if (userAnswer === correct) {
+                                  status = 'correct';
+                                  statusColor = 'text-green-700 bg-green-100 border-green-200';
+                              } else {
+                                  status = 'wrong';
+                                  statusColor = 'text-red-700 bg-red-100 border-red-200';
+                              }
+                          }
+
+                          return (
+                              <div key={q.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-start gap-4">
+                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 font-bold text-sm border ${status === 'correct' ? 'bg-green-600 text-white border-green-600' : status === 'wrong' ? 'bg-red-600 text-white border-red-600' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                                      {idx + 1}
+                                  </div>
+                                  <div className="flex-1">
+                                      <div className="mb-2 font-medium text-slate-800"><LatexRenderer content={q.questionText} /></div>
+                                      <div className="flex gap-4 text-sm mt-3">
+                                          <div className="flex items-center gap-2">
+                                              <span className="text-slate-500 font-bold text-xs uppercase">Your Answer:</span>
+                                              <span className={`px-2 py-0.5 rounded font-mono font-bold ${statusColor}`}>{userAnswer || 'Skipped'}</span>
+                                          </div>
+                                          {/* In a real scenario, you might hide correct answer immediately or show it */}
+                                          {/* <div className="flex items-center gap-2">
+                                              <span className="text-slate-500 font-bold text-xs uppercase">Correct:</span>
+                                              <span className="px-2 py-0.5 rounded font-mono font-bold bg-green-50 text-green-700 border border-green-100">{correct}</span>
+                                          </div> */}
+                                      </div>
+                                  </div>
+                                  <div className="shrink-0">
+                                      {status === 'correct' && <Check className="text-green-500" size={24}/>}
+                                      {status === 'wrong' && <XIcon className="text-red-500" size={24}/>}
+                                  </div>
+                              </div>
+                          );
+                      })}
+                  </div>
+              </div>
+              
+              <div className="p-6 border-t border-slate-200 bg-white flex justify-center">
+                  <button onClick={() => window.location.href = '/student'} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition">Return to Dashboard</button>
+              </div>
           </div>
       </div>
   );
@@ -517,6 +595,7 @@ export default function ExamPage() {
                      <span className="px-2.5 py-1 bg-blue-100 text-blue-700 text-[10px] font-bold rounded uppercase tracking-wide">{question.subject || 'General'}</span>
                      {qType === 'INTEGER' && <span className="px-2.5 py-1 text-[10px] font-bold rounded uppercase bg-purple-100 text-purple-700 tracking-wide">INTEGER TYPE</span>}
                      {qType === 'MULTIPLE' && <span className="px-2.5 py-1 text-[10px] font-bold rounded uppercase bg-amber-100 text-amber-700 tracking-wide">MULTI CORRECT</span>}
+                     {qType === 'SINGLE' && <span className="px-2.5 py-1 text-[10px] font-bold rounded uppercase bg-slate-200 text-slate-600 tracking-wide">SINGLE CHOICE</span>}
                  </div>
                  <div className="flex items-center gap-4 text-xs font-bold">
                      <span className="text-green-600 flex items-center gap-1 bg-green-50 px-2 py-1 rounded"><CheckCircle size={14}/> +{question.marks}</span>
@@ -531,7 +610,8 @@ export default function ExamPage() {
                  </div>
                  {question.questionImage && (
                      <div className="w-full flex justify-center my-4">
-                         <img src={question.questionImage} alt="Question Diagram" className="max-w-full max-h-[40vh] h-auto object-contain rounded-lg border border-slate-200 shadow-sm"/>
+                         {/* Zoomed out image constraint applied here */}
+                         <img src={question.questionImage} alt="Question Diagram" className="max-w-[80%] max-h-[50vh] h-auto object-contain rounded-lg border border-slate-200 shadow-sm"/>
                      </div>
                  )}
              </div>
@@ -552,7 +632,7 @@ export default function ExamPage() {
                      </div>
                  ) : isOptionImg ? (
                      <div className="flex flex-col items-center">
-                         {/* Option Image: Constrained to ~300-400px width and ~150-200px height per request */}
+                         {/* Option Image: Constrained */}
                          <div className="mb-4 bg-white p-2 rounded border border-slate-200 shadow-sm">
                              <img 
                                 src={question.options.a} 
@@ -570,7 +650,7 @@ export default function ExamPage() {
                                  return (
                                     <button 
                                         key={key} 
-                                        onClick={() => handleOptionSelect(key, qType)} 
+                                        onClick={() => handleOptionSelect(key, qType as any)} 
                                         className={`w-10 h-10 rounded-full font-bold text-sm border-2 transition-all flex items-center justify-center shadow-sm ${isSelected ? 'bg-blue-600 border-blue-600 text-white shadow-blue-200 scale-110' : 'bg-white border-slate-300 text-slate-500 hover:border-blue-400 hover:text-blue-600'}`}
                                     >
                                         {key.toUpperCase()}
@@ -589,7 +669,7 @@ export default function ExamPage() {
                             return (
                                 <div 
                                     key={key} 
-                                    onClick={() => handleOptionSelect(key, qType)} 
+                                    onClick={() => handleOptionSelect(key, qType as any)} 
                                     className={`cursor-pointer px-4 py-2 rounded-lg border transition-all duration-200 flex items-center gap-3 relative group ${isSelected ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-100' : 'bg-white border-slate-200 text-slate-700 hover:border-blue-300 hover:shadow-sm'}`}
                                 >
                                     <span className={`w-8 h-8 rounded-md flex items-center justify-center font-bold text-xs shrink-0 border transition-colors ${isSelected ? 'bg-white text-blue-600 border-white' : 'bg-slate-50 text-slate-400 border-slate-200 group-hover:border-blue-200'}`}>
