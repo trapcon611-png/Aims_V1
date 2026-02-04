@@ -15,7 +15,11 @@ import {
   LayoutDashboard,
   RefreshCw,
   Check,
-  X as XIcon
+  X as XIcon,
+  Circle,
+  CheckCircle2,
+  Square,
+  CheckSquare
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -27,13 +31,13 @@ interface Question {
   questionText: string;
   questionImage?: string | null;
   options: any; 
-  correctAnswer?: string; // Add correct answer field
+  correctAnswer?: string; 
   subject: string;
   topic?: string;
   marks: number;
   negative: number;
   tags?: string[];
-  type?: string; // Add type field explicitly from DB if available
+  type?: string; 
 }
 
 interface ExamData {
@@ -42,6 +46,7 @@ interface ExamData {
     title: string;
     duration: number; // minutes
     totalMarks: number;
+    examType?: string; // e.g., "JEE_MAINS", "JEE_ADVANCED", "NEET"
   };
   questions: Question[];
   serverTime: string; 
@@ -49,28 +54,41 @@ interface ExamData {
 }
 
 // --- HELPER FUNCTIONS ---
-const getQuestionType = (q: Question) => {
-    // 1. Explicit Type check from DB (if available and mapped)
-    if (q.type) {
-        const t = q.type.toLowerCase();
-        if (t.includes('multi')) return 'MULTIPLE';
-        if (t.includes('integer') || t.includes('numerical')) return 'INTEGER';
-        if (t.includes('single')) return 'SINGLE';
-    }
 
-    // 2. Heuristic for INTEGER: No options provided or empty options object
-    if (!q.options || Object.keys(q.options).length === 0) {
+/**
+ * Determines the question interaction type based on Exam Type rules and Question attributes.
+ * Rules:
+ * 1. Integer/Numerical questions always remain Integer type.
+ * 2. JEE Advanced -> All MCQs are treated as Multiple Correct (Checkboxes).
+ * 3. JEE Mains / NEET -> All MCQs are treated as Single Correct (Radio buttons).
+ */
+const getQuestionType = (q: Question, examTypeRaw: string = '') => {
+    const examType = examTypeRaw.toUpperCase();
+
+    // 1. Check for Integer Type (Priority)
+    // Checks DB 'type' field, 'tags', or if options are empty
+    const isInteger = 
+        (!q.options || Object.keys(q.options).length === 0) ||
+        (q.type && (q.type.toLowerCase().includes('integer') || q.type.toLowerCase().includes('numerical'))) ||
+        (q.tags && q.tags.some(t => t.toLowerCase().includes('integer') || t.toLowerCase().includes('numerical')));
+
+    if (isInteger) {
         return 'INTEGER';
     }
 
-    // 3. Check tags if available
-    if (q.tags && q.tags.length > 0) {
-        const lowerTags = q.tags.map(t => t.toLowerCase());
-        if (lowerTags.some(t => t.includes('multiple') || t.includes('multi'))) return 'MULTIPLE';
-        if (lowerTags.some(t => t.includes('integer') || t.includes('numerical'))) return 'INTEGER';
+    // 2. Exam Type Logic
+    if (examType.includes('ADVANCE')) {
+        return 'MULTIPLE'; // JEE Advanced allows multi-select
     }
     
-    // 4. Default to SINGLE choice
+    if (examType.includes('MAIN') || examType.includes('NEET')) {
+        return 'SINGLE'; // Mains and NEET are strictly single select
+    }
+
+    // 3. Fallback to question metadata if exam type is generic/unknown
+    if (q.type && q.type.toLowerCase().includes('multi')) return 'MULTIPLE';
+    if (q.tags && q.tags.some(t => t.toLowerCase().includes('multiple'))) return 'MULTIPLE';
+
     return 'SINGLE';
 };
 
@@ -93,11 +111,9 @@ const LatexRenderer = React.memo(({ content }: { content: string }) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Dynamically load KaTeX from CDN to avoid build-time CSS/Font loader issues
     const loadKatex = async () => {
         if ((window as any).katex) return;
 
-        // 1. Inject CSS
         if (!document.getElementById('katex-css')) {
             const link = document.createElement("link");
             link.id = 'katex-css';
@@ -107,7 +123,6 @@ const LatexRenderer = React.memo(({ content }: { content: string }) => {
             document.head.appendChild(link);
         }
 
-        // 2. Inject JS
         if (!document.getElementById('katex-js')) {
             const script = document.createElement("script");
             script.id = 'katex-js';
@@ -156,13 +171,22 @@ const LatexRenderer = React.memo(({ content }: { content: string }) => {
 LatexRenderer.displayName = 'LatexRenderer';
 
 // --- CONTENT RENDERER ---
-const ContentRenderer = ({ content }: { content: string }) => {
+const ContentRenderer = ({ content, isOption = false }: { content: string, isOption?: boolean }) => {
     if (!content) return null;
+    
     if (isImageUrl(content)) {
         return (
-            <div className="w-full flex justify-center my-1">
-                 {/* Specific sizing for option images: ~7-8cm width (approx 280-300px), ~3-4cm height (approx 120-150px) */}
-                 <img src={content} alt="Option" className="max-w-[300px] max-h-[150px] w-auto h-auto object-contain rounded-sm border border-slate-100" />
+            <div className={`w-full flex justify-center my-1 ${isOption ? 'bg-white p-1 rounded' : ''}`}>
+                 {/* Specific sizing for option images: ~7-8cm width (approx 300px), ~3-4cm height (approx 150px) */}
+                 <img 
+                    src={content} 
+                    alt="Content" 
+                    className={
+                        isOption 
+                        ? "max-w-[300px] max-h-[150px] w-auto h-auto object-contain" // Strict size for options
+                        : "max-w-[90%] max-h-[40vh] h-auto object-contain rounded-md border border-slate-100" // Zoomed out for questions
+                    } 
+                 />
             </div>
         );
     }
@@ -204,24 +228,20 @@ export default function ExamPage() {
   useEffect(() => {
     if (submissionStatus !== 'IDLE' || loading) return;
 
-    const handleContextMenu = (e: MouseEvent) => {
-        e.preventDefault();
-    };
-
+    const handleContextMenu = (e: MouseEvent) => e.preventDefault();
     const handleCopyPaste = (e: ClipboardEvent) => {
         e.preventDefault();
-        alert("Action disabled: Copy/Paste is not allowed during the exam.");
+        alert("Action disabled: Copy/Paste is not allowed.");
     };
-
     const handleVisibilityChange = () => {
         if (document.hidden) {
              setWarnings(prev => {
                  const newCount = prev + 1;
                  if (newCount >= 3) {
-                     alert("Violation detected! You have switched tabs too many times. The exam will be auto-submitted.");
+                     alert("Violation detected! Exam auto-submitted due to tab switching.");
                      handleSubmit(true);
                  } else {
-                     alert(`WARNING (${newCount}/3): Do not switch tabs or minimize the window. Your exam may be cancelled.`);
+                     alert(`WARNING (${newCount}/3): Do not switch tabs!`);
                  }
                  return newCount;
              });
@@ -230,14 +250,12 @@ export default function ExamPage() {
 
     document.addEventListener('contextmenu', handleContextMenu);
     document.addEventListener('copy', handleCopyPaste);
-    document.addEventListener('cut', handleCopyPaste);
     document.addEventListener('paste', handleCopyPaste);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
         document.removeEventListener('contextmenu', handleContextMenu);
         document.removeEventListener('copy', handleCopyPaste);
-        document.removeEventListener('cut', handleCopyPaste);
         document.removeEventListener('paste', handleCopyPaste);
         document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
@@ -260,7 +278,6 @@ export default function ExamPage() {
 
     try {
       const attemptUrl = `${API_URL}/exams/${examId}/attempt`;
-      
       const res = await fetch(attemptUrl, {
         method: 'POST',
         headers: { 
@@ -271,21 +288,18 @@ export default function ExamPage() {
 
       if (!res.ok) {
           if (res.status === 404) throw new Error(`Exam not found.`);
-          if (res.status === 401) throw new Error(`Unauthorized access. Please login again.`);
-          
+          if (res.status === 401) throw new Error(`Unauthorized access.`);
           let errMsg = "Failed to load exam";
           try {
              const err = await res.json();
              errMsg = err.message || errMsg;
           } catch(e) {}
-          
           throw new Error(errMsg);
       }
 
       const data: ExamData = await res.json();
       setExamData(data);
 
-      // Restore State from LocalStorage
       const savedAnswers = localStorage.getItem(`exam_answers_${data.attemptId}`);
       if (savedAnswers) setAnswers(JSON.parse(savedAnswers));
       
@@ -298,10 +312,8 @@ export default function ExamPage() {
           localStorage.setItem(`exam_start_${data.attemptId}`, startTime.toString());
       }
       
-      // Calculate Remaining Time
       const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
-      const totalSeconds = data.exam.duration * 60;
-      const remaining = totalSeconds - elapsedSeconds;
+      const remaining = (data.exam.duration * 60) - elapsedSeconds;
 
       if (remaining <= 0) {
           setTimeLeft(0);
@@ -363,7 +375,7 @@ export default function ExamPage() {
              return;
         }
     } else {
-        // SINGLE CHOICE: Simple replacement
+        // SINGLE choice - just replace
         newVal = optionKey;
     }
 
@@ -377,6 +389,9 @@ export default function ExamPage() {
      const qId = examData?.questions[currentQIndex].id;
      if (!qId) return;
      
+     // Allow negative and decimal
+     if (!/^-?\d*\.?\d*$/.test(val)) return;
+
      const newAnswers = { ...answers, [qId]: val };
      setAnswers(newAnswers);
      if (examData?.attemptId) localStorage.setItem(`exam_answers_${examData.attemptId}`, JSON.stringify(newAnswers));
@@ -400,17 +415,20 @@ export default function ExamPage() {
   };
 
   const handleSubmit = async (autoSubmit = false) => {
-    if (!autoSubmit && !confirm("Are you sure you want to submit the exam? You cannot undo this action.")) return;
+    if (!autoSubmit && !confirm("Are you sure you want to submit the exam?")) return;
     
     setSubmissionStatus('SUBMITTING');
     const token = getToken();
     
     if (!token) {
-        alert("Authentication lost. Please login in a new tab and try again.");
+        alert("Authentication lost. Please login again.");
         setSubmissionStatus('IDLE');
         return;
     }
 
+    // Format answers: Multi-select might need array or string depending on backend expectation.
+    // Based on 'add-student.ts' or 'exam' logic, standardizing on what backend expects.
+    // Here we send the raw value (string or comma-sep string). Backend should parse.
     const payload = Object.entries(answers).map(([qId, opt]) => ({ 
         questionId: qId, 
         selectedOption: opt, 
@@ -424,10 +442,7 @@ export default function ExamPage() {
             body: JSON.stringify({ answers: payload })
         });
 
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.message || "Submission failed");
-        }
+        if (!res.ok) throw new Error("Submission failed");
         
         const result = await res.json();
         setScore({ total: result.score, correct: result.correct, wrong: result.wrong });
@@ -439,8 +454,7 @@ export default function ExamPage() {
             localStorage.removeItem(`exam_start_${examData.attemptId}`);
         }
     } catch (e: any) {
-        console.error(e);
-        alert(`Error submitting exam: ${e.message}. Please check your internet and try again.`);
+        alert(`Error submitting exam: ${e.message}`);
         setSubmissionStatus('IDLE');
     }
   };
@@ -452,29 +466,22 @@ export default function ExamPage() {
     return `${h}:${m < 10 ? '0'+m : m}:${s < 10 ? '0'+s : s}`;
   };
 
-  const getCleanAnswer = (raw: string | undefined) => {
-      if (!raw) return '';
-      // Remove brackets [B] -> B, [B,C] -> B,C
-      return raw.replace(/[\[\]']/g, '').trim();
-  };
+  const getCleanAnswer = (raw: string | undefined) => raw ? raw.replace(/[\[\]']/g, '').trim() : '';
 
   // --- RENDER STATES ---
   if (loading) return (
       <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
           <Loader2 className="animate-spin text-blue-600 mb-4" size={48}/>
-          <p className="text-slate-500 font-medium">Loading your exam environment...</p>
+          <p className="text-slate-500 font-medium">Loading Exam...</p>
       </div>
   );
   
   if (error) return (
       <div className="h-screen flex flex-col items-center justify-center bg-slate-50 p-4 text-center">
           <AlertTriangle className="text-red-500 mb-4" size={48}/>
-          <h2 className="text-xl font-bold text-slate-800">Unable to Start Exam</h2>
-          <div className="bg-red-50 p-4 rounded-lg mt-4 border border-red-100 max-w-lg"><p className="text-red-700 font-mono text-xs">{error}</p></div>
-          <div className="flex gap-4 mt-8">
-            <button onClick={() => window.location.href = '/student'} className="px-6 py-2 bg-slate-200 text-slate-700 rounded-lg font-bold">Go Back</button>
-            <button onClick={loadExam} className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold flex items-center gap-2"><RefreshCw size={16}/> Retry</button>
-          </div>
+          <h2 className="text-xl font-bold text-slate-800">Error</h2>
+          <p className="text-red-600 mt-2">{error}</p>
+          <button onClick={() => window.location.href = '/student'} className="mt-6 px-6 py-2 bg-slate-800 text-white rounded-lg">Exit</button>
       </div>
   );
 
@@ -482,85 +489,57 @@ export default function ExamPage() {
       <div className="min-h-screen bg-slate-50 p-4 md:p-8 flex flex-col items-center font-sans">
           <div className="max-w-4xl w-full bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-200">
               <div className="bg-slate-900 p-8 text-center text-white">
-                  <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm"><Award size={32}/></div>
+                  <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4"><Award size={32}/></div>
                   <h2 className="text-3xl font-black mb-2">Result Analysis</h2>
-                  <p className="text-slate-400">Review your performance for {examData.exam.title}</p>
+                  <p className="text-slate-400">{examData.exam.title}</p>
               </div>
-              
-              <div className="p-8 border-b border-slate-100">
-                  <div className="grid grid-cols-3 gap-6">
-                      <div className="p-6 bg-blue-50 rounded-2xl border border-blue-100 text-center"><p className="text-xs text-blue-600 font-bold uppercase tracking-wider mb-1">Total Score</p><p className="text-4xl font-black text-blue-900">{score.total}<span className="text-lg text-blue-400 font-medium">/{examData.exam.totalMarks}</span></p></div>
-                      <div className="p-6 bg-green-50 rounded-2xl border border-green-100 text-center"><p className="text-xs text-green-600 font-bold uppercase tracking-wider mb-1">Correct</p><p className="text-4xl font-black text-green-800">{score.correct}</p></div>
-                      <div className="p-6 bg-red-50 rounded-2xl border border-red-100 text-center"><p className="text-xs text-red-600 font-bold uppercase tracking-wider mb-1">Wrong</p><p className="text-4xl font-black text-red-800">{score.wrong}</p></div>
-                  </div>
+              <div className="p-8 border-b border-slate-100 grid grid-cols-3 gap-6 text-center">
+                  <div className="p-4 bg-blue-50 rounded-xl border border-blue-100"><p className="text-xs text-blue-600 font-bold uppercase">Score</p><p className="text-3xl font-black text-blue-900">{score.total}/{examData.exam.totalMarks}</p></div>
+                  <div className="p-4 bg-green-50 rounded-xl border border-green-100"><p className="text-xs text-green-600 font-bold uppercase">Correct</p><p className="text-3xl font-black text-green-800">{score.correct}</p></div>
+                  <div className="p-4 bg-red-50 rounded-xl border border-red-100"><p className="text-xs text-red-600 font-bold uppercase">Wrong</p><p className="text-3xl font-black text-red-800">{score.wrong}</p></div>
               </div>
-
               <div className="p-8 bg-slate-50/50">
-                  <h3 className="font-bold text-slate-800 mb-6 text-lg">Question Review</h3>
-                  <div className="space-y-4">
+                  <h3 className="font-bold text-slate-800 mb-6">Question Summary</h3>
+                  <div className="space-y-3">
                       {examData.questions.map((q, idx) => {
                           const userAnswer = answers[q.id];
-                          const correct = getCleanAnswer(q.correctAnswer); // Assuming API returns 'correctAnswer' or mapped
-                          const isCorrect = userAnswer === correct; // Simplified check, needs array comparison for multi
-                          
-                          // Better check for multi
-                          let status = 'unanswered';
+                          const correct = getCleanAnswer(q.correctAnswer);
                           let statusColor = 'text-slate-500 bg-slate-100';
+                          let StatusIcon = Circle;
                           
                           if (userAnswer) {
-                              if (userAnswer === correct) {
-                                  status = 'correct';
-                                  statusColor = 'text-green-700 bg-green-100 border-green-200';
-                              } else {
-                                  status = 'wrong';
-                                  statusColor = 'text-red-700 bg-red-100 border-red-200';
-                              }
+                              if (userAnswer === correct) { statusColor = 'text-green-700 bg-green-100'; StatusIcon = Check; }
+                              else { statusColor = 'text-red-700 bg-red-100'; StatusIcon = XIcon; }
                           }
-
                           return (
-                              <div key={q.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-start gap-4">
-                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 font-bold text-sm border ${status === 'correct' ? 'bg-green-600 text-white border-green-600' : status === 'wrong' ? 'bg-red-600 text-white border-red-600' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                                      {idx + 1}
+                              <div key={q.id} className="bg-white p-3 rounded-lg border border-slate-200 flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                      <span className="w-6 h-6 rounded bg-slate-100 text-xs font-bold flex items-center justify-center">{idx + 1}</span>
+                                      <span className="text-sm font-medium text-slate-700 truncate max-w-[200px] md:max-w-md">{q.questionText}</span>
                                   </div>
-                                  <div className="flex-1">
-                                      <div className="mb-2 font-medium text-slate-800"><LatexRenderer content={q.questionText} /></div>
-                                      <div className="flex gap-4 text-sm mt-3">
-                                          <div className="flex items-center gap-2">
-                                              <span className="text-slate-500 font-bold text-xs uppercase">Your Answer:</span>
-                                              <span className={`px-2 py-0.5 rounded font-mono font-bold ${statusColor}`}>{userAnswer || 'Skipped'}</span>
-                                          </div>
-                                          {/* In a real scenario, you might hide correct answer immediately or show it */}
-                                          {/* <div className="flex items-center gap-2">
-                                              <span className="text-slate-500 font-bold text-xs uppercase">Correct:</span>
-                                              <span className="px-2 py-0.5 rounded font-mono font-bold bg-green-50 text-green-700 border border-green-100">{correct}</span>
-                                          </div> */}
-                                      </div>
-                                  </div>
-                                  <div className="shrink-0">
-                                      {status === 'correct' && <Check className="text-green-500" size={24}/>}
-                                      {status === 'wrong' && <XIcon className="text-red-500" size={24}/>}
+                                  <div className={`flex items-center gap-2 px-3 py-1 rounded text-xs font-bold ${statusColor}`}>
+                                      <span className="uppercase">{userAnswer || 'Skipped'}</span>
+                                      <StatusIcon size={14}/>
                                   </div>
                               </div>
                           );
                       })}
                   </div>
               </div>
-              
-              <div className="p-6 border-t border-slate-200 bg-white flex justify-center">
-                  <button onClick={() => window.location.href = '/student'} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition">Return to Dashboard</button>
+              <div className="p-6 border-t border-slate-200 bg-white text-center">
+                  <button onClick={() => window.location.href = '/student'} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold">Return to Dashboard</button>
               </div>
           </div>
       </div>
   );
 
   const questions = examData?.questions || [];
-  if (questions.length === 0) return <div className="h-screen flex flex-col items-center justify-center bg-slate-50 p-4"><AlertTriangle className="text-amber-500 mb-4" size={48}/><h2 className="text-xl font-bold text-slate-800">No Questions Found</h2><button onClick={() => window.location.href='/student'} className="mt-6 px-6 py-2 bg-blue-600 text-white rounded-lg font-bold">Go Back</button></div>;
+  if (questions.length === 0) return <div className="h-screen flex items-center justify-center">No Questions</div>;
 
   const question = questions[currentQIndex];
-  const qType = getQuestionType(question);
-  // Check if the FIRST option ('a') looks like an image URL. If so, treat all options as images in a unified view.
+  const examType = examData?.exam.examType || examData?.exam.title || '';
+  const qType = getQuestionType(question, examType);
   const isOptionImg = isImageUrl(question.options?.a || '');
-
   const optionKeys = Object.keys(question.options || {}).sort();
   const displayOptionKeys = optionKeys.length > 0 ? optionKeys : ['a', 'b', 'c', 'd'];
 
@@ -569,49 +548,49 @@ export default function ExamPage() {
       {/* HEADER */}
       <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6 z-50 shadow-sm">
          <div className="flex items-center gap-3">
-             <div className="relative w-8 h-8"><img src={LOGO_PATH} alt="Logo" className="w-full h-full object-contain" /></div>
+             <img src={LOGO_PATH} alt="Logo" className="h-8 w-auto" />
              <div className="hidden md:block">
                  <h1 className="text-sm font-black text-slate-800 uppercase tracking-tight">{examData?.exam.title}</h1>
-                 <p className="text-[10px] text-slate-400 font-bold tracking-widest">EXAM ID: {examData?.attemptId.slice(0,8)}</p>
+                 <p className="text-[10px] text-slate-400 font-bold tracking-widest">ID: {examData?.attemptId.slice(0,8)}</p>
              </div>
          </div>
          <div className="flex items-center gap-4">
-             <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full font-mono font-bold text-lg border transition-colors ${timeLeft < 300 ? 'bg-red-50 text-red-600 border-red-200 animate-pulse' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+             <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full font-mono font-bold text-lg border ${timeLeft < 300 ? 'bg-red-50 text-red-600 border-red-200 animate-pulse' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
                 <Clock size={18}/> {formatTime(timeLeft)}
              </div>
-             <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="md:hidden p-2 bg-slate-100 rounded-lg text-slate-600"><Menu size={20}/></button>
+             <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="md:hidden p-2 bg-slate-100 rounded-lg"><Menu size={20}/></button>
          </div>
       </header>
 
       {/* MAIN CONTENT */}
       <main className="flex-1 mt-16 p-2 md:p-6 overflow-hidden relative flex flex-col md:flex-row gap-4">
-         {/* Question Area */}
+         {/* Question Section */}
          <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col h-full overflow-hidden">
              
-             {/* Question Header */}
+             {/* Question Info Bar */}
              <div className="px-6 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 min-h-[50px]">
                  <div className="flex items-center gap-3 flex-wrap">
                      <span className="text-lg font-black text-slate-400">Q.{currentQIndex + 1}</span>
                      <span className="px-2.5 py-1 bg-blue-100 text-blue-700 text-[10px] font-bold rounded uppercase tracking-wide">{question.subject || 'General'}</span>
-                     {qType === 'INTEGER' && <span className="px-2.5 py-1 text-[10px] font-bold rounded uppercase bg-purple-100 text-purple-700 tracking-wide">INTEGER TYPE</span>}
-                     {qType === 'MULTIPLE' && <span className="px-2.5 py-1 text-[10px] font-bold rounded uppercase bg-amber-100 text-amber-700 tracking-wide">MULTI CORRECT</span>}
-                     {qType === 'SINGLE' && <span className="px-2.5 py-1 text-[10px] font-bold rounded uppercase bg-slate-200 text-slate-600 tracking-wide">SINGLE CHOICE</span>}
+                     <span className={`px-2.5 py-1 text-[10px] font-bold rounded uppercase tracking-wide ${qType === 'INTEGER' ? 'bg-purple-100 text-purple-700' : qType === 'MULTIPLE' ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-600'}`}>
+                        {qType === 'INTEGER' ? 'INTEGER' : qType === 'MULTIPLE' ? 'MULTI SELECT' : 'SINGLE SELECT'}
+                     </span>
                  </div>
                  <div className="flex items-center gap-4 text-xs font-bold">
-                     <span className="text-green-600 flex items-center gap-1 bg-green-50 px-2 py-1 rounded"><CheckCircle size={14}/> +{question.marks}</span>
-                     <span className="text-red-500 flex items-center gap-1 bg-red-50 px-2 py-1 rounded"><AlertTriangle size={14}/> {question.negative}</span>
+                     <span className="text-green-600 bg-green-50 px-2 py-1 rounded">+{question.marks}</span>
+                     <span className="text-red-500 bg-red-50 px-2 py-1 rounded">{question.negative}</span>
                  </div>
              </div>
 
-             {/* Question Body */}
+             {/* Question Content */}
              <div className="p-6 flex-1 overflow-y-auto custom-scrollbar">
                  <div className="text-base md:text-lg text-slate-800 font-medium leading-relaxed mb-4">
                      <LatexRenderer content={question.questionText} />
                  </div>
                  {question.questionImage && (
                      <div className="w-full flex justify-center my-4">
-                         {/* Zoomed out image constraint applied here */}
-                         <img src={question.questionImage} alt="Question Diagram" className="max-w-[80%] max-h-[50vh] h-auto object-contain rounded-lg border border-slate-200 shadow-sm"/>
+                         {/* Zoomed out question image constraint */}
+                         <img src={question.questionImage} alt="Question" className="max-w-[85%] max-h-[40vh] h-auto object-contain rounded-lg border border-slate-200 shadow-sm"/>
                      </div>
                  )}
              </div>
@@ -619,29 +598,27 @@ export default function ExamPage() {
              {/* Options / Input Area */}
              <div className="p-4 bg-slate-50 border-t border-slate-200">
                  {qType === 'INTEGER' ? (
-                     <div className="flex flex-col items-center justify-center py-4">
-                         <label className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-widest">Enter Numerical Answer</label>
+                     <div className="flex flex-col items-center justify-center py-6">
+                         <label className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-widest">Numerical Answer</label>
                          <input 
-                            type="number" 
-                            className="text-2xl font-mono font-bold text-center w-32 p-2 border-2 border-blue-200 rounded-xl focus:border-blue-600 focus:ring-4 focus:ring-blue-100 outline-none transition-all" 
+                            type="text" 
+                            className="text-2xl font-mono font-bold text-center w-40 p-3 border-2 border-blue-200 rounded-xl focus:border-blue-600 focus:ring-4 focus:ring-blue-100 outline-none transition-all" 
                             placeholder="-" 
                             value={answers[question.id] || ''} 
                             onChange={(e) => handleIntegerInput(e.target.value)}
-                            onPaste={(e) => e.preventDefault()}
                         />
                      </div>
                  ) : isOptionImg ? (
                      <div className="flex flex-col items-center">
-                         {/* Option Image: Constrained */}
                          <div className="mb-4 bg-white p-2 rounded border border-slate-200 shadow-sm">
+                             {/* Display the 'Option A' image which likely contains all options if it's a composite image */}
                              <img 
                                 src={question.options.a} 
                                 alt="Options" 
-                                className="max-w-[400px] w-full max-h-[200px] h-auto object-contain" 
+                                className="max-w-[400px] w-full max-h-[250px] h-auto object-contain" 
                              />
                          </div>
-                         {/* Small Option Tabs */}
-                         <div className="flex gap-3 justify-center">
+                         <div className="flex gap-4 justify-center">
                              {displayOptionKeys.map(key => {
                                  const isSelected = qType === 'MULTIPLE' 
                                     ? answers[question.id]?.split(',').includes(key)
@@ -672,13 +649,18 @@ export default function ExamPage() {
                                     onClick={() => handleOptionSelect(key, qType as any)} 
                                     className={`cursor-pointer px-4 py-2 rounded-lg border transition-all duration-200 flex items-center gap-3 relative group ${isSelected ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-100' : 'bg-white border-slate-200 text-slate-700 hover:border-blue-300 hover:shadow-sm'}`}
                                 >
-                                    <span className={`w-8 h-8 rounded-md flex items-center justify-center font-bold text-xs shrink-0 border transition-colors ${isSelected ? 'bg-white text-blue-600 border-white' : 'bg-slate-50 text-slate-400 border-slate-200 group-hover:border-blue-200'}`}>
+                                    <div className={`w-6 h-6 flex items-center justify-center shrink-0`}>
+                                        {qType === 'MULTIPLE' 
+                                            ? (isSelected ? <CheckSquare size={20} className="text-white"/> : <Square size={20} className="text-slate-300"/>)
+                                            : (isSelected ? <CheckCircle2 size={20} className="text-white"/> : <Circle size={20} className="text-slate-300"/>)
+                                        }
+                                    </div>
+                                    <span className={`w-6 h-6 rounded text-[10px] flex items-center justify-center font-bold border ${isSelected ? 'bg-blue-500 text-white border-blue-500' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
                                         {key.toUpperCase()}
                                     </span>
                                     <div className={`text-sm font-medium flex-1 ${isSelected ? 'text-white' : 'text-slate-700'}`}>
-                                        <ContentRenderer content={(question.options as any)[key]} />
+                                        <ContentRenderer content={(question.options as any)[key]} isOption={true} />
                                     </div>
-                                    {isSelected && <div className="absolute top-2 right-2"><CheckCircle size={16} className="text-white fill-white stroke-blue-600"/></div>}
                                 </div>
                             );
                         })}
@@ -688,19 +670,19 @@ export default function ExamPage() {
 
              {/* Footer Navigation */}
              <div className="p-3 border-t border-slate-200 bg-white flex justify-between items-center gap-3">
-                 <button onClick={() => setCurrentQIndex(prev => Math.max(0, prev - 1))} disabled={currentQIndex === 0} className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg font-bold hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2 transition text-sm"><ChevronLeft size={16}/> Prev</button>
+                 <button onClick={() => setCurrentQIndex(prev => Math.max(0, prev - 1))} disabled={currentQIndex === 0} className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg font-bold hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2 transition text-xs md:text-sm"><ChevronLeft size={16}/> Prev</button>
                  
                  <div className="flex gap-2">
-                    <button onClick={handleMarkReview} className={`px-3 py-2 rounded-lg font-bold transition flex items-center gap-2 text-sm ${markedForReview[question.id] ? 'bg-orange-100 text-orange-700 border border-orange-200' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                    <button onClick={handleMarkReview} className={`px-3 py-2 rounded-lg font-bold transition flex items-center gap-2 text-xs md:text-sm ${markedForReview[question.id] ? 'bg-orange-100 text-orange-700 border border-orange-200' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                         <Flag size={16} className={markedForReview[question.id] ? 'fill-current' : ''}/> <span className="hidden sm:inline">{markedForReview[question.id] ? 'Marked' : 'Review'}</span>
                     </button>
-                    <button onClick={clearResponse} className="px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg font-bold hover:text-red-600 hover:border-red-200 transition text-sm">Clear</button>
+                    <button onClick={clearResponse} className="px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg font-bold hover:text-red-600 hover:border-red-200 transition text-xs md:text-sm">Clear</button>
                  </div>
 
                  {currentQIndex === questions.length - 1 ? (
-                     <button onClick={() => handleSubmit(false)} className="px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold shadow-md shadow-green-200 flex items-center gap-2 transition transform active:scale-95 text-sm">Submit <CheckCircle size={16}/></button>
+                     <button onClick={() => handleSubmit(false)} className="px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold shadow-md shadow-green-200 flex items-center gap-2 transition transform active:scale-95 text-xs md:text-sm">Submit <CheckCircle size={16}/></button>
                  ) : (
-                     <button onClick={() => setCurrentQIndex(prev => Math.min(questions.length - 1, prev + 1))} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-md shadow-blue-200 flex items-center gap-2 transition transform active:scale-95 text-sm">Next <ChevronRight size={16}/></button>
+                     <button onClick={() => setCurrentQIndex(prev => Math.min(questions.length - 1, prev + 1))} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-md shadow-blue-200 flex items-center gap-2 transition transform active:scale-95 text-xs md:text-sm">Next <ChevronRight size={16}/></button>
                  )}
              </div>
          </div>
@@ -708,19 +690,17 @@ export default function ExamPage() {
          {/* SIDEBAR (Question Palette) */}
          <aside className={`fixed inset-y-0 right-0 w-80 bg-white border-l border-slate-200 shadow-2xl transform transition-transform duration-300 z-40 flex flex-col ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'} md:translate-x-0 md:static md:shadow-none md:border-none md:w-72 rounded-2xl overflow-hidden`}>
              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 mt-16 md:mt-0">
-                 <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm"><LayoutDashboard size={16}/> Question Palette</h3>
+                 <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm"><LayoutDashboard size={16}/> Palette</h3>
                  <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400"><X size={18}/></button>
              </div>
              
-             {/* Legend */}
-             <div className="px-4 py-3 grid grid-cols-2 gap-y-2 gap-x-2 text-[10px] font-bold text-slate-500 border-b border-slate-100 bg-white">
+             <div className="px-4 py-3 grid grid-cols-2 gap-2 text-[10px] font-bold text-slate-500 border-b border-slate-100 bg-white">
                  <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-green-500"></span> Answered</div>
                  <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-orange-400"></span> Review</div>
                  <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-slate-200 border border-slate-300"></span> Not Visited</div>
                  <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full border border-blue-600 relative flex items-center justify-center"><span className="w-1.5 h-1.5 bg-blue-600 rounded-full"></span></span> Current</div>
              </div>
 
-             {/* Grid */}
              <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-white">
                  <div className="grid grid-cols-5 gap-2">
                      {questions.map((q, idx) => { 
@@ -743,7 +723,6 @@ export default function ExamPage() {
                  </div>
              </div>
              
-             {/* Submit Button Sidebar */}
              <div className="p-4 border-t border-slate-100 bg-slate-50">
                  <button onClick={() => handleSubmit(false)} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-bold hover:bg-slate-800 transition shadow-lg shadow-slate-300 flex items-center justify-center gap-2 text-sm">
                      Submit Test
@@ -752,7 +731,6 @@ export default function ExamPage() {
          </aside>
       </main>
       
-      {/* Global Styles for Latex & Scrollbar */}
       <style jsx global>{`
         .latex-content img { display: inline-block; vertical-align: middle; }
         .latex-content .katex { font-size: 1.1em; }

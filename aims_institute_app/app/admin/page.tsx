@@ -32,7 +32,8 @@ import {
   ArrowLeft,
   Settings,
   Image as ImageIcon,
-  Hash
+  Hash,
+  Printer
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -126,6 +127,14 @@ const adminApi = {
         if (!res.ok) return [];
         return await res.json();
     } catch (e) { return []; }
+  },
+
+  async getExamById(token: string, id: string) {
+    const res = await fetch(`${API_URL}/exams/${id}`, { // Using public/student endpoint pattern to get full details including questions
+        headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error('Failed to fetch exam details');
+    return await res.json();
   },
 
   async createExam(token: string, data: any) {
@@ -605,50 +614,50 @@ const QuestionSelectorModal = ({
 
                                 return (
                                     <div key={q.id} onClick={() => toggleSelection(q.id)} className={`p-4 rounded-xl border transition cursor-pointer group ${isSelected ? 'bg-amber-50 border-amber-500 shadow-sm' : 'bg-white border-slate-200 hover:border-amber-300'}`}>
-                                        <div className="flex justify-between items-start gap-4">
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 mb-2">
-                                                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${qType === 'INTEGER' ? 'bg-purple-100 text-purple-700' : qType === 'MULTIPLE' ? 'bg-orange-100 text-orange-700' : 'bg-blue-50 text-blue-700'}`}>
-                                                        {qType === 'INTEGER' ? 'Integer' : qType === 'MULTIPLE' ? 'Multi' : 'Single'}
-                                                    </span>
-                                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${q.difficulty === 'HARD' ? 'bg-red-50 text-red-600' : q.difficulty === 'MEDIUM' ? 'bg-yellow-50 text-yellow-600' : 'bg-green-50 text-green-600'}`}>{q.difficulty}</span>
+                                            <div className="flex justify-between items-start gap-4">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${qType === 'INTEGER' ? 'bg-purple-100 text-purple-700' : qType === 'MULTIPLE' ? 'bg-orange-100 text-orange-700' : 'bg-blue-50 text-blue-700'}`}>
+                                                            {qType === 'INTEGER' ? 'Integer' : qType === 'MULTIPLE' ? 'Multi' : 'Single'}
+                                                        </span>
+                                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${q.difficulty === 'HARD' ? 'bg-red-50 text-red-600' : q.difficulty === 'MEDIUM' ? 'bg-yellow-50 text-yellow-600' : 'bg-green-50 text-green-600'}`}>{q.difficulty}</span>
+                                                    </div>
+                                                    <div className="text-sm font-medium text-slate-800 line-clamp-3 mb-2"><LatexRenderer content={q.questionText} /></div>
+                                                    {/* RICH CONTENT RENDERER - MOVED BELOW TEXT */}
+                                                    {q.questionImage && (
+                                                        <div className="mb-2 w-full max-w-md h-32 relative border rounded bg-slate-50">
+                                                            <img src={q.questionImage} alt="Question Image" className="w-full h-full object-contain" />
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {/* PREVIEW OPTIONS */}
+                                                    {qType === 'INTEGER' ? (
+                                                        <div className="mt-2 text-xs font-bold text-slate-600 border px-3 py-1 rounded bg-slate-50 inline-block">
+                                                            Answer: {getIntegerAnswer(q.correctOption)}
+                                                        </div>
+                                                    ) : isOptionImg ? (
+                                                        <div className="mt-2 text-xs text-slate-500 italic">Image Options available</div>
+                                                    ) : (
+                                                         <div className="mt-2 grid grid-cols-2 gap-2">
+                                                            {['a','b','c','d'].map(key => (
+                                                                <div key={key} className="text-xs text-slate-500 truncate border px-2 py-1 rounded">
+                                                                    <span className="uppercase font-bold mr-1">{key}.</span> 
+                                                                    <ContentRenderer content={String(q.options[key] || '')} />
+                                                                </div>
+                                                            ))}
+                                                            {Object.keys(q.options).length > 2 && <div className="text-xs text-slate-400 pl-1">...</div>}
+                                                         </div>
+                                                    )}
                                                 </div>
-                                                <div className="text-sm font-medium text-slate-800 line-clamp-3 mb-2"><LatexRenderer content={q.questionText} /></div>
-                                                {/* RICH CONTENT RENDERER - MOVED BELOW TEXT */}
-                                                {q.questionImage && (
-                                                    <div className="mb-2 w-full max-w-md h-32 relative border rounded bg-slate-50">
-                                                        <img src={q.questionImage} alt="Question Image" className="w-full h-full object-contain" />
-                                                    </div>
-                                                )}
-                                                
-                                                {/* PREVIEW OPTIONS */}
-                                                {qType === 'INTEGER' ? (
-                                                    <div className="mt-2 text-xs font-bold text-slate-600 border px-3 py-1 rounded bg-slate-50 inline-block">
-                                                        Answer: {getIntegerAnswer(q.correctOption)}
-                                                    </div>
-                                                ) : isOptionImg ? (
-                                                    <div className="mt-2 text-xs text-slate-500 italic">Image Options available</div>
-                                                ) : (
-                                                     <div className="mt-2 grid grid-cols-2 gap-2">
-                                                        {['a','b','c','d'].map(key => (
-                                                            <div key={key} className="text-xs text-slate-500 truncate border px-2 py-1 rounded">
-                                                                <span className="uppercase font-bold mr-1">{key}.</span> 
-                                                                <ContentRenderer content={String(q.options[key] || '')} />
-                                                            </div>
-                                                        ))}
-                                                        {Object.keys(q.options).length > 2 && <div className="text-xs text-slate-400 pl-1">...</div>}
-                                                     </div>
-                                                )}
+                                                <div className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-amber-500 border-amber-500 text-white' : 'border-slate-300'}`}>
+                                                    {isSelected && <CheckCircle size={14} className="fill-current"/>}
+                                                </div>
                                             </div>
-                                            <div className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-amber-500 border-amber-500 text-white' : 'border-slate-300'}`}>
-                                                {isSelected && <CheckCircle size={14} className="fill-current"/>}
+                                            <div className="mt-2 flex items-center gap-2 text-xs border-t pt-2 border-slate-100">
+                                                <span className="font-bold text-slate-500">{q.subject}</span>
+                                                <span className="text-slate-300">•</span>
+                                                <span className="font-mono text-slate-400">ID: {q.id.slice(0,6)}</span>
                                             </div>
-                                        </div>
-                                        <div className="mt-2 flex items-center gap-2 text-xs border-t pt-2 border-slate-100">
-                                            <span className="font-bold text-slate-500">{q.subject}</span>
-                                            <span className="text-slate-300">•</span>
-                                            <span className="font-mono text-slate-400">ID: {q.id.slice(0,6)}</span>
-                                        </div>
                                     </div>
                                 );
                             })}
@@ -851,6 +860,94 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
           alert(e.message || "Failed to save questions to exam.");
       }
   };
+
+  // --- ADDED: PDF Download Functionality for NEET ---
+  const handleDownloadPDF = async (e: React.MouseEvent, exam: Exam) => {
+      e.stopPropagation();
+      try {
+          const fullExamData = await adminApi.getExamById(token, exam.id);
+          const questionsList = fullExamData.questions || [];
+          
+          const printWindow = window.open('', '_blank', 'width=900,height=800');
+          if(!printWindow) return alert("Pop-up blocked. Please allow pop-ups to print.");
+          
+          let html = `
+            <html>
+              <head>
+                <title>${exam.title} - Question Paper</title>
+                <style>
+                  body { font-family: 'Times New Roman', serif; padding: 40px; font-size: 14px; }
+                  .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 15px; }
+                  .header h1 { margin: 0 0 10px 0; font-size: 24px; text-transform: uppercase; }
+                  .meta { display: flex; justify-content: space-between; font-weight: bold; font-size: 16px; }
+                  .q-container { display: flex; flex-wrap: wrap; justify-content: space-between; }
+                  .q-item { width: 48%; margin-bottom: 25px; page-break-inside: avoid; border: 1px solid #eee; padding: 10px; border-radius: 5px; }
+                  .q-text { font-weight: bold; margin-bottom: 10px; }
+                  .q-img { max-width: 100%; max-height: 150px; display: block; margin: 10px 0; border: 1px solid #ccc; }
+                  .options { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; }
+                  .opt-img { max-width: 100px; max-height: 50px; vertical-align: middle; }
+                  @media print { .q-item { width: 100%; border: none; padding: 0; } }
+                </style>
+                <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+                <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+                <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+              </head>
+              <body>
+                <div class="header">
+                  <h1>AIMS INSTITUTE - ${exam.examType || 'TEST'}</h1>
+                  <div class="meta">
+                    <span>${exam.title}</span>
+                    <span>Duration: ${exam.durationMin} mins | Max Marks: ${exam.totalMarks}</span>
+                  </div>
+                </div>
+                <div class="q-container">
+          `;
+          
+          questionsList.forEach((q: any, idx: number) => {
+             // Parse options if they are stored as JSON string
+             let opts = q.options;
+             if (typeof opts === 'string' && opts.startsWith('{')) {
+                 try { opts = JSON.parse(opts); } catch(e) {}
+             }
+
+             const renderOpt = (val: any) => {
+                 if(typeof val === 'string' && val.match(/^https?:\/\//)) {
+                     return `<img src="${val}" class="opt-img"/>`;
+                 }
+                 return val;
+             };
+
+             html += `
+               <div class="q-item">
+                 <div class="q-text">Q${idx+1}. ${q.questionText || ''}</div>
+                 ${q.questionImage ? `<img src="${q.questionImage}" class="q-img"/>` : ''}
+                 <div class="options">
+                    ${opts.a ? `<div>(A) ${renderOpt(opts.a)}</div>` : ''}
+                    ${opts.b ? `<div>(B) ${renderOpt(opts.b)}</div>` : ''}
+                    ${opts.c ? `<div>(C) ${renderOpt(opts.c)}</div>` : ''}
+                    ${opts.d ? `<div>(D) ${renderOpt(opts.d)}</div>` : ''}
+                 </div>
+               </div>
+             `;
+          });
+          
+          html += `
+                </div>
+                <script>
+                    document.addEventListener("DOMContentLoaded", function() {
+                        renderMathInElement(document.body, {delimiters: [{left: "$$", right: "$$", display: true},{left: "$", right: "$", display: false}]});
+                        setTimeout(() => window.print(), 1000);
+                    });
+                </script>
+              </body></html>`;
+          
+          printWindow.document.write(html);
+          printWindow.document.close();
+          
+      } catch(err) {
+          alert("Failed to generate PDF. Questions might not be loaded.");
+      }
+  };
   
   const handleAddQuestion = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -1014,24 +1111,24 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
                                 const qType = getQuestionType(q);
                                 return (
                                     <div key={q.id} className="p-4 rounded-xl border border-slate-100 bg-slate-50 hover:border-blue-200 transition">
-                                        <div className="flex justify-between items-start gap-4">
-                                            <div className="flex-1 min-w-0">
-                                                {/* RICH CONTENT RENDERER (Preview) */}
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${qType === 'INTEGER' ? 'bg-purple-100 text-purple-700' : qType === 'MULTIPLE' ? 'bg-orange-100 text-orange-700' : 'bg-blue-50 text-blue-700'}`}>
-                                                        {qType === 'INTEGER' ? 'Integer' : qType === 'MULTIPLE' ? 'Multi' : 'Single'}
-                                                    </span>
+                                            <div className="flex justify-between items-start gap-4">
+                                                <div className="flex-1 min-w-0">
+                                                    {/* RICH CONTENT RENDERER (Preview) */}
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${qType === 'INTEGER' ? 'bg-purple-100 text-purple-700' : qType === 'MULTIPLE' ? 'bg-orange-100 text-orange-700' : 'bg-blue-50 text-blue-700'}`}>
+                                                            {qType === 'INTEGER' ? 'Integer' : qType === 'MULTIPLE' ? 'Multi' : 'Single'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-sm text-slate-700 font-medium line-clamp-2 mb-1"><LatexRenderer content={q.questionText} /></div>
+                                                    {q.questionImage && <ImageIcon size={16} className="text-slate-400"/>}
                                                 </div>
-                                                <div className="text-sm text-slate-700 font-medium line-clamp-2 mb-1"><LatexRenderer content={q.questionText} /></div>
-                                                {q.questionImage && <ImageIcon size={16} className="text-slate-400"/>}
+                                                <span className={`text-[10px] font-bold px-2 py-1 rounded shrink-0 ${q.difficulty === 'HARD' ? 'bg-red-50 text-red-600' : q.difficulty === 'MEDIUM' ? 'bg-yellow-50 text-yellow-600' : 'bg-green-50 text-green-600'}`}>{q.difficulty}</span>
                                             </div>
-                                            <span className={`text-[10px] font-bold px-2 py-1 rounded shrink-0 ${q.difficulty === 'HARD' ? 'bg-red-50 text-red-600' : q.difficulty === 'MEDIUM' ? 'bg-yellow-50 text-yellow-600' : 'bg-green-50 text-green-600'}`}>{q.difficulty}</span>
-                                        </div>
-                                        <div className="mt-2 text-xs text-slate-400 flex gap-2">
-                                            <span>{q.subject}</span>
-                                            <span>•</span>
-                                            <span>{q.topic}</span>
-                                        </div>
+                                            <div className="mt-2 text-xs text-slate-400 flex gap-2">
+                                                <span>{q.subject}</span>
+                                                <span>•</span>
+                                                <span>{q.topic}</span>
+                                            </div>
                                     </div>
                                 );
                             })}
@@ -1091,63 +1188,63 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
 
                                     return (
                                     <tr key={q.id} className="hover:bg-slate-50/50 transition">
-                                        <td className="px-6 py-6 align-top">
-                                            <div className="flex gap-2 mb-2">
-                                                <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{q.subject}</span>
-                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${q.difficulty === 'HARD' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>{q.difficulty}</span>
-                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${qType === 'INTEGER' ? 'bg-purple-100 text-purple-700' : qType === 'MULTIPLE' ? 'bg-orange-100 text-orange-700' : 'bg-blue-50 text-blue-600'}`}>
-                                                    {qType === 'INTEGER' ? 'Integer' : qType === 'MULTIPLE' ? 'Multi' : 'Single'}
-                                                </span>
-                                            </div>
-                                            <div className="text-slate-800 font-medium text-base mb-2"><LatexRenderer content={q.questionText} /></div>
-                                            {/* RICH CONTENT RENDERER - MOVED BELOW TEXT */}
-                                            {q.questionImage && (
-                                                <div className="w-full max-w-lg h-40 relative border rounded bg-slate-50 mb-4">
-                                                    <img src={q.questionImage} alt="Question Image" className="w-full h-full object-contain" />
+                                            <td className="px-6 py-6 align-top">
+                                                <div className="flex gap-2 mb-2">
+                                                    <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{q.subject}</span>
+                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${q.difficulty === 'HARD' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>{q.difficulty}</span>
+                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${qType === 'INTEGER' ? 'bg-purple-100 text-purple-700' : qType === 'MULTIPLE' ? 'bg-orange-100 text-orange-700' : 'bg-blue-50 text-blue-600'}`}>
+                                                        {qType === 'INTEGER' ? 'Integer' : qType === 'MULTIPLE' ? 'Multi' : 'Single'}
+                                                    </span>
                                                 </div>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-6 align-top">
-                                            {qType === 'INTEGER' ? (
-                                                <div className="mt-2 text-xs font-bold text-slate-600 border px-3 py-1 rounded bg-slate-50 inline-block">
-                                                    Answer: {getIntegerAnswer(q.correctOption)}
-                                                </div>
-                                            ) : isOptionImg ? (
-                                                <div>
-                                                    <div className="mb-2 w-full h-32 relative border rounded bg-white">
-                                                         <img src={q.options.a} alt="Options" className="w-full h-full object-contain" />
+                                                <div className="text-slate-800 font-medium text-base mb-2"><LatexRenderer content={q.questionText} /></div>
+                                                {/* RICH CONTENT RENDERER - MOVED BELOW TEXT */}
+                                                {q.questionImage && (
+                                                    <div className="w-full max-w-lg h-40 relative border rounded bg-slate-50 mb-4">
+                                                        <img src={q.questionImage} alt="Question Image" className="w-full h-full object-contain" />
                                                     </div>
-                                                    <div className="grid grid-cols-4 gap-2">
-                                                        {['a','b','c','d'].map(key => {
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-6 align-top">
+                                                {qType === 'INTEGER' ? (
+                                                    <div className="mt-2 text-xs font-bold text-slate-600 border px-3 py-1 rounded bg-slate-50 inline-block">
+                                                        Answer: {getIntegerAnswer(q.correctOption)}
+                                                    </div>
+                                                ) : isOptionImg ? (
+                                                    <div>
+                                                        <div className="mb-2 w-full h-32 relative border rounded bg-white">
+                                                             <img src={q.options.a} alt="Options" className="w-full h-full object-contain" />
+                                                        </div>
+                                                        <div className="grid grid-cols-4 gap-2">
+                                                            {['a','b','c','d'].map(key => {
+                                                                // Correct Option Logic for Multiple Answers (Includes check)
+                                                                const isCorrect = q.correctOption.toLowerCase().includes(key);
+                                                                return (
+                                                                    <div key={key} className={`text-center py-1 rounded text-xs font-bold border ${isCorrect ? 'bg-green-100 text-green-700 border-green-300' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                                                                        {key.toUpperCase()}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                                        {Object.entries(q.options || {}).map(([key, val]) => {
                                                             // Correct Option Logic for Multiple Answers (Includes check)
-                                                            const isCorrect = q.correctOption.toLowerCase().includes(key);
+                                                            const isOptionCorrect = q.correctOption.toLowerCase().includes(key.toLowerCase());
                                                             return (
-                                                                <div key={key} className={`text-center py-1 rounded text-xs font-bold border ${isCorrect ? 'bg-green-100 text-green-700 border-green-300' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
-                                                                    {key.toUpperCase()}
+                                                                <div key={key} className={`p-2 rounded border flex flex-col ${isOptionCorrect ? 'bg-green-50 border-green-200 text-green-800 font-bold' : 'bg-white border-slate-100 text-slate-600'}`}>
+                                                                    <span className="uppercase mr-1 mb-1">{key}.</span> 
+                                                                    <ContentRenderer content={String(val)} />
                                                                 </div>
                                                             );
                                                         })}
                                                     </div>
-                                                </div>
-                                            ) : (
-                                                <div className="grid grid-cols-2 gap-2 text-xs">
-                                                    {Object.entries(q.options || {}).map(([key, val]) => {
-                                                        // Correct Option Logic for Multiple Answers (Includes check)
-                                                        const isOptionCorrect = q.correctOption.toLowerCase().includes(key.toLowerCase());
-                                                        return (
-                                                            <div key={key} className={`p-2 rounded border flex flex-col ${isOptionCorrect ? 'bg-green-50 border-green-200 text-green-800 font-bold' : 'bg-white border-slate-100 text-slate-600'}`}>
-                                                                <span className="uppercase mr-1 mb-1">{key}.</span> 
-                                                                <ContentRenderer content={String(val)} />
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-6 align-top text-right">
-                                            <div className="text-slate-500 font-mono text-xs mb-1">Marks: {q.marks}</div>
-                                            <button className="text-xs text-red-400 hover:text-red-600 font-bold flex items-center justify-end gap-1 ml-auto"><Trash2 size={12}/> Delete</button>
-                                        </td>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-6 align-top text-right">
+                                                <div className="text-slate-500 font-mono text-xs mb-1">Marks: {q.marks}</div>
+                                                <button className="text-xs text-red-400 hover:text-red-600 font-bold flex items-center justify-end gap-1 ml-auto"><Trash2 size={12}/> Delete</button>
+                                            </td>
                                     </tr>
                                 )})}
                                 {paginatedQuestions.length === 0 && (
@@ -1194,6 +1291,15 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
                                     <option value="SUBJECT_MATHS">Maths Only</option>
                                     <option value="SUBJECT_BIOLOGY">Biology Only</option>
                                 </select>
+                                {/* Added Helper Text for Logic Clarification */}
+                                {newExam.examType && (
+                                    <p className="text-[10px] text-amber-600 font-bold mt-1 ml-1 flex items-center gap-1">
+                                        <AlertCircle size={10}/>
+                                        {newExam.examType.includes('ADVANCED') 
+                                            ? "Multi-Choice Enabled" 
+                                            : "Single-Choice Only (Radio Buttons)"}
+                                    </p>
+                                )}
                              </div>
                              <div>
                                 <label className={labelStyle}>Exam Title</label>
@@ -1232,8 +1338,19 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
                                 </div>
                                 <div className="mt-2 pt-2 border-t border-slate-100 flex justify-between items-center">
                                     <span className="text-[10px] text-slate-400 font-mono">{new Date(exam.scheduledAt).toLocaleDateString()}</span>
-                                    {/* Added Delete Button */}
+                                    
                                     <div className="flex items-center gap-2">
+                                        {/* Added PDF Download Button for NEET */}
+                                        {exam.examType && exam.examType.includes('NEET') && (
+                                            <button 
+                                                className="p-1.5 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded transition" 
+                                                onClick={(e) => handleDownloadPDF(e, exam)}
+                                                title="Download PDF"
+                                            >
+                                                <Printer size={12}/>
+                                            </button>
+                                        )}
+
                                         <span className="text-[10px] text-blue-600 font-bold flex items-center gap-1">Manage <ChevronRight size={10}/></span>
                                         <button 
                                             className="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded transition" 
