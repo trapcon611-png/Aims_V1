@@ -55,6 +55,7 @@ interface Question {
   options: any; 
   correctOption: string;
   tags?: string[];
+  type?: string; 
 }
 
 interface Exam {
@@ -131,7 +132,7 @@ const adminApi = {
   },
 
   async getExamById(token: string, id: string) {
-    const res = await fetch(`${API_URL}/exams/${id}`, { // Using public/student endpoint pattern to get full details including questions
+    const res = await fetch(`${API_URL}/exams/${id}`, { 
         headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) throw new Error('Failed to fetch exam details');
@@ -251,15 +252,20 @@ const adminApi = {
 
 // --- HELPER FUNCTIONS ---
 const getQuestionType = (q: Question) => {
-    // Check tags first
+    // 1. Check DB 'type' field explicitly first
+    if (q.type && (q.type.toLowerCase().trim() === 'integer' || q.type.toLowerCase().trim() === 'numerical')) {
+        return 'INTEGER';
+    }
+
+    // 2. Check tags
     if (q.tags && q.tags.length > 0) {
         const lowerTags = q.tags.map(t => t.toLowerCase());
         if (lowerTags.some(t => t.includes('multiple') || t.includes('multi'))) return 'MULTIPLE';
         if (lowerTags.some(t => t.includes('integer') || t.includes('numerical'))) return 'INTEGER';
     }
     
-    // Heuristic: If correctOption looks like a number (e.g. "[4]", "25") and isn't a/b/c/d
-    const ans = q.correctOption.toLowerCase().replace(/[\[\]]/g, '').trim();
+    // 3. Heuristic: If correctOption looks like a number (e.g. "[4]", "25") and isn't A/B/C/D
+    const ans = q.correctOption.replace(/[\[\]'"]/g, '').trim().toLowerCase();
     if (!isNaN(Number(ans)) && !['a','b','c','d'].includes(ans)) return 'INTEGER';
     
     // Default
@@ -267,13 +273,15 @@ const getQuestionType = (q: Question) => {
 };
 
 const getIntegerAnswer = (correctOption: string) => {
-    return correctOption.replace(/[\[\]]/g, '').trim();
+    // Robust cleaner for integer answers stored like [5] or "5" or '5'
+    if (!correctOption) return '';
+    return correctOption.replace(/[\[\]'"]/g, '').trim();
 };
 
 const isImageUrl = (url: string) => {
-    if (!url) return false;
+    if (!url || typeof url !== 'string') return false;
     return (url.startsWith('http') || url.startsWith('/')) && 
-           (url.match(/\.(jpeg|jpg|gif|png|webp|svg)$/) != null || url.includes('cloudinary') || url.includes('blob'));
+           (url.match(/\.(jpeg|jpg|gif|png|webp|svg)$/i) != null || url.includes('cloudinary') || url.includes('blob'));
 };
 
 // --- HELPER COMPONENTS FOR RENDERING ---
@@ -475,7 +483,7 @@ const QuestionSelectorModal = ({
     const [difficulty, setDifficulty] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [page, setPage] = useState(1);
-    const [viewMode, setViewMode] = useState<'SELECT' | 'CONFIRM'>('SELECT'); // Add view mode state
+    const [viewMode, setViewMode] = useState<'SELECT' | 'CONFIRM'>('SELECT');
     
     // Pattern Tracking
     const typeMatch = exam.title.match(/^\[(.*?)\]/);
@@ -530,8 +538,6 @@ const QuestionSelectorModal = ({
         let matchesExamType = true;
         const s = normalizeSubject(q.subject);
 
-        // Allow GENERAL/CHEMISTRY as fallback for seeded data if needed, or stick to strict
-        // Here strict to ensure pattern integrity, but check your DB data
         if (examType.includes('JEE') || examType.includes('CET')) {
             matchesExamType = ['PHYSICS', 'CHEMISTRY', 'MATHS', 'GENERAL'].includes(s);
         } else if (examType.includes('NEET')) {
@@ -554,7 +560,6 @@ const QuestionSelectorModal = ({
     const totalPages = Math.ceil(filteredQuestions.length / ITEMS_PER_PAGE);
     const paginatedQuestions = filteredQuestions.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
 
-    // Reset page on filter change
     useEffect(() => {
         setPage(1);
     }, [search, subject, difficulty]);
@@ -574,7 +579,6 @@ const QuestionSelectorModal = ({
                         <p className="text-xs text-slate-400 mt-1">Paper Generator: <span className="text-amber-400 font-bold">{examType}</span> Pattern</p>
                     </div>
                     <div className="flex items-center gap-4">
-                        {/* Dynamic Stat Bar based on Pattern */}
                         <div className="flex gap-2 text-xs">
                              {target.PHYSICS && <span className={`px-3 py-1 rounded transition-colors ${getCountColor(stats.Physics, target.PHYSICS)}`}>P: {stats.Physics}/{target.PHYSICS}</span>}
                              {target.CHEMISTRY && <span className={`px-3 py-1 rounded transition-colors ${getCountColor(stats.Chemistry, target.CHEMISTRY)}`}>C: {stats.Chemistry}/{target.CHEMISTRY}</span>}
@@ -731,12 +735,15 @@ const QuestionSelectorModal = ({
                             </div>
                             <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
                                 <div className="max-w-4xl mx-auto space-y-6">
-                                    {selectedQuestions.map((q, idx) => (
+                                    {selectedQuestions.map((q, idx) => {
+                                         const qType = getQuestionType(q);
+                                         return (
                                         <div key={q.id} className="p-6 border border-slate-200 rounded-xl bg-white shadow-sm">
                                             <div className="flex justify-between items-start mb-4">
                                                 <div className="flex items-center gap-2">
                                                     <span className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-700 text-sm">{idx + 1}</span>
                                                     <span className="text-xs font-bold bg-amber-50 text-amber-700 px-2 py-0.5 rounded uppercase">{q.subject}</span>
+                                                    <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded">{qType}</span>
                                                 </div>
                                                 <span className="text-xs font-bold text-slate-400">Marks: {q.marks}</span>
                                             </div>
@@ -748,19 +755,27 @@ const QuestionSelectorModal = ({
                                             )}
                                             
                                             {/* Options Display for Review */}
-                                             <div className="grid grid-cols-2 gap-4">
-                                                {Object.entries(q.options || {}).map(([key, val]) => {
-                                                    if (!val) return null;
-                                                    return (
-                                                        <div key={key} className="p-2 border rounded bg-slate-50 text-sm flex items-start gap-2">
-                                                            <span className="font-bold uppercase text-slate-500">{key}.</span>
-                                                            <ContentRenderer content={String(val)} />
-                                                        </div>
-                                                    )
-                                                })}
-                                             </div>
+                                             {qType === 'INTEGER' ? (
+                                                 <div className="p-3 bg-slate-50 border rounded-lg text-sm font-bold text-slate-700">
+                                                     Correct Answer: {getIntegerAnswer(q.correctOption)}
+                                                 </div>
+                                             ) : (
+                                                 <div className="grid grid-cols-2 gap-4">
+                                                    {Object.entries(q.options || {}).map(([key, val]) => {
+                                                        if (!val) return null;
+                                                        // Check answer match (handle multi/single)
+                                                        const isCorrect = q.correctOption.toLowerCase().includes(key.toLowerCase());
+                                                        return (
+                                                            <div key={key} className={`p-2 border rounded bg-slate-50 text-sm flex items-start gap-2 ${isCorrect ? 'border-green-400 bg-green-50 ring-1 ring-green-200' : ''}`}>
+                                                                <span className={`font-bold uppercase ${isCorrect ? 'text-green-700' : 'text-slate-500'}`}>{key}.</span>
+                                                                <ContentRenderer content={String(val)} />
+                                                            </div>
+                                                        )
+                                                    })}
+                                                 </div>
+                                             )}
                                         </div>
-                                    ))}
+                                    )})}
                                 </div>
                             </div>
                             <div className="p-6 border-t border-slate-200 bg-slate-50 flex justify-end">
@@ -966,6 +981,12 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
                  try { opts = JSON.parse(opts); } catch(e) {}
              }
 
+             // Check type to determine rendering style
+             // Use the same helper function if possible, or replicate logic
+             // Simple check here: if correctOption is number and options empty/weird
+             let isInteger = false;
+             if (q.type && (q.type.toLowerCase().includes('integer') || q.type.toLowerCase().includes('numerical'))) isInteger = true;
+             
              const renderOpt = (val: any) => {
                  if(typeof val === 'string' && val.match(/^https?:\/\//)) {
                      return `<img src="${val}" class="opt-img"/>`;
@@ -977,12 +998,15 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
                <div class="q-item">
                  <div class="q-text">Q${idx+1}. ${q.questionText || ''}</div>
                  ${q.questionImage ? `<img src="${q.questionImage}" class="q-img"/>` : ''}
-                 <div class="options">
-                    ${opts.a ? `<div>(A) ${renderOpt(opts.a)}</div>` : ''}
-                    ${opts.b ? `<div>(B) ${renderOpt(opts.b)}</div>` : ''}
-                    ${opts.c ? `<div>(C) ${renderOpt(opts.c)}</div>` : ''}
-                    ${opts.d ? `<div>(D) ${renderOpt(opts.d)}</div>` : ''}
-                 </div>
+                 ${isInteger ? 
+                    `<div style="margin-top:15px; border-bottom:1px solid #000; width:150px; height:30px;">Ans: </div>` :
+                    `<div class="options">
+                        ${opts.a ? `<div>(A) ${renderOpt(opts.a)}</div>` : ''}
+                        ${opts.b ? `<div>(B) ${renderOpt(opts.b)}</div>` : ''}
+                        ${opts.c ? `<div>(C) ${renderOpt(opts.c)}</div>` : ''}
+                        ${opts.d ? `<div>(D) ${renderOpt(opts.d)}</div>` : ''}
+                     </div>`
+                 }
                </div>
              `;
           });
