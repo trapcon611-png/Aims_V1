@@ -20,7 +20,7 @@ services:
   # --- 2. Backend (NestJS) ---
   backend:
     build: 
-      context: ./AIMS_BACKEND
+      context: ./aims_backend
       dockerfile: Dockerfile
     container_name: aims_backend
     restart: always

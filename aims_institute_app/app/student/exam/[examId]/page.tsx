@@ -13,13 +13,14 @@ import {
   Loader2,
   Award,
   LayoutDashboard,
-  RefreshCw,
   Check,
   X as XIcon,
   Circle,
   CheckCircle2,
   Square,
-  CheckSquare
+  CheckSquare,
+  List,
+  FileText
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -55,33 +56,30 @@ interface ExamData {
 
 // --- HELPER FUNCTIONS ---
 
-/**
- * Determines the question interaction type based on Exam Type rules and Question attributes.
- */
 const getQuestionType = (q: Question, examTypeRaw: string = '') => {
     const examType = examTypeRaw.toUpperCase();
 
-    // 1. Check for Integer Type (Priority)
-    // Checks DB 'type' field, 'tags', or if options are empty/null/undefined/empty object
-    const isInteger = 
-        (!q.options || (typeof q.options === 'object' && Object.keys(q.options).length === 0)) ||
-        (q.type && (q.type.toLowerCase().includes('integer') || q.type.toLowerCase().includes('numerical'))) ||
-        (q.tags && q.tags.some(t => t.toLowerCase().includes('integer') || t.toLowerCase().includes('numerical')));
-
-    if (isInteger) {
+    if (q.type && (q.type.toLowerCase().trim() === 'integer' || q.type.toLowerCase().trim() === 'numerical')) {
         return 'INTEGER';
     }
 
-    // 2. Exam Type Logic
-    if (examType.includes('ADVANCE')) {
-        return 'MULTIPLE'; // JEE Advanced allows multi-select
-    }
-    
-    if (examType.includes('MAIN') || examType.includes('NEET')) {
-        return 'SINGLE'; // Mains and NEET are strictly single select
-    }
+    const normalizeOptions = (opts: any) => {
+      if (!opts) return [];
+      if (Array.isArray(opts)) return opts.map(x => String(x).trim());
+      if (typeof opts === "object") return Object.values(opts).map(x => String(x).trim());
+      return [];
+    };
 
-    // 3. Fallback to question metadata if exam type is generic/unknown
+    const cleaned = normalizeOptions(q.options);
+    const hasRealOptions = cleaned.some(v => v && v.toLowerCase() !== "null" && v.toLowerCase() !== "undefined" && v !== "-" && v !== "--" && v.trim() !== "");
+
+    if (!hasRealOptions) return 'INTEGER';
+
+    if (q.tags && q.tags.some(t => t.toLowerCase().includes('integer') || t.toLowerCase().includes('numerical'))) return 'INTEGER';
+
+    if (examType.includes('ADVANCE')) return 'MULTIPLE';
+    if (examType.includes('MAIN') || examType.includes('NEET')) return 'SINGLE';
+
     if (q.type && q.type.toLowerCase().includes('multi')) return 'MULTIPLE';
     if (q.tags && q.tags.some(t => t.toLowerCase().includes('multiple'))) return 'MULTIPLE';
 
@@ -108,7 +106,7 @@ const LatexRenderer = React.memo(({ content }: { content: string }) => {
 
   useEffect(() => {
     const loadKatex = async () => {
-        if ((window as any).katex) return;
+        if ((window as any).katex) { renderMath(); return; }
 
         if (!document.getElementById('katex-css')) {
             const link = document.createElement("link");
@@ -162,7 +160,7 @@ const LatexRenderer = React.memo(({ content }: { content: string }) => {
   }, [content]);
 
   if (!content) return null;
-  return <div ref={containerRef} dangerouslySetInnerHTML={{__html: content}} className="latex-content text-sm md:text-base leading-relaxed"/>;
+  return <div ref={containerRef} dangerouslySetInnerHTML={{__html: content}} className="latex-content text-sm md:text-base leading-relaxed inline"/>;
 });
 LatexRenderer.displayName = 'LatexRenderer';
 
@@ -178,7 +176,7 @@ const ContentRenderer = ({ content, isOption = false }: { content: string, isOpt
                     alt="Content" 
                     className={
                         isOption 
-                        ? "max-w-[300px] max-h-[150px] w-auto h-auto object-contain" 
+                        ? "max-w-[200px] max-h-[120px] w-auto h-auto object-contain" 
                         : "max-w-[90%] max-h-[40vh] h-auto object-contain rounded-md border border-slate-100"
                     } 
                  />
@@ -200,10 +198,14 @@ export default function ExamPage() {
   const [markedForReview, setMarkedForReview] = useState<Record<string, boolean>>({});
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isQuestionPaperOpen, setIsQuestionPaperOpen] = useState(false);
   const [submissionStatus, setSubmissionStatus] = useState<'IDLE' | 'SUBMITTING' | 'COMPLETED'>('IDLE');
-  const [score, setScore] = useState<{ total: number; correct: number; wrong: number } | null>(null);
   const [error, setError] = useState('');
   const [warnings, setWarnings] = useState(0);
+
+  // Time Tracking
+  const [timeSpent, setTimeSpent] = useState<Record<string, number>>({});
+  const lastSwitchTime = useRef<number>(Date.now());
 
   // --- INIT: EXTRACT ID ---
   useEffect(() => {
@@ -266,6 +268,7 @@ export default function ExamPage() {
     const token = getToken();
     
     if (!token) {
+      console.error("Token missing! Checked keys: accessToken, access_token, token, student_token");
       setError("Authentication missing. Please login again.");
       setLoading(false);
       return;
@@ -283,7 +286,7 @@ export default function ExamPage() {
 
       if (!res.ok) {
           if (res.status === 404) throw new Error(`Exam not found.`);
-          if (res.status === 401) throw new Error(`Unauthorized access.`);
+          if (res.status === 401) throw new Error(`Unauthorized access. Please login again.`);
           let errMsg = "Failed to load exam";
           try {
              const err = await res.json();
@@ -301,6 +304,10 @@ export default function ExamPage() {
       const savedReview = localStorage.getItem(`exam_review_${data.attemptId}`);
       if (savedReview) setMarkedForReview(JSON.parse(savedReview));
 
+      // UPDATED: Load Saved Time Spent on Refresh
+      const savedTimeSpent = localStorage.getItem(`exam_timeSpent_${data.attemptId}`);
+      if (savedTimeSpent) setTimeSpent(JSON.parse(savedTimeSpent));
+
       let startTime = parseInt(localStorage.getItem(`exam_start_${data.attemptId}`) || '0');
       if (!startTime) {
           startTime = Date.now();
@@ -316,6 +323,9 @@ export default function ExamPage() {
       } else {
           setTimeLeft(remaining);
       }
+      
+      // Init Timer Ref
+      lastSwitchTime.current = Date.now();
 
     } catch (e: any) {
       console.error("Exam Load Error:", e);
@@ -348,6 +358,30 @@ export default function ExamPage() {
 
 
   // --- HANDLERS ---
+  
+  // Update time spent when switching questions
+  const handleQuestionSwitch = (newIndex: number) => {
+      if (!examData) return;
+      const now = Date.now();
+      const diff = (now - lastSwitchTime.current) / 1000; // seconds
+      
+      const currentQId = examData.questions[currentQIndex]?.id;
+      
+      if (currentQId) {
+          setTimeSpent(prev => {
+              const updated = { ...prev, [currentQId]: (prev[currentQId] || 0) + diff };
+              // Persist to localStorage
+              if (examData.attemptId) {
+                  localStorage.setItem(`exam_timeSpent_${examData.attemptId}`, JSON.stringify(updated));
+              }
+              return updated;
+          });
+      }
+      
+      lastSwitchTime.current = now;
+      setCurrentQIndex(newIndex);
+  };
+
   const handleOptionSelect = (optionKey: string, type: 'SINGLE' | 'MULTIPLE' | 'INTEGER') => {
     if (submissionStatus !== 'IDLE') return;
     const qId = examData?.questions[currentQIndex].id;
@@ -421,10 +455,21 @@ export default function ExamPage() {
         return;
     }
 
+    // Finalize time for the current question
+    const now = Date.now();
+    const diff = (now - lastSwitchTime.current) / 1000;
+    const currentQId = examData?.questions[currentQIndex]?.id;
+    const finalTimeSpent = { ...timeSpent };
+    
+    if (currentQId) {
+        finalTimeSpent[currentQId] = (finalTimeSpent[currentQId] || 0) + diff;
+    }
+
+    // Prepare payload with timeTaken
     const payload = Object.entries(answers).map(([qId, opt]) => ({ 
         questionId: qId, 
-        selectedOption: opt, 
-        timeTaken: 0 
+        selectedOption: Array.isArray(opt) ? opt.join(',') : opt, 
+        timeTaken: Math.round(finalTimeSpent[qId] || 0) // Send rounded seconds
     }));
 
     try {
@@ -436,14 +481,14 @@ export default function ExamPage() {
 
         if (!res.ok) throw new Error("Submission failed");
         
-        const result = await res.json();
-        setScore({ total: result.score, correct: result.correct, wrong: result.wrong });
+        // Success: Status set to COMPLETED which triggers the "Submission Successful" UI
         setSubmissionStatus('COMPLETED');
         
         if (examData?.attemptId) {
             localStorage.removeItem(`exam_answers_${examData.attemptId}`);
             localStorage.removeItem(`exam_review_${examData.attemptId}`);
             localStorage.removeItem(`exam_start_${examData.attemptId}`);
+            localStorage.removeItem(`exam_timeSpent_${examData.attemptId}`); // Clear time records
         }
     } catch (e: any) {
         alert(`Error submitting exam: ${e.message}`);
@@ -457,8 +502,6 @@ export default function ExamPage() {
     const s = seconds % 60;
     return `${h}:${m < 10 ? '0'+m : m}:${s < 10 ? '0'+s : s}`;
   };
-
-  const getCleanAnswer = (raw: string | undefined) => raw ? raw.replace(/[\[\]']/g, '').trim() : '';
 
   // --- RENDER STATES ---
   if (loading) return (
@@ -477,50 +520,24 @@ export default function ExamPage() {
       </div>
   );
 
-  if (submissionStatus === 'COMPLETED' && score && examData) return (
-      <div className="min-h-screen bg-slate-50 p-4 md:p-8 flex flex-col items-center font-sans">
-          <div className="max-w-4xl w-full bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-200">
-              <div className="bg-slate-900 p-8 text-center text-white">
-                  <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4"><Award size={32}/></div>
-                  <h2 className="text-3xl font-black mb-2">Result Analysis</h2>
-                  <p className="text-slate-400">{examData.exam.title}</p>
+  // --- SUCCESS SCREEN (After database push) ---
+  if (submissionStatus === 'COMPLETED') return (
+      <div className="min-h-screen bg-slate-50 p-4 flex flex-col items-center justify-center font-sans">
+          <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-slate-200 p-8 text-center">
+              <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6 animate-in zoom-in duration-300">
+                  <CheckCircle size={40} />
               </div>
-              <div className="p-8 border-b border-slate-100 grid grid-cols-3 gap-6 text-center">
-                  <div className="p-4 bg-blue-50 rounded-xl border border-blue-100"><p className="text-xs text-blue-600 font-bold uppercase">Score</p><p className="text-3xl font-black text-blue-900">{score.total}/{examData.exam.totalMarks}</p></div>
-                  <div className="p-4 bg-green-50 rounded-xl border border-green-100"><p className="text-xs text-green-600 font-bold uppercase">Correct</p><p className="text-3xl font-black text-green-800">{score.correct}</p></div>
-                  <div className="p-4 bg-red-50 rounded-xl border border-red-100"><p className="text-xs text-red-600 font-bold uppercase">Wrong</p><p className="text-3xl font-black text-red-800">{score.wrong}</p></div>
-              </div>
-              <div className="p-8 bg-slate-50/50">
-                  <h3 className="font-bold text-slate-800 mb-6">Question Summary</h3>
-                  <div className="space-y-3">
-                      {examData.questions.map((q, idx) => {
-                          const userAnswer = answers[q.id];
-                          const correct = getCleanAnswer(q.correctAnswer);
-                          let statusColor = 'text-slate-500 bg-slate-100';
-                          let StatusIcon = Circle;
-                          
-                          if (userAnswer) {
-                              if (userAnswer === correct) { statusColor = 'text-green-700 bg-green-100'; StatusIcon = Check; }
-                              else { statusColor = 'text-red-700 bg-red-100'; StatusIcon = XIcon; }
-                          }
-                          return (
-                              <div key={q.id} className="bg-white p-3 rounded-lg border border-slate-200 flex items-center justify-between">
-                                  <div className="flex items-center gap-3">
-                                      <span className="w-6 h-6 rounded bg-slate-100 text-xs font-bold flex items-center justify-center">{idx + 1}</span>
-                                      <span className="text-sm font-medium text-slate-700 truncate max-w-[200px] md:max-w-md">{q.questionText}</span>
-                                  </div>
-                                  <div className={`flex items-center gap-2 px-3 py-1 rounded text-xs font-bold ${statusColor}`}>
-                                      <span className="uppercase">{userAnswer || 'Skipped'}</span>
-                                      <StatusIcon size={14}/>
-                                  </div>
-                              </div>
-                          );
-                      })}
-                  </div>
-              </div>
-              <div className="p-6 border-t border-slate-200 bg-white text-center">
-                  <button onClick={() => window.location.href = '/student'} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold">Return to Dashboard</button>
-              </div>
+              <h2 className="text-2xl font-black text-slate-800 mb-2">Submission Successful!</h2>
+              <p className="text-slate-500 mb-6 text-sm leading-relaxed">
+                  Your exam has been submitted securely. <br/>
+                  Please check the <strong>Results</strong> tab in your dashboard after a few minutes for your score and detailed analysis.
+              </p>
+              <button 
+                  onClick={() => window.location.href = '/student'} 
+                  className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition shadow-lg shadow-slate-200"
+              >
+                  Return to Dashboard
+              </button>
           </div>
       </div>
   );
@@ -531,8 +548,10 @@ export default function ExamPage() {
   const question = questions[currentQIndex];
   const examType = examData?.exam.examType || examData?.exam.title || '';
   const qType = getQuestionType(question, examType);
-  // Check if the FIRST option ('a') looks like an image URL. If so, treat all options as images in a unified view.
-  const isOptionImg = isImageUrl(question.options?.a || '');
+  
+  // Only check for option images if it's NOT an integer question.
+  // This logic is crucial to prevent the integer input from being hidden.
+  const isOptionImg = qType !== 'INTEGER' && isImageUrl(question.options?.a || '');
 
   const optionKeys = Object.keys(question.options || {}).sort();
   const displayOptionKeys = optionKeys.length > 0 ? optionKeys : ['a', 'b', 'c', 'd'];
@@ -552,6 +571,15 @@ export default function ExamPage() {
              <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full font-mono font-bold text-lg border ${timeLeft < 300 ? 'bg-red-50 text-red-600 border-red-200 animate-pulse' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
                 <Clock size={18}/> {formatTime(timeLeft)}
              </div>
+             
+             {/* QUESTION PAPER BUTTON */}
+             <button 
+                onClick={() => setIsQuestionPaperOpen(true)}
+                className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition text-sm font-bold"
+             >
+                <FileText size={18}/> <span className="hidden lg:inline">Question Paper</span>
+             </button>
+
              <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="md:hidden p-2 bg-slate-100 rounded-lg"><Menu size={20}/></button>
          </div>
       </header>
@@ -590,20 +618,25 @@ export default function ExamPage() {
              </div>
 
              {/* Options / Input Area */}
-             <div className="p-4 bg-slate-50 border-t border-slate-200">
-                 {/* Explicitly Check for INTEGER Type First */}
+             <div className="p-4 bg-slate-50 border-t border-slate-200 max-h-[40vh] overflow-y-auto custom-scrollbar shadow-inner">
+                 {/* CRITICAL CHANGE: Explicitly Check for INTEGER Type First and Render Input */}
                  {qType === 'INTEGER' ? (
-                     <div className="flex flex-col items-center justify-center py-6">
-                         <label className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-widest">Numerical Answer</label>
-                         <input 
-                            type="text" 
-                            className="text-2xl font-mono font-bold text-center w-40 p-3 border-2 border-blue-200 rounded-xl focus:border-blue-600 focus:ring-4 focus:ring-blue-100 outline-none transition-all text-slate-900 bg-white shadow-sm" 
-                            placeholder="-" 
-                            value={answers[question.id] || ''} 
-                            onChange={(e) => handleIntegerInput(e.target.value)}
-                            autoFocus
-                        />
-                         <p className="text-[10px] text-slate-400 mt-2 font-medium">Enter integers or decimal values.</p>
+                     <div className="flex flex-col items-center justify-center py-6 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full max-w-sm flex flex-col items-center">
+                             <label className="text-sm font-bold text-slate-600 mb-3 uppercase tracking-widest flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                                Numerical Answer
+                             </label>
+                             <input 
+                                type="text" 
+                                className="text-xl font-mono font-bold text-center w-32 p-2 border-2 border-slate-200 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-100 outline-none transition-all text-slate-800 placeholder-slate-300" 
+                                placeholder="-" 
+                                value={answers[question.id] || ''} 
+                                onChange={(e) => handleIntegerInput(e.target.value)}
+                                autoFocus
+                            />
+                             <p className="text-[11px] text-slate-400 mt-3 font-medium text-center">Type your answer. Integers and decimals allowed.</p>
+                         </div>
                      </div>
                  ) : isOptionImg ? (
                      <div className="flex flex-col items-center">
@@ -612,10 +645,10 @@ export default function ExamPage() {
                              <img 
                                 src={question.options.a} 
                                 alt="Options" 
-                                className="max-w-[400px] w-full max-h-[250px] h-auto object-contain" 
+                                className="max-w-full max-h-[30vh] h-auto object-contain" 
                              />
                          </div>
-                         <div className="flex gap-4 justify-center">
+                         <div className="flex gap-4 justify-center flex-wrap">
                              {displayOptionKeys.map(key => {
                                  const isSelected = qType === 'MULTIPLE' 
                                     ? answers[question.id]?.split(',').includes(key)
@@ -667,7 +700,7 @@ export default function ExamPage() {
 
              {/* Footer Navigation */}
              <div className="p-3 border-t border-slate-200 bg-white flex justify-between items-center gap-3">
-                 <button onClick={() => setCurrentQIndex(prev => Math.max(0, prev - 1))} disabled={currentQIndex === 0} className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg font-bold hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2 transition text-xs md:text-sm"><ChevronLeft size={16}/> Prev</button>
+                 <button onClick={() => handleQuestionSwitch(Math.max(0, currentQIndex - 1))} disabled={currentQIndex === 0} className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg font-bold hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2 transition text-xs md:text-sm"><ChevronLeft size={16}/> Prev</button>
                  
                  <div className="flex gap-2">
                     <button onClick={handleMarkReview} className={`px-3 py-2 rounded-lg font-bold transition flex items-center gap-2 text-xs md:text-sm ${markedForReview[question.id] ? 'bg-orange-100 text-orange-700 border border-orange-200' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
@@ -679,7 +712,7 @@ export default function ExamPage() {
                  {currentQIndex === questions.length - 1 ? (
                      <button onClick={() => handleSubmit(false)} className="px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold shadow-md shadow-green-200 flex items-center gap-2 transition transform active:scale-95 text-xs md:text-sm">Submit <CheckCircle size={16}/></button>
                  ) : (
-                     <button onClick={() => setCurrentQIndex(prev => Math.min(questions.length - 1, prev + 1))} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-md shadow-blue-200 flex items-center gap-2 transition transform active:scale-95 text-xs md:text-sm">Next <ChevronRight size={16}/></button>
+                     <button onClick={() => handleQuestionSwitch(Math.min(questions.length - 1, currentQIndex + 1))} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-md shadow-blue-200 flex items-center gap-2 transition transform active:scale-95 text-xs md:text-sm">Next <ChevronRight size={16}/></button>
                  )}
              </div>
          </div>
@@ -709,7 +742,7 @@ export default function ExamPage() {
                          return ( 
                              <button 
                                 key={q.id} 
-                                onClick={() => { setCurrentQIndex(idx); setIsSidebarOpen(false); }} 
+                                onClick={() => { handleQuestionSwitch(idx); setIsSidebarOpen(false); }} 
                                 className={`aspect-square rounded-md border text-xs font-medium flex items-center justify-center transition-all ${statusClass}`}
                              >
                                  {idx + 1}
@@ -727,6 +760,31 @@ export default function ExamPage() {
              </div>
          </aside>
       </main>
+
+      {/* QUESTION PAPER MODAL */}
+      {isQuestionPaperOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95">
+              <div className="bg-white w-full max-w-4xl h-[80vh] rounded-2xl shadow-2xl flex flex-col">
+                  <div className="p-4 border-b border-slate-100 flex justify-between items-center">
+                      <h3 className="font-bold text-slate-800 flex items-center gap-2"><FileText size={20}/> Question Paper</h3>
+                      <button onClick={() => setIsQuestionPaperOpen(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={20}/></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-6 custom-scrollbar space-y-6">
+                      {questions.map((q, idx) => (
+                          <div key={q.id} className="border-b border-slate-100 pb-4 last:border-none">
+                              <div className="flex gap-2 mb-2">
+                                  <span className="font-bold text-slate-900">Q.{idx+1}</span>
+                                  <div className="flex-1 text-sm text-slate-700">
+                                      <LatexRenderer content={q.questionText} />
+                                      {q.questionImage && <img src={q.questionImage} alt="Question" className="max-w-[200px] h-auto mt-2 rounded border border-slate-200"/>}
+                                  </div>
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+              </div>
+          </div>
+      )}
       
       <style jsx global>{`
         .latex-content img { display: inline-block; vertical-align: middle; }

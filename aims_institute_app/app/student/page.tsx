@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { 
@@ -8,18 +8,16 @@ import {
   Clock, 
   FileText, 
   LogOut, 
-  Menu, 
   User, 
   Award, 
   PlayCircle, 
-  Download, 
   CheckCircle, 
   AlertCircle, 
   Loader2,
   ChevronRight,
   ChevronLeft,
   ChevronUp,
-  Search,
+  ChevronDown,
   LayoutDashboard,
   GraduationCap,
   Eye,       
@@ -29,13 +27,14 @@ import {
   Bell,      
   Megaphone, 
   Zap,
-  ArrowRight 
+  ArrowRight,
+  PieChart
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 const LOGO_PATH = '/logo.png';
 
-// --- TYPES ---
+// --- TYPES (Frontend) ---
 interface Exam {
   id: string;
   title: string;
@@ -48,10 +47,16 @@ interface Exam {
 }
 
 interface QuestionMetric {
-  id: number;
+  id: string | number;
   status: 'CORRECT' | 'WRONG' | 'SKIPPED';
   timeSpent: number;
   viewCount: number;
+  subject?: string;
+  questionText?: string;
+  questionImage?: string; // Added image field
+  selectedOption?: string;
+  correctOption?: string;
+  marks?: number;
 }
 
 interface Result {
@@ -59,7 +64,7 @@ interface Result {
   examTitle: string;
   score: number;
   totalMarks: number;
-  rank: number;
+  rank: number | string;
   date: string;
   analytics?: {
     questions: QuestionMetric[];
@@ -90,20 +95,6 @@ interface StudentProfile {
   avatar?: string;
 }
 
-// --- HELPER: Generate Mock Analytics (Frontend Simulation) ---
-const generateMockAnalytics = (totalQuestions: number = 30) => {
-  const questions: QuestionMetric[] = [];
-  for (let i = 1; i <= totalQuestions; i++) {
-    questions.push({
-      id: i,
-      status: Math.random() > 0.3 ? 'CORRECT' : (Math.random() > 0.5 ? 'WRONG' : 'SKIPPED'),
-      timeSpent: Math.floor(Math.random() * 180) + 30, 
-      viewCount: Math.floor(Math.random() * 5) + 1, 
-    });
-  }
-  return { questions };
-};
-
 // --- API UTILITIES ---
 const studentApi = {
   async login(username: string, password: string) {
@@ -117,20 +108,13 @@ const studentApi = {
   },
 
   async getProfile(token: string) {
-    // Graceful fail if endpoint doesn't exist
     try {
         const res = await fetch(`${API_URL}/auth/profile`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (!res.ok) {
-            console.warn('Profile fetch failed, using local user data');
-            return null;
-        }
+        if (!res.ok) return null;
         return await res.json();
-    } catch (e) {
-        console.warn('Profile fetch error:', e);
-        return null;
-    }
+    } catch (e) { return null; }
   },
 
   async getExams(token: string) {
@@ -143,19 +127,72 @@ const studentApi = {
     } catch (e) { return []; }
   },
 
+  // UPDATED: Fetches 'TestAttempt' records correctly based on Schema
   async getResults(token: string, studentId: string) {
     try {
-      // Assuming endpoint exists or reusing attempts
-      const res = await fetch(`${API_URL}/erp/academics/results?studentId=${studentId}`, {
+      // Trying the endpoint that corresponds to ExamsService.getMyAttempts
+      const res = await fetch(`${API_URL}/exams/my-attempts`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (!res.ok) return [];
-      const data = await res.json();
-      return data.map((d: any) => ({
-        ...d,
-        analytics: generateMockAnalytics(25) // Inject mock analysis
-      }));
-    } catch (e) { return []; }
+      
+      if (!res.ok) {
+          console.warn("Results API fetch failed:", res.status);
+          return [];
+      }
+      
+      // Fix for "Unexpected end of JSON input" error
+      const text = await res.text();
+      if (!text) return []; 
+
+      let attempts;
+      try {
+        attempts = JSON.parse(text);
+      } catch (err) {
+        console.error("Invalid JSON from results API", err);
+        return [];
+      }
+
+      if (!Array.isArray(attempts)) return [];
+      
+      // Map Prisma 'TestAttempt' -> Frontend 'Result'
+      return attempts.map((attempt: any) => {
+        // Map Answers to Analytics
+        const questionMetrics: QuestionMetric[] = (attempt.answers || []).map((ans: any, idx: number) => {
+            let status: 'CORRECT' | 'WRONG' | 'SKIPPED' = 'SKIPPED';
+            if (ans.selectedOption) {
+                status = ans.isCorrect ? 'CORRECT' : 'WRONG';
+            }
+
+            return {
+                id: idx + 1, // Simple sequential ID for display
+                status: status,
+                timeSpent: ans.timeTaken || 0,
+                viewCount: 1, 
+                subject: ans.question?.subject || 'General',
+                questionText: ans.question?.questionText || 'Question text not available',
+                questionImage: ans.question?.questionImage, // Map image
+                selectedOption: ans.selectedOption,
+                correctOption: ans.question?.correctOption, // Map correct option
+                marks: ans.marksAwarded
+            };
+        });
+
+        return {
+            id: attempt.id,
+            examTitle: attempt.exam?.title || 'Unknown Exam',
+            score: attempt.totalScore || 0,
+            totalMarks: attempt.exam?.totalMarks || 0,
+            rank: '-', 
+            date: attempt.submittedAt || attempt.startedAt || new Date().toISOString(),
+            analytics: {
+                questions: questionMetrics
+            }
+        };
+      });
+    } catch (e) { 
+        console.error("Error fetching results", e);
+        return []; 
+    }
   },
   
   async getResources(token: string) {
@@ -181,12 +218,78 @@ const studentApi = {
 
 // --- HELPER: Youtube ID ---
 const getYoutubeId = (url: string) => {
+    if (!url) return null;
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
     const match = url.match(regExp);
     return (match && match[2].length === 11) ? match[2] : null;
 };
 
-// --- COMPONENT: STUDENT LOGIN (BLUE THEME) ---
+// --- LATEX RENDERER COMPONENT (Reused for Results) ---
+const LatexRenderer = React.memo(({ content }: { content: string }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const loadKatex = async () => {
+        if ((window as any).katex) { renderMath(); return; }
+
+        if (!document.getElementById('katex-css')) {
+            const link = document.createElement("link");
+            link.id = 'katex-css';
+            link.rel = "stylesheet";
+            link.href = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css";
+            link.crossOrigin = "anonymous";
+            document.head.appendChild(link);
+        }
+
+        if (!document.getElementById('katex-js')) {
+            const script = document.createElement("script");
+            script.id = 'katex-js';
+            script.src = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js";
+            script.crossOrigin = "anonymous";
+            script.onload = () => loadAutoRender();
+            document.head.appendChild(script);
+        } else {
+            loadAutoRender();
+        }
+    };
+
+    const loadAutoRender = () => {
+        if (!document.getElementById('katex-auto-render')) {
+            const script = document.createElement("script");
+            script.id = 'katex-auto-render';
+            script.src = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js";
+            script.crossOrigin = "anonymous";
+            script.onload = renderMath;
+            document.head.appendChild(script);
+        } else {
+            renderMath();
+        }
+    };
+
+    const renderMath = () => {
+         if (containerRef.current && (window as any).renderMathInElement) {
+             (window as any).renderMathInElement(containerRef.current, {
+                 delimiters: [
+                     {left: '$$', right: '$$', display: true},
+                     {left: '$', right: '$', display: false},
+                     {left: '\\(', right: '\\)', display: false},
+                     {left: '\\[', right: '\\]', display: true}
+                 ],
+                 throwOnError : false
+             });
+         }
+    };
+
+    loadKatex();
+  }, [content]);
+
+  if (!content) return null;
+  return <div ref={containerRef} dangerouslySetInnerHTML={{__html: content}} className="latex-content text-sm leading-relaxed inline"/>;
+});
+LatexRenderer.displayName = 'LatexRenderer';
+
+
+// --- COMPONENT: STUDENT LOGIN ---
 const StudentLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
   const [creds, setCreds] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
@@ -198,8 +301,9 @@ const StudentLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
     setError('');
     try {
       const data = await studentApi.login(creds.username, creds.password);
-      // Allow if role is STUDENT or if role check logic allows it (e.g. simplified for dev)
-      if (data.user.role !== 'STUDENT') throw new Error("Access Restricted: Students Only");
+      // Robust role check
+      const role = data.user?.role?.toUpperCase();
+      if (role !== 'STUDENT') throw new Error("Access Restricted: Students Only");
       onLogin(data);
     } catch (err: any) {
       setError(err.message || 'Login failed');
@@ -210,50 +314,36 @@ const StudentLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
 
   return (
     <div className="min-h-screen w-full flex flex-col justify-center items-center bg-slate-50 font-sans relative overflow-hidden py-10 px-4">
-      {/* Background Gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-blue-900 to-slate-900 opacity-90 z-0"></div>
-      
-      {/* Abstract Shapes */}
       <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-blue-600/30 rounded-full blur-[100px] pointer-events-none"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] bg-cyan-500/20 rounded-full blur-[100px] pointer-events-none"></div>
 
       <div className="relative z-10 w-full max-w-sm">
         <div className="bg-white/90 backdrop-blur-xl border border-white/20 rounded-3xl shadow-2xl overflow-hidden ring-1 ring-white/40">
           <div className="p-8 text-center border-b border-slate-100">
-            {/* LOGO CONTAINER */}
             <div className="relative w-24 h-24 mx-auto mb-6 p-2 bg-white rounded-full shadow-lg ring-4 ring-blue-50">
                <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain p-1" unoptimized />
             </div>
-            
             <h3 className="text-2xl font-black text-slate-800 tracking-tight uppercase">Student Portal</h3>
             <p className="text-blue-600 text-xs mt-2 font-bold uppercase tracking-widest flex items-center justify-center gap-2">
               <GraduationCap size={16}/> Learning Hub
             </p>
           </div>
-          
           <form onSubmit={handleLogin} className="p-8 space-y-5">
             {error && <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-center gap-3 text-red-600 text-xs font-bold"><AlertCircle size={16} /> {error}</div>}
-            
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Student ID</label>
               <input type="text" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all font-mono placeholder:text-slate-400" value={creds.username} onChange={(e) => setCreds({...creds, username: e.target.value})} placeholder="STU-2026-001"/>
             </div>
-            
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Password</label>
               <input type="password" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all font-mono placeholder:text-slate-400" value={creds.password} onChange={(e) => setCreds({...creds, password: e.target.value})} placeholder="••••••••"/>
             </div>
-            
             <button disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-bold text-sm uppercase tracking-wider shadow-lg shadow-blue-200 transition-all disabled:opacity-50 flex items-center justify-center gap-2 mt-2 active:scale-95">
               {loading ? <Loader2 className="animate-spin" size={18} /> : <>Enter Classroom <ChevronRight size={16} /></>}
             </button>
-            
-            <div className="text-center pt-4 border-t border-slate-100">
-               <Link href="/" className="text-xs text-slate-400 hover:text-blue-600 transition-colors">Return to Home</Link>
-            </div>
           </form>
         </div>
-        <p className="text-center text-[10px] text-white/60 mt-6 font-mono">AIMS INSTITUTE • ACADEMIC EXCELLENCE</p>
       </div>
     </div>
   );
@@ -261,16 +351,42 @@ const StudentLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
 
 // --- COMPONENT: RESULT ANALYSIS MODAL ---
 const ResultAnalysisModal = ({ result, onClose }: { result: Result, onClose: () => void }) => {
-  if (!result.analytics) return null;
+  // State for expanding row details
+  const [expandedRow, setExpandedRow] = useState<string | number | null>(null);
+
+  if (!result.analytics || !result.analytics.questions || result.analytics.questions.length === 0) {
+      return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-white w-full max-w-md p-8 rounded-2xl shadow-2xl text-center">
+                 <AlertCircle className="mx-auto text-slate-300 mb-4" size={48} />
+                 <h3 className="text-xl font-bold text-slate-800">Processing Analysis</h3>
+                 <p className="text-slate-500 mt-2 mb-6">Detailed analytics are being generated. Basic scores are available in the table.</p>
+                 <button onClick={onClose} className="px-6 py-2 bg-slate-900 text-white rounded-lg font-bold">Close</button>
+            </div>
+        </div>
+      );
+  }
 
   const { questions } = result.analytics;
   
-  // Calculations
-  const totalTime = questions.reduce((acc, q) => acc + q.timeSpent, 0);
-  const avgTime = Math.round(totalTime / questions.length);
+  // -- CALCULATIONS --
+  const totalTime = questions.reduce((acc, q) => acc + (q.timeSpent || 0), 0);
+  const avgTime = questions.length > 0 ? Math.round(totalTime / questions.length) : 0;
   
-  const slowestQ = questions.reduce((prev, current) => (prev.timeSpent > current.timeSpent) ? prev : current);
-  const mostViewedQ = questions.reduce((prev, current) => (prev.viewCount > current.viewCount) ? prev : current);
+  // Safe reduces with initial values
+  const slowestQ = questions.length > 0 ? questions.reduce((prev, current) => (prev.timeSpent > current.timeSpent) ? prev : current) : { id: '-', timeSpent: 0 };
+  const mostViewedQ = questions.length > 0 ? questions.reduce((prev, current) => (prev.viewCount > current.viewCount) ? prev : current) : { id: '-', viewCount: 0 };
+
+  // Subject-wise Analysis
+  const subjects = questions.reduce((acc, q) => {
+    const sub = q.subject || 'General';
+    if (!acc[sub]) acc[sub] = { total: 0, correct: 0, skipped: 0, wrong: 0 };
+    acc[sub].total++;
+    if (q.status === 'CORRECT') acc[sub].correct++;
+    else if (q.status === 'WRONG') acc[sub].wrong++;
+    else acc[sub].skipped++;
+    return acc;
+  }, {} as Record<string, { total: number; correct: number; skipped: number; wrong: number }>);
 
   const formatTime = (sec: number) => {
     const m = Math.floor(sec / 60);
@@ -278,100 +394,180 @@ const ResultAnalysisModal = ({ result, onClose }: { result: Result, onClose: () 
     return `${m}m ${s}s`;
   };
 
+  const toggleExpand = (id: string | number) => {
+      setExpandedRow(expandedRow === id ? null : id);
+  };
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95 duration-200">
-      <div className="bg-white w-full max-w-4xl h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col relative text-slate-900">
+    <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-white w-full max-w-5xl h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col relative text-slate-900">
         
         {/* HEADER */}
         <div className="bg-slate-900 p-6 text-white flex justify-between items-center shrink-0">
            <div>
               <h2 className="text-xl font-bold tracking-tight">{result.examTitle}</h2>
-              <p className="text-xs text-slate-400 mt-1 flex items-center gap-2">
+              <p className="text-xs text-slate-400 mt-1 flex items-center gap-3">
                  <span className="bg-blue-600 px-2 py-0.5 rounded text-white font-bold">Rank #{result.rank}</span>
-                 <span>Score: {result.score}/{result.totalMarks}</span>
+                 <span className="font-mono text-blue-200">Score: {result.score} / {result.totalMarks}</span>
+                 <span className="text-slate-500">|</span>
+                 <span className="text-slate-400">{new Date(result.date).toLocaleDateString()}</span>
               </p>
            </div>
            <button onClick={onClose} className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition"><X size={20}/></button>
         </div>
 
         {/* CONTENT */}
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+        <div className="flex-1 overflow-y-auto p-6 bg-slate-50 custom-scrollbar">
            
-           {/* KEY INSIGHTS */}
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-              <div className="bg-white p-4 rounded-xl border border-red-100 shadow-sm">
-                 <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-red-50 text-red-600 rounded-lg"><Clock size={18}/></div>
-                    <p className="text-xs font-bold text-slate-500 uppercase">Slowest Question</p>
+           {/* TOP METRICS */}
+           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-white p-4 rounded-xl border border-blue-100 shadow-sm flex flex-col justify-between">
+                 <div className="flex items-center gap-2 mb-2 text-blue-600">
+                    <PieChart size={18}/>
+                    <p className="text-xs font-bold uppercase">Accuracy</p>
                  </div>
-                 <h3 className="text-2xl font-black text-slate-800">Q.{slowestQ.id}</h3>
-                 <p className="text-sm text-red-600 font-bold mt-1">Took {formatTime(slowestQ.timeSpent)}</p>
+                 <h3 className="text-2xl font-black text-slate-800">
+                    {questions.length > 0 ? Math.round((questions.filter(q => q.status === 'CORRECT').length / questions.length) * 100) : 0}%
+                 </h3>
+                 <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                    <div className="bg-blue-600 h-full rounded-full" style={{ width: `${questions.length > 0 ? (questions.filter(q => q.status === 'CORRECT').length / questions.length) * 100 : 0}%` }}></div>
+                 </div>
               </div>
 
-              <div className="bg-white p-4 rounded-xl border border-blue-100 shadow-sm">
-                 <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Eye size={18}/></div>
-                    <p className="text-xs font-bold text-slate-500 uppercase">Most Revisited</p>
+              <div className="bg-white p-4 rounded-xl border border-red-100 shadow-sm">
+                 <div className="flex items-center gap-2 mb-2 text-red-600">
+                    <Clock size={18}/>
+                    <p className="text-xs font-bold uppercase">Slowest Q</p>
+                 </div>
+                 <h3 className="text-2xl font-black text-slate-800">Q.{slowestQ.id}</h3>
+                 <p className="text-xs text-red-600 font-bold mt-1">Took {formatTime(slowestQ.timeSpent)}</p>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl border border-amber-100 shadow-sm">
+                 <div className="flex items-center gap-2 mb-2 text-amber-600">
+                    <Eye size={18}/>
+                    <p className="text-xs font-bold uppercase">Most Viewed</p>
                  </div>
                  <h3 className="text-2xl font-black text-slate-800">Q.{mostViewedQ.id}</h3>
-                 <p className="text-sm text-blue-600 font-bold mt-1">Viewed {mostViewedQ.viewCount} times</p>
+                 <p className="text-xs text-amber-600 font-bold mt-1">Visited {mostViewedQ.viewCount} times</p>
               </div>
 
               <div className="bg-white p-4 rounded-xl border border-purple-100 shadow-sm">
-                 <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-purple-50 text-purple-600 rounded-lg"><Timer size={18}/></div>
-                    <p className="text-xs font-bold text-slate-500 uppercase">Avg Time / Q</p>
+                 <div className="flex items-center gap-2 mb-2 text-purple-600">
+                    <Timer size={18}/>
+                    <p className="text-xs font-bold uppercase">Avg Time/Q</p>
                  </div>
                  <h3 className="text-2xl font-black text-slate-800">{formatTime(avgTime)}</h3>
-                 <p className="text-sm text-purple-600 font-bold mt-1">Pacing Speed</p>
+                 <p className="text-xs text-purple-600 font-bold mt-1">Pacing Speed</p>
               </div>
            </div>
 
-           {/* DETAILED ANALYSIS TABLE */}
+           {/* SUBJECT PERFORMANCE */}
+           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+                <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><BarChart2 size={18}/> Subject Performance</h3>
+                <div className="space-y-4">
+                    {Object.entries(subjects).map(([subject, stats]) => {
+                        const accuracy = stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0;
+                        return (
+                            <div key={subject} className="flex items-center gap-4">
+                                <div className="w-24 text-sm font-bold text-slate-700 truncate">{subject}</div>
+                                <div className="flex-1">
+                                    <div className="flex justify-between text-xs mb-1">
+                                        <span className="font-bold text-slate-600">{accuracy}% Accuracy</span>
+                                        <span className="text-slate-400">{stats.correct}/{stats.total} Correct</span>
+                                    </div>
+                                    <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden flex">
+                                        <div className="bg-green-500 h-full" style={{ width: `${(stats.correct / stats.total) * 100}%` }}></div>
+                                        <div className="bg-red-400 h-full" style={{ width: `${(stats.wrong / stats.total) * 100}%` }}></div>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+           </div>
+
+           {/* DETAILED QUESTION TABLE */}
            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                 <h3 className="font-bold text-slate-800 flex items-center gap-2"><BarChart2 size={18} className="text-blue-600"/> Question Breakdown</h3>
-                 <span className="text-xs text-slate-400 font-mono">25 Questions</span>
+                 <h3 className="font-bold text-slate-800 flex items-center gap-2"><FileText size={18} className="text-blue-600"/> Question Breakdown</h3>
+                 <span className="text-xs text-slate-400 font-mono">{questions.length} Questions</span>
               </div>
-              <div className="overflow-x-auto">
-                 <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
+              <div className="overflow-x-auto max-h-100">
+                 <table className="w-full text-left text-sm relative">
+                    <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs sticky top-0 z-10 shadow-sm">
                        <tr>
                           <th className="px-6 py-3">Q.No</th>
+                          <th className="px-6 py-3">Subject</th>
                           <th className="px-6 py-3">Status</th>
                           <th className="px-6 py-3 text-right">Time Taken</th>
-                          <th className="px-6 py-3 text-right">Views</th>
-                          <th className="px-6 py-3 text-right">Performance</th>
+                          <th className="px-6 py-3 text-right">Insight</th>
+                          <th className="px-6 py-3 text-center">Details</th>
                        </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                        {questions.map((q) => (
-                          <tr key={q.id} className="hover:bg-blue-50/50 transition-colors">
-                             <td className="px-6 py-3 font-bold text-slate-700">Q.{q.id}</td>
-                             <td className="px-6 py-3">
-                                <span className={`px-2 py-1 rounded text-[10px] font-bold ${
-                                   q.status === 'CORRECT' ? 'bg-green-100 text-green-700' : 
-                                   q.status === 'WRONG' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
-                                }`}>
-                                   {q.status}
-                                </span>
-                             </td>
-                             <td className="px-6 py-3 text-right font-mono text-slate-600">
-                                {formatTime(q.timeSpent)}
-                             </td>
-                             <td className="px-6 py-3 text-right font-mono text-slate-600">
-                                {q.viewCount}
-                             </td>
-                             <td className="px-6 py-3 text-right">
-                                {q.timeSpent > avgTime * 1.5 ? (
-                                   <span className="text-[10px] text-red-500 font-bold">Slow</span>
-                                ) : q.timeSpent < avgTime * 0.5 ? (
-                                   <span className="text-[10px] text-blue-500 font-bold">Fast</span>
-                                ) : (
-                                   <span className="text-[10px] text-green-500 font-bold">Avg</span>
-                                )}
-                             </td>
-                          </tr>
+                          <React.Fragment key={q.id}>
+                            <tr className={`hover:bg-blue-50/50 transition-colors cursor-pointer ${expandedRow === q.id ? 'bg-blue-50/30' : ''}`} onClick={() => toggleExpand(q.id)}>
+                                <td className="px-6 py-3 font-bold text-slate-700">Q.{q.id}</td>
+                                <td className="px-6 py-3 text-xs font-bold text-slate-500">{q.subject || '-'}</td>
+                                <td className="px-6 py-3">
+                                    <span className={`px-2 py-1 rounded text-[10px] font-bold ${
+                                    q.status === 'CORRECT' ? 'bg-green-100 text-green-700' : 
+                                    q.status === 'WRONG' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
+                                    }`}>
+                                    {q.status}
+                                    </span>
+                                </td>
+                                <td className="px-6 py-3 text-right font-mono text-slate-600">
+                                    {formatTime(q.timeSpent)}
+                                </td>
+                                <td className="px-6 py-3 text-right">
+                                    {avgTime > 0 && q.timeSpent > avgTime * 2 ? (
+                                    <span className="text-[10px] text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded">Too Slow</span>
+                                    ) : avgTime > 0 && q.timeSpent < avgTime * 0.3 ? (
+                                    <span className="text-[10px] text-blue-500 font-bold bg-blue-50 px-2 py-0.5 rounded">Fast</span>
+                                    ) : (
+                                    <span className="text-[10px] text-slate-400 font-bold">-</span>
+                                    )}
+                                </td>
+                                <td className="px-6 py-3 text-center">
+                                    {expandedRow === q.id ? <ChevronUp size={16} className="text-blue-500"/> : <ChevronDown size={16} className="text-slate-400"/>}
+                                </td>
+                            </tr>
+                            {/* EXPANDED ROW FOR QUESTION DETAILS */}
+                            {expandedRow === q.id && (
+                                <tr className="bg-slate-50 border-b border-slate-100">
+                                    <td colSpan={6} className="px-6 py-4">
+                                        <div className="space-y-3">
+                                            <div className="p-3 bg-white border border-slate-200 rounded-lg">
+                                                <p className="text-xs font-bold text-slate-400 uppercase mb-1">Question</p>
+                                                <LatexRenderer content={q.questionText || "Question text unavailable"} />
+                                                {q.questionImage && (
+                                                    <div className="mt-2">
+                                                        <img src={q.questionImage} alt="Question" className="max-w-[200px] max-h-[150px] object-contain rounded border border-slate-200" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className={`p-3 border rounded-lg ${q.status === 'CORRECT' ? 'bg-green-50 border-green-200' : q.status === 'WRONG' ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200'}`}>
+                                                    <p className="text-xs font-bold text-slate-400 uppercase mb-1">Your Answer</p>
+                                                    <p className={`font-mono font-bold ${q.status === 'CORRECT' ? 'text-green-700' : q.status === 'WRONG' ? 'text-red-700' : 'text-slate-500'}`}>
+                                                        {q.selectedOption ? q.selectedOption.toUpperCase() : <span className="text-slate-400 italic">Skipped</span>}
+                                                    </p>
+                                                </div>
+                                                <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                                                    <p className="text-xs font-bold text-blue-400 uppercase mb-1">Correct Answer</p>
+                                                    <p className="font-mono font-bold text-blue-700">
+                                                        {q.correctOption ? q.correctOption.toUpperCase().replace(/[\[\]'"]/g, '') : "N/A"}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            )}
+                          </React.Fragment>
                        ))}
                     </tbody>
                  </table>
@@ -384,7 +580,7 @@ const ResultAnalysisModal = ({ result, onClose }: { result: Result, onClose: () 
   );
 };
 
-// --- MAIN STUDENT DASHBOARD ---
+// --- COMPONENT: STUDENT DASHBOARD ---
 const StudentDashboard = ({ user, token, onLogout }: { user: any, token: string, onLogout: () => void }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [profile, setProfile] = useState<StudentProfile | null>(null);
@@ -396,7 +592,6 @@ const StudentDashboard = ({ user, token, onLogout }: { user: any, token: string,
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [selectedResult, setSelectedResult] = useState<Result | null>(null);
   
-  // Greeting Logic
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good Morning';
@@ -407,36 +602,25 @@ const StudentDashboard = ({ user, token, onLogout }: { user: any, token: string,
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Initial setup from local user object if available
         setProfile({
             id: user.sub, 
             name: user.username, 
             username: user.username,
-            batch: 'JEE-2026', // Default for now
+            batch: 'JEE-2026', 
             avatar: ''
         });
 
-        // Try to fetch profile from API, fallback to local user data if fails (prevent crash)
-        try {
-            const profileData = await studentApi.getProfile(token);
-            if (profileData) {
-                // If backend returns profile data, update it
-                // setProfile(profileData); // TODO: Type match profile data from backend
-            }
-        } catch(e) {
-            console.warn("Profile API fetch failed, using local session data.");
-        }
+        // Parallel Fetch for efficiency
+        const [examsData, resultsData, resourceData, noticesData] = await Promise.all([
+            studentApi.getExams(token),
+            studentApi.getResults(token, user.sub),
+            studentApi.getResources(token),
+            studentApi.getNotices(token)
+        ]);
 
-        const examsData = await studentApi.getExams(token);
         setExams(Array.isArray(examsData) ? examsData : []);
-        
-        const resultsData = await studentApi.getResults(token, user.sub);
         setResults(Array.isArray(resultsData) ? resultsData : []);
-        
-        const resourceData = await studentApi.getResources(token);
         setResources(Array.isArray(resourceData) ? resourceData : []);
-        
-        const noticesData = await studentApi.getNotices(token);
         setNotices(Array.isArray(noticesData) ? noticesData : []);
 
       } catch (e) {
@@ -452,17 +636,16 @@ const StudentDashboard = ({ user, token, onLogout }: { user: any, token: string,
 
   const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden transition-all duration-300 hover:shadow-md";
 
-  // --- DERIVED DATA ---
   const upcomingExams = exams.filter(e => new Date(e.scheduledAt).getTime() > Date.now())
                              .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
   const nextExam = upcomingExams[0];
 
   const averageScore = results.length > 0 
-    ? Math.round(results.reduce((acc, curr) => acc + (curr.score / curr.totalMarks * 100), 0) / results.length) 
+    ? Math.round(results.reduce((acc, curr) => acc + (curr.totalMarks > 0 ? (curr.score / curr.totalMarks * 100) : 0), 0) / results.length) 
     : 0;
 
-  const latestRank = results.length > 0 ? results[0].rank : null;
-
+  // Since rank isn't in TestAttempt, we check if it's available or not
+  const latestRank = results.length > 0 && results[0].rank !== '-' ? results[0].rank : null;
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
@@ -537,9 +720,9 @@ const StudentDashboard = ({ user, token, onLogout }: { user: any, token: string,
         {/* DASHBOARD TAB */}
         {activeTab === 'dashboard' && (
            <div className="space-y-6 max-w-6xl">
-              
-              {/* WELCOME BANNER */}
-              <div className="bg-gradient-to-r from-blue-700 to-indigo-800 rounded-2xl p-8 text-white shadow-xl relative overflow-hidden">
+             
+             {/* WELCOME BANNER */}
+             <div className="bg-gradient-to-r from-blue-700 to-indigo-800 rounded-2xl p-8 text-white shadow-xl relative overflow-hidden">
                  <div className="absolute top-0 right-0 p-8 opacity-10">
                     <GraduationCap size={150}/>
                  </div>
@@ -553,9 +736,9 @@ const StudentDashboard = ({ user, token, onLogout }: { user: any, token: string,
                         "Success is the sum of small efforts, repeated day in and day out." — Check your upcoming exams and stay prepared.
                     </p>
                  </div>
-              </div>
+             </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                  
                  {/* LEFT COL: STATS & EXAMS */}
                  <div className="lg:col-span-2 space-y-6">
@@ -571,17 +754,17 @@ const StudentDashboard = ({ user, token, onLogout }: { user: any, token: string,
                        </div>
                        
                        <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-6 text-white shadow-lg shadow-blue-200">
-                            <div className="flex justify-between items-start mb-4">
-                                <div>
-                                    <p className="text-blue-100 text-xs font-bold uppercase">Next Exam</p>
-                                    <h3 className="text-xl font-bold mt-1 line-clamp-1" title={nextExam?.title}>{nextExam?.title || 'None Scheduled'}</h3>
-                                </div>
-                                <div className="p-2 bg-white/20 rounded-lg"><Clock size={20}/></div>
-                            </div>
-                            <div className="mt-4 pt-4 border-t border-white/20 flex justify-between items-center text-sm">
-                                <span>{nextExam ? new Date(nextExam.scheduledAt).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '--'}</span>
-                                {nextExam && <span className="bg-white text-blue-700 text-xs px-2 py-0.5 rounded font-bold">Upcoming</span>}
-                            </div>
+                           <div className="flex justify-between items-start mb-4">
+                               <div>
+                                   <p className="text-blue-100 text-xs font-bold uppercase">Next Exam</p>
+                                   <h3 className="text-xl font-bold mt-1 line-clamp-1" title={nextExam?.title}>{nextExam?.title || 'None Scheduled'}</h3>
+                               </div>
+                               <div className="p-2 bg-white/20 rounded-lg"><Clock size={20}/></div>
+                           </div>
+                           <div className="mt-4 pt-4 border-t border-white/20 flex justify-between items-center text-sm">
+                               <span>{nextExam ? new Date(nextExam.scheduledAt).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '--'}</span>
+                               {nextExam && <span className="bg-white text-blue-700 text-xs px-2 py-0.5 rounded font-bold">Upcoming</span>}
+                           </div>
                        </div>
                     </div>
 
@@ -593,7 +776,7 @@ const StudentDashboard = ({ user, token, onLogout }: { user: any, token: string,
                        </div>
                        <div className="divide-y divide-slate-100">
                           {exams.length === 0 ? (
-                              <div className="p-8 text-center text-slate-400 text-sm">No active exams at the moment.</div>
+                             <div className="p-8 text-center text-slate-400 text-sm">No active exams at the moment.</div>
                           ) : (
                               exams.slice(0, 3).map((exam) => (
                                   <div key={exam.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition">
@@ -624,30 +807,30 @@ const StudentDashboard = ({ user, token, onLogout }: { user: any, token: string,
                         <Megaphone size={18} className="text-orange-500"/>
                         <h3 className="font-bold text-slate-800">Notice Board</h3>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar max-h-[400px]">
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar max-h-100">
                         {notices.length === 0 ? (
-                            <div className="text-center text-slate-400 text-sm py-10 italic">No new notices.</div>
+                           <div className="text-center text-slate-400 text-sm py-10 italic">No new notices.</div>
                         ) : (
-                            notices.map((notice, idx) => (
-                                <div key={idx} className="p-3 rounded-xl bg-orange-50/50 border border-orange-100">
-                                    <h4 className="font-bold text-slate-800 text-sm">{notice.title}</h4>
-                                    <p className="text-xs text-slate-600 mt-1 leading-relaxed">{notice.content}</p>
-                                    <p className="text-[10px] text-slate-400 mt-2 font-mono">{new Date(notice.createdAt || Date.now()).toLocaleDateString()}</p>
-                                </div>
-                            ))
+                           notices.map((notice, idx) => (
+                               <div key={idx} className="p-3 rounded-xl bg-orange-50/50 border border-orange-100">
+                                   <h4 className="font-bold text-slate-800 text-sm">{notice.title}</h4>
+                                   <p className="text-xs text-slate-600 mt-1 leading-relaxed">{notice.content}</p>
+                                   <p className="text-[10px] text-slate-400 mt-2 font-mono">{new Date(notice.createdAt || Date.now()).toLocaleDateString()}</p>
+                               </div>
+                           ))
                         )}
                     </div>
                  </div>
 
-              </div>
+             </div>
            </div>
         )}
 
         {/* EXAMS TAB */}
         {activeTab === 'exams' && (
            <div className="space-y-6 max-w-5xl">
-              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2"><FileText size={24} className="text-blue-600"/> Examination Hall</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+             <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2"><FileText size={24} className="text-blue-600"/> Examination Hall</h2>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                  {exams.length === 0 ? (
                     <div className="col-span-2 p-12 text-center text-slate-400 border border-dashed border-slate-300 rounded-xl">No exams scheduled.</div>
                  ) : (
@@ -674,58 +857,58 @@ const StudentDashboard = ({ user, token, onLogout }: { user: any, token: string,
                         </div>
                     ))
                  )}
-              </div>
+             </div>
            </div>
         )}
 
         {/* RESULTS TAB */}
         {activeTab === 'results' && (
            <div className="max-w-5xl">
-              <h2 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2"><Award size={24} className="text-blue-600"/> Performance Reports</h2>
-              <div className={glassPanel + " overflow-hidden"}>
-                  <table className="w-full text-left">
-                      <thead className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase">
-                          <tr>
-                              <th className="px-6 py-4 font-bold">Exam Name</th>
-                              <th className="px-6 py-4 font-bold">Date</th>
-                              <th className="px-6 py-4 font-bold text-right">Score</th>
-                              <th className="px-6 py-4 font-bold text-right">Action</th>
-                          </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                          {results.length === 0 ? (
-                              <tr><td colSpan={4} className="p-8 text-center text-slate-400 italic">No results released yet.</td></tr>
-                          ) : (
-                              results.map((res) => (
-                                  <tr key={res.id} className="hover:bg-slate-50/50 transition">
-                                      <td className="px-6 py-4 font-bold text-slate-800">{res.examTitle}</td>
-                                      <td className="px-6 py-4 text-sm text-slate-500">{new Date(res.date).toLocaleDateString()}</td>
-                                      <td className="px-6 py-4 text-right">
-                                          <span className="font-mono font-bold text-blue-600">{res.score}/{res.totalMarks}</span>
-                                      </td>
-                                      <td className="px-6 py-4 text-right">
-                                          <button 
-                                            onClick={() => setSelectedResult(res)}
-                                            className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded hover:bg-blue-100 transition"
-                                          >
-                                             View Analysis <BarChart2 size={14}/>
-                                          </button>
-                                      </td>
-                                  </tr>
-                              ))
-                          )}
-                      </tbody>
-                  </table>
-              </div>
+             <h2 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2"><Award size={24} className="text-blue-600"/> Performance Reports</h2>
+             <div className={glassPanel + " overflow-hidden"}>
+                 <table className="w-full text-left">
+                     <thead className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase">
+                         <tr>
+                             <th className="px-6 py-4 font-bold">Exam Name</th>
+                             <th className="px-6 py-4 font-bold">Date</th>
+                             <th className="px-6 py-4 font-bold text-right">Score</th>
+                             <th className="px-6 py-4 font-bold text-right">Action</th>
+                         </tr>
+                     </thead>
+                     <tbody className="divide-y divide-slate-100">
+                         {results.length === 0 ? (
+                             <tr><td colSpan={4} className="p-8 text-center text-slate-400 italic">No results available.</td></tr>
+                         ) : (
+                             results.map((res) => (
+                                 <tr key={res.id} className="hover:bg-slate-50/50 transition">
+                                     <td className="px-6 py-4 font-bold text-slate-800">{res.examTitle}</td>
+                                     <td className="px-6 py-4 text-sm text-slate-500">{new Date(res.date).toLocaleDateString()}</td>
+                                     <td className="px-6 py-4 text-right">
+                                         <span className="font-mono font-bold text-blue-600">{res.score}/{res.totalMarks}</span>
+                                     </td>
+                                     <td className="px-6 py-4 text-right">
+                                         <button 
+                                           onClick={() => setSelectedResult(res)}
+                                           className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded hover:bg-blue-100 transition"
+                                         >
+                                            View Analysis <BarChart2 size={14}/>
+                                         </button>
+                                     </td>
+                                 </tr>
+                             ))
+                         )}
+                     </tbody>
+                 </table>
+             </div>
            </div>
         )}
 
         {/* RESOURCES TAB */}
         {activeTab === 'resources' && (
            <div className="max-w-6xl">
-              <h2 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2"><BookOpen size={24} className="text-blue-600"/> Study Material & Lectures</h2>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+             <h2 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2"><BookOpen size={24} className="text-blue-600"/> Study Material & Lectures</h2>
+             
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                  {resources.length === 0 ? (
                      <div className="col-span-3 p-12 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">No materials uploaded yet.</div>
                  ) : (
@@ -743,15 +926,15 @@ const StudentDashboard = ({ user, token, onLogout }: { user: any, token: string,
                                          />
                                      ) : (
                                          <div className="w-full h-full flex items-center justify-center text-slate-300">
-                                             <FileText size={48}/>
+                                              <FileText size={48}/>
                                          </div>
                                      )}
                                      <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors"></div>
                                      <a 
-                                        href={res.url} 
-                                        target="_blank" 
-                                        rel="noreferrer"
-                                        className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20"
+                                       href={res.url} 
+                                       target="_blank" 
+                                       rel="noreferrer"
+                                       className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20"
                                      >
                                          <div className="w-12 h-12 bg-white/90 rounded-full flex items-center justify-center text-red-600 shadow-lg scale-75 group-hover:scale-100 transition-transform">
                                              <PlayCircle size={24} className="fill-current"/>
@@ -776,7 +959,7 @@ const StudentDashboard = ({ user, token, onLogout }: { user: any, token: string,
                          );
                      })
                  )}
-              </div>
+             </div>
            </div>
         )}
 
@@ -788,40 +971,58 @@ const StudentDashboard = ({ user, token, onLogout }: { user: any, token: string,
   );
 };
 
+// --- MAIN PAGE COMPONENT ---
 export default function StudentPage() {
   const [user, setUser] = useState<any>(null);
   const [token, setToken] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const t = localStorage.getItem('student_token');
-    const u = localStorage.getItem('student_user');
+    // Check all potential keys to be safe
+    const t = localStorage.getItem('student_token') || localStorage.getItem('accessToken');
+    const u = localStorage.getItem('student_user') || localStorage.getItem('user');
+    
     if (t && u) {
         try {
             setToken(t);
             setUser(JSON.parse(u));
         } catch (e) {
+            // Clear invalid data
             localStorage.removeItem('student_token');
+            localStorage.removeItem('student_user');
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('user');
         }
     }
     setLoading(false);
   }, []);
 
   const handleLogin = (data: any) => {
-    localStorage.setItem('student_token', data.access_token);
+    // Store robustly
+    const t = data.access_token || data.token;
+    localStorage.setItem('student_token', t);
     localStorage.setItem('student_user', JSON.stringify(data.user));
-    setToken(data.access_token);
+    // Also save as standard keys for other components that might use them
+    localStorage.setItem('accessToken', t);
+    
+    setToken(t);
     setUser(data.user);
   };
 
   const handleLogout = () => {
     localStorage.removeItem('student_token');
     localStorage.removeItem('student_user');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('user');
     setUser(null);
     setToken('');
   };
 
-  if (loading) return null;
+  if (loading) return (
+      <div className="h-screen flex items-center justify-center bg-slate-50">
+          <Loader2 className="animate-spin text-blue-600" size={32}/>
+      </div>
+  );
 
   return user ? <StudentDashboard user={user} token={token} onLogout={handleLogout} /> : <StudentLogin onLogin={handleLogin} />;
 }

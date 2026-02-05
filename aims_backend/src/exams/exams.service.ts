@@ -6,11 +6,10 @@ export class ExamsService {
   constructor(private prisma: PrismaService) {}
 
   async findAll() {
-    // Only return exams that are published
     return this.prisma.exam.findMany({
       where: { isPublished: true },
       orderBy: { scheduledAt: 'desc' },
-      include: { batch: true } // Include batch name for UI
+      include: { batch: true }
     });
   }
 
@@ -21,30 +20,56 @@ export class ExamsService {
     });
   }
 
+  // --- NEW: Get Student Attempts with Analytics Data ---
+  async getMyAttempts(userId: string) {
+    return this.prisma.testAttempt.findMany({
+      where: { 
+        userId,
+        status: { in: ['SUBMITTED', 'EVALUATED'] } // Only show finished exams
+      },
+      include: {
+        exam: {
+          select: { title: true, totalMarks: true } 
+        },
+        answers: {
+          include: {
+            question: {
+              // CRITICAL FIX: Select all fields needed for frontend analysis
+              select: { 
+                  subject: true, 
+                  difficulty: true,
+                  questionText: true,
+                  questionImage: true,
+                  correctOption: true,
+                  options: true 
+              } 
+            }
+          }
+        }
+      },
+      orderBy: { submittedAt: 'desc' }
+    });
+  }
+
   // --- START EXAM LOGIC ---
   async startAttempt(userId: string, examId: string) {
-    // 1. Verify User Exists
     const userExists = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!userExists) throw new BadRequestException('User profile not found.');
 
-    // 2. Verify Exam
     const exam = await this.prisma.exam.findUnique({
       where: { id: examId },
-      include: { questions: true } // Fetch questions to send to client
+      include: { questions: true } 
     });
     if (!exam) throw new NotFoundException('Exam not found');
 
-    // 3. Check for existing attempt
     let attempt = await this.prisma.testAttempt.findFirst({
       where: { userId, examId }
     });
 
-    // If already submitted, block re-entry
     if (attempt && attempt.status === 'SUBMITTED') {
        throw new BadRequestException('You have already submitted this exam.');
     }
 
-    // 4. Create Attempt if new (Start Timer)
     if (!attempt) {
       try {
         attempt = await this.prisma.testAttempt.create({
@@ -60,18 +85,15 @@ export class ExamsService {
       }
     }
 
-    // 5. Sanitize Questions (CRITICAL SECURITY STEP)
-    // We map over questions and REMOVE 'correctOption' so students can't inspect element to cheat
     const sanitizedQuestions = exam.questions.map(q => ({
       id: q.id,
       questionText: q.questionText,
-      questionImage: q.questionImage, // Include Image if present
-      options: q.options, // This is the JSON object {a:..., b:...}
+      questionImage: q.questionImage,
+      options: q.options,
       subject: q.subject,
       marks: q.marks,
       negative: q.negative,
-      // topic: q.topic // Removed as it might not exist on Question model
-      tags: [] // If tags are added to Question model later, pass them here
+      tags: [] 
     }));
 
     return {
@@ -87,33 +109,28 @@ export class ExamsService {
     };
   }
 
-  // --- SUBMIT EXAM LOGIC (UPDATED FOR MULTI/INTEGER) ---
+  // --- SUBMIT EXAM LOGIC ---
   async submitAttempt(userId: string, examId: string, answers: { questionId: string, selectedOption: string, timeTaken: number }[]) {
-    // 1. Fetch Exam with Answer Key
     const exam = await this.prisma.exam.findUnique({
         where: { id: examId },
         include: { questions: true }
     });
     if (!exam) throw new NotFoundException('Exam not found');
 
-    // 2. Validate Attempt
     const attempt = await this.prisma.testAttempt.findFirst({
         where: { userId, examId, status: 'IN_PROGRESS' }
     });
     if (!attempt) throw new BadRequestException('No active attempt found to submit.');
 
-    // 3. Calculate Score
     let totalScore = 0;
-    let physics = 0, chemistry = 0, maths = 0, biology = 0; // Added biology support
+    let physics = 0, chemistry = 0, maths = 0, biology = 0;
     let correct = 0, wrong = 0, skipped = 0;
 
-    // Explicitly typed as any[] to avoid 'never[]' error
     const answerRecords: any[] = [];
 
-    // Loop through every question in the exam
     for (const q of exam.questions) {
         const userAnswer = answers.find(a => a.questionId === q.id);
-        const selected = userAnswer?.selectedOption?.toLowerCase().trim() || null; // Normalize
+        const selected = userAnswer?.selectedOption?.toLowerCase().trim() || null; 
         const timeTaken = userAnswer?.timeTaken || 0;
 
         let marksAwarded = 0;
@@ -122,36 +139,22 @@ export class ExamsService {
         if (!selected) {
             skipped++;
         } else {
-            // --- GRADING LOGIC START ---
             let isMatch = false;
-            
-            // Clean DB Answer: Remove brackets [], quotes '', spaces
-            // E.g., "[A, B]" -> "a,b"
             const dbAnswerRaw = q.correctOption.toLowerCase();
             const dbAnswerClean = dbAnswerRaw.replace(/[\[\]'"]/g, '').trim();
-
-            // Determine Type based on DB Answer format
-            // If it has comma, treat as Multiple Choice Set comparison
             const isMultiple = dbAnswerClean.includes(',');
             
             if (isMultiple) {
-                // MULTIPLE CORRECT: Sort and Compare arrays
                 const dbSet = new Set(dbAnswerClean.split(',').map(s => s.trim()));
                 const userSet = new Set(selected.split(',').map(s => s.trim()));
-                
-                // Exact Match logic (Partial marking can be added here if needed)
                 if (dbSet.size === userSet.size && [...dbSet].every(val => userSet.has(val))) {
                     isMatch = true;
                 }
             } else {
-                // SINGLE or INTEGER
-                // For Integer "[4]", dbAnswerClean is "4". User sends "4".
-                // For Single "[A]", dbAnswerClean is "a". User sends "a".
                 if (selected === dbAnswerClean) {
                     isMatch = true;
                 }
             }
-            // --- GRADING LOGIC END ---
 
             if (isMatch) {
                 isCorrect = true;
@@ -165,14 +168,12 @@ export class ExamsService {
 
         totalScore += marksAwarded;
 
-        // Subject-wise Aggregation
         const subj = q.subject?.toUpperCase() || '';
         if (subj.includes('PHYSICS')) physics += marksAwarded;
         else if (subj.includes('CHEMISTRY')) chemistry += marksAwarded;
         else if (subj.includes('MATH')) maths += marksAwarded;
         else if (subj.includes('BIO')) biology += marksAwarded;
 
-        // Prepare Answer Record
         answerRecords.push({
             attemptId: attempt.id,
             questionId: q.id,
@@ -183,12 +184,8 @@ export class ExamsService {
         });
     }
 
-    // 4. Transaction: Save Answers & Update Attempt
     await this.prisma.$transaction([
-        // 1. Bulk insert detailed answers
         this.prisma.answer.createMany({ data: answerRecords }),
-        
-        // 2. Update the attempt with final score
         this.prisma.testAttempt.update({
             where: { id: attempt.id },
             data: {
@@ -207,31 +204,24 @@ export class ExamsService {
 
     return { 
         success: true, 
-        message: "Exam Submitted Successfully",
-        score: totalScore, 
-        correct,
-        wrong 
+        message: "Exam Submitted Successfully" 
     };
   }
 
-  // --- ADMIN: COPY QUESTIONS TO EXAM ---
   async addQuestionsToExam(examId: string, questionBankIds: string[]) {
-      // 1. Fetch the source questions from QuestionBank
       const sourceQuestions = await this.prisma.questionBank.findMany({
           where: { id: { in: questionBankIds } }
       });
 
       if (sourceQuestions.length === 0) return { count: 0 };
 
-      // 2. Transform them into Exam Questions
-      // We assume the schema has separate 'Question' table for exams distinct from 'QuestionBank'
       const examQuestionsData = sourceQuestions.map(q => ({
           examId,
           questionBankId: q.id,
           questionText: q.questionText,
-          questionImage: q.questionImage, // Copy Image URL
-          solutionImage: q.solutionImage, // Copy Solution URL
-          options: q.options || {}, // JSON copy
+          questionImage: q.questionImage,
+          solutionImage: q.solutionImage,
+          options: q.options || {},
           correctOption: q.correctOption,
           subject: q.subject,
           difficulty: q.difficulty,
@@ -240,9 +230,8 @@ export class ExamsService {
           expectedTime: q.expectedTime
       }));
 
-      // 3. Bulk Insert
       const result = await this.prisma.question.createMany({
-          data: examQuestionsData as any // Type assertion for Prisma compatibility
+          data: examQuestionsData as any 
       });
 
       return { count: result.count };
