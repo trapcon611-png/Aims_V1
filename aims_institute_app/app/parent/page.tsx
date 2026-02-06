@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import Image from 'next/image';
 import { 
   Users, 
   CreditCard, 
@@ -205,13 +204,13 @@ const ParentLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 font-sans relative overflow-hidden">
-       <div className="absolute inset-0 bg-gradient-to-br from-purple-100 via-indigo-50 to-pink-50 opacity-90"></div>
+       <div className="absolute inset-0 bg-linear-to-br from-purple-100 via-indigo-50 to-pink-50 opacity-90"></div>
        <NeuralBackground isDark={false} />
        
        <div className="w-full max-w-md bg-white/80 backdrop-blur-xl p-10 rounded-3xl shadow-2xl border border-purple-100 relative z-10 mx-4">
          <div className="text-center mb-8">
            <div className="relative w-24 h-24 mx-auto mb-4 p-2 bg-white rounded-full shadow-lg">
-             <Image src={LOGO_PATH} alt="Logo" fill className="object-contain" unoptimized />
+             <img src={LOGO_PATH} alt="Logo" className="w-full h-full object-contain" />
            </div>
            <h1 className="text-3xl font-black text-slate-800 tracking-tight uppercase">Parent Portal</h1>
            <p className="text-purple-600 text-sm mt-1 font-bold uppercase tracking-wider">AIMS Institute</p>
@@ -230,7 +229,7 @@ const ParentLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
              <input className="w-full p-4 border border-purple-100 rounded-xl bg-purple-50/30 focus:bg-white outline-none focus:ring-2 focus:ring-purple-500 transition-all font-mono text-lg text-slate-700" type="password" placeholder="••••••••" value={creds.password} onChange={e=>setCreds({...creds, password:e.target.value})} />
            </div>
            
-           <button disabled={loading} className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-purple-500/30 transition-all flex justify-center items-center gap-2 disabled:opacity-70 mt-4 active:scale-95">
+           <button disabled={loading} className="w-full bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-purple-500/30 transition-all flex justify-center items-center gap-2 disabled:opacity-70 mt-4 active:scale-95">
              {loading ? <Loader2 className="animate-spin"/> : <>Secure Login <Sparkles size={18} className="text-purple-200"/></>}
            </button>
            
@@ -262,7 +261,7 @@ const ParentInvoiceModal = ({ data, onClose }: { data: any, onClose: () => void 
           <div className="flex justify-between items-center border-b-4 border-[#c1121f] pb-6 mb-8">
               <div className="flex flex-col gap-2">
                 <div className="relative w-20 h-20">
-                   <Image src={LOGO_PATH} alt="Logo" fill className="object-contain" unoptimized />
+                   <img src={LOGO_PATH} alt="Logo" className="w-full h-full object-contain" />
                 </div>
                 <div>
                     <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase font-serif">RECEIPT</h1>
@@ -449,7 +448,7 @@ const StudentCard = ({ child, onViewInvoice, isDark, token }: { child: ChildFina
       {/* SIDEBAR */}
       <div className={`lg:w-72 ${sidebarBg} border-b lg:border-b-0 lg:border-r p-6 flex flex-col`}>
           <div className="flex items-center gap-4 mb-8">
-            <div className="h-12 w-12 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg">{child.name.charAt(0)}</div>
+            <div className="h-12 w-12 bg-linear-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg">{child.name.charAt(0)}</div>
             <div><h2 className="text-lg font-bold truncate leading-tight">{child.name}</h2><p className="text-xs font-bold mt-1 text-purple-500">{child.batch}</p></div>
           </div>
           <nav className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0">
@@ -467,7 +466,7 @@ const StudentCard = ({ child, onViewInvoice, isDark, token }: { child: ChildFina
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                 
                 {/* PAYMENT CARD */}
-                <div className="p-8 rounded-3xl text-white shadow-2xl relative overflow-hidden bg-gradient-to-br from-purple-600 to-indigo-700">
+                <div className="p-8 rounded-3xl text-white shadow-2xl relative overflow-hidden bg-linear-to-br from-purple-600 to-indigo-700">
                    <div className="flex justify-between items-start mb-8">
                        <div>
                            <p className="text-purple-200 text-xs font-bold uppercase tracking-widest mb-1">Active Installment</p>
@@ -555,7 +554,7 @@ const StudentCard = ({ child, onViewInvoice, isDark, token }: { child: ChildFina
                                         <p className={`text-[10px] font-bold uppercase tracking-wider ${labelColor}`}>Rank</p>
                                         <div className="flex items-center gap-1">
                                             <Trophy size={14} className="text-amber-500"/>
-                                            <p className="text-xl font-black text-amber-500">#{res.rank}</p>
+                                            <p className="text-xl font-black text-amber-500">{res.rank > 0 ? `#${res.rank}` : 'N/A'}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -602,7 +601,7 @@ const ParentDashboard = ({ user, token, onLogout }: { user: any, token: string, 
       
       <header className={`${headerClass} backdrop-blur-md border-b px-6 py-4 flex justify-between items-center sticky top-0 z-50`}>
         <div className="flex items-center gap-3">
-           <div className="relative w-8 h-8"><Image src={LOGO_PATH} alt="Logo" fill className="object-contain" unoptimized /></div>
+           <div className="relative w-8 h-8"><img src={LOGO_PATH} alt="Logo" className="w-full h-full object-contain" /></div>
            <div><h1 className="text-lg font-black leading-none tracking-tight">AIMS PORTAL</h1><p className="text-[10px] font-bold uppercase text-purple-600">Parent Access</p></div>
         </div>
         <div className="flex items-center gap-4">
