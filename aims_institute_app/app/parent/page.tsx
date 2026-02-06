@@ -104,6 +104,7 @@ const parentApi = {
         if(!res.ok) return [];
         return await res.json();
       } catch(e) {
+          console.error("Error fetching results:", e);
           return [];
       }
   }
@@ -204,7 +205,7 @@ const ParentLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 font-sans relative overflow-hidden">
-       <div className="absolute inset-0 bg-linear-to-br from-purple-100 via-indigo-50 to-pink-50 opacity-90"></div>
+       <div className="absolute inset-0 bg-gradient-to-br from-purple-100 via-indigo-50 to-pink-50 opacity-90"></div>
        <NeuralBackground isDark={false} />
        
        <div className="w-full max-w-md bg-white/80 backdrop-blur-xl p-10 rounded-3xl shadow-2xl border border-purple-100 relative z-10 mx-4">
@@ -229,7 +230,7 @@ const ParentLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
              <input className="w-full p-4 border border-purple-100 rounded-xl bg-purple-50/30 focus:bg-white outline-none focus:ring-2 focus:ring-purple-500 transition-all font-mono text-lg text-slate-700" type="password" placeholder="••••••••" value={creds.password} onChange={e=>setCreds({...creds, password:e.target.value})} />
            </div>
            
-           <button disabled={loading} className="w-full bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-purple-500/30 transition-all flex justify-center items-center gap-2 disabled:opacity-70 mt-4 active:scale-95">
+           <button disabled={loading} className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-purple-500/30 transition-all flex justify-center items-center gap-2 disabled:opacity-70 mt-4 active:scale-95">
              {loading ? <Loader2 className="animate-spin"/> : <>Secure Login <Sparkles size={18} className="text-purple-200"/></>}
            </button>
            
@@ -448,7 +449,7 @@ const StudentCard = ({ child, onViewInvoice, isDark, token }: { child: ChildFina
       {/* SIDEBAR */}
       <div className={`lg:w-72 ${sidebarBg} border-b lg:border-b-0 lg:border-r p-6 flex flex-col`}>
           <div className="flex items-center gap-4 mb-8">
-            <div className="h-12 w-12 bg-linear-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg">{child.name.charAt(0)}</div>
+            <div className="h-12 w-12 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg">{child.name.charAt(0)}</div>
             <div><h2 className="text-lg font-bold truncate leading-tight">{child.name}</h2><p className="text-xs font-bold mt-1 text-purple-500">{child.batch}</p></div>
           </div>
           <nav className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0">
@@ -466,7 +467,7 @@ const StudentCard = ({ child, onViewInvoice, isDark, token }: { child: ChildFina
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                 
                 {/* PAYMENT CARD */}
-                <div className="p-8 rounded-3xl text-white shadow-2xl relative overflow-hidden bg-linear-to-br from-purple-600 to-indigo-700">
+                <div className="p-8 rounded-3xl text-white shadow-2xl relative overflow-hidden bg-gradient-to-br from-purple-600 to-indigo-700">
                    <div className="flex justify-between items-start mb-8">
                        <div>
                            <p className="text-purple-200 text-xs font-bold uppercase tracking-widest mb-1">Active Installment</p>
