@@ -49,7 +49,14 @@ interface Enquiry {
   followUpCount: number;
   allotedTo?: string;
 }
-interface Exam { id: string; title: string; }
+interface Exam { 
+  id: string; 
+  title: string; 
+  durationMin?: number; 
+  totalMarks?: number; 
+  scheduledAt?: string; 
+  batch?: { name: string };
+}
 interface ResultRow { id: string; rank: number; studentName: string; physics: number; chemistry: number; maths: number; total: number; }
 interface AttendanceStat { id: string; name: string; present: number; total: number; percentage: number; }
 interface InstallmentPlan { id: number; amount: number; dueDate: string; }
@@ -75,16 +82,30 @@ const erpApi = {
   async createExpense(expenseData: any) { const res = await fetch(`${API_URL}/erp/expenses`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(expenseData) }); if (!res.ok) throw new Error('Failed to save expense'); return await res.json(); },
   async deleteExpense(id: string) { const res = await fetch(`${API_URL}/erp/expenses/${id}`, { method: 'DELETE' }); if (!res.ok) throw new Error('Failed to delete expense'); return await res.json(); },
   async collectFee(data: { studentId: string; amount: number; remarks?: string; paymentMode: string; transactionId: string }) { const res = await fetch(`${API_URL}/erp/fees`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); if (!res.ok) throw new Error('Failed to record fee'); return await res.json(); },
+  async getFeeHistory() { 
+      try { 
+          const res = await fetch(`${API_URL}/erp/fees`); 
+          if (!res.ok) return []; 
+          return await res.json(); 
+      } catch (e) { return []; } 
+  },
   async getSummary() { try { const res = await fetch(`${API_URL}/erp/summary`); if (!res.ok) return { revenue: 0, expenses: 0, profit: 0 }; return await res.json(); } catch (e) { return { revenue: 0, expenses: 0, profit: 0 }; } },
+  
+  // Content Management (Resources & Notices)
   async getResources() { try { const res = await fetch(`${API_URL}/erp/resources`); if (!res.ok) return []; return await res.json(); } catch (e) { return []; } },
   async createResource(data: any) { const res = await fetch(`${API_URL}/erp/resources`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); if (!res.ok) throw new Error('Failed'); return await res.json(); },
   async deleteResource(id: string) { await fetch(`${API_URL}/erp/resources/${id}`, { method: 'DELETE' }); },
+  
   async getNotices() { try { const res = await fetch(`${API_URL}/erp/notices`); if (!res.ok) return []; return await res.json(); } catch (e) { return []; } },
   async createNotice(data: any) { const res = await fetch(`${API_URL}/erp/notices`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); if (!res.ok) throw new Error('Failed'); return await res.json(); },
   async deleteNotice(id: string) { await fetch(`${API_URL}/erp/notices/${id}`, { method: 'DELETE' }); },
+  
+  // CRM
   async getEnquiries() { try { const res = await fetch(`${API_URL}/erp/enquiries`); if (!res.ok) return []; return await res.json(); } catch (e) { return []; } },
   async createEnquiry(data: any) { const res = await fetch(`${API_URL}/erp/enquiries`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); if (!res.ok) throw new Error('Failed'); return await res.json(); },
   async updateEnquiryStatus(id: string, status: string, followUpCount?: number) { const res = await fetch(`${API_URL}/erp/enquiries/${id}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, followUpCount }) }); if (!res.ok) throw new Error('Failed'); return await res.json(); },
+  
+  // Academic Stats
   async getExamResults(examId: string, batchId: string) { try { const res = await fetch(`${API_URL}/erp/academics/results?examId=${examId}&batchId=${batchId}`); if (!res.ok) return []; return await res.json(); } catch (e) { return []; } },
   async getAttendanceStats(batchId: string) { try { const res = await fetch(`${API_URL}/erp/academics/attendance?batchId=${batchId}`); if (!res.ok) return []; return await res.json(); } catch (e) { return []; } },
   async getExams() { try { const res = await fetch(`${API_URL}/erp/exams`); if (!res.ok) return []; return await res.json(); } catch (e) { return []; } }
@@ -144,7 +165,7 @@ const DirectorBackground = () => {
   return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none opacity-80 z-0" />;
 };
 
-// --- COMPONENT: A4 INVOICE MODAL ---
+// --- COMPONENT: A4 INVOICE MODAL (UPDATED) ---
 const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () => void, isGstEnabled: boolean }) => {
   const baseAmount = isGstEnabled ? Math.round(data.amount / 1.18) : data.amount;
   const gstAmount = isGstEnabled ? data.amount - baseAmount : 0;
@@ -158,62 +179,69 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
           @page { size: A4; margin: 0; }
           body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; }
           .print-hidden { display: none !important; }
-          .print-a4 { width: 210mm !important; min-height: 297mm !important; margin: 0 auto !important; border: none !important; box-shadow: none !important; padding: 20mm !important; border-radius: 0 !important; }
+          .print-a4 { width: 210mm !important; min-height: 297mm !important; margin: 0 auto !important; border: none !important; box-shadow: none !important; padding: 15mm !important; border-radius: 0 !important; }
         }
       `}</style>
       
-      <div className="print-a4 bg-white w-[210mm] min-h-[297mm] p-[20mm] relative shadow-2xl my-8 mx-auto flex flex-col justify-between text-slate-900">
+      <div className="print-a4 bg-white w-[210mm] min-h-[297mm] p-[15mm] relative shadow-2xl my-8 mx-auto flex flex-col justify-between text-slate-900">
+        
+        {/* HEADER */}
         <div>
-          <div className="flex justify-between items-center border-b-4 border-[#dc2626] pb-6 mb-8">
+          <div className="flex justify-between items-start border-b-2 border-[#dc2626] pb-6 mb-6">
              <div className="flex flex-col gap-2">
-               <div className="relative w-24 h-24">
+               <div className="relative w-20 h-20">
                   <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain" unoptimized />
                </div>
                <div>
-                 <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase font-serif">AIMS INSTITUTE</h1>
-                 <p className="text-sm font-bold text-[#dc2626] uppercase tracking-wide">Team of IITian's & Dr's</p>
-                 {isGstEnabled && <p className="text-xs font-bold text-slate-500 mt-1">TAX INVOICE</p>}
+                 <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase font-serif">AIMS INSTITUTE</h1>
+                 <p className="text-xs font-bold text-[#dc2626] uppercase tracking-wide">Team of IITian's & Dr's</p>
                </div>
              </div>
-             <div className="text-right">
-               <h2 className="text-xl font-bold text-slate-800">OFFICIAL RECEIPT</h2>
-               <p className="text-sm text-slate-600">123, Knowledge Park, MH</p>
-               <p className="text-sm text-slate-600">contact@aimsinstitute.com</p>
-               <p className="text-sm text-slate-600 font-mono">+91 98765 43210</p>
-               {isGstEnabled && <p className="text-sm font-bold text-slate-800 mt-2">GSTIN: 27AABCU9603R1ZM</p>}
+             <div className="text-right text-xs text-slate-600">
+               <h2 className="text-xl font-bold text-slate-800 mb-2">FEE RECEIPT</h2>
+               <p>Royal Tranquil, 3rd Floor,</p>
+               <p>Above Chitale Bandhu, Pimple Saudagar,</p>
+               <p>Pune, MH 411027</p>
+               <div className="mt-2 font-mono">
+                 <p>+91 87889 40143</p>
+                 <p>+91 87676 50590</p>
+                 <p className="text-blue-600">talentsupport@aimsinstitute.org.in</p>
+               </div>
+               {isGstEnabled && <p className="font-bold text-slate-800 mt-2">GSTIN: 27AABCU9603R1ZM</p>}
              </div>
           </div>
 
-          <div className="flex justify-between mb-10 bg-slate-50 p-6 rounded-lg border border-slate-100">
+          {/* BILL TO INFO */}
+          <div className="flex justify-between mb-8 bg-slate-50 p-4 rounded-lg border border-slate-100">
             <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Billed To Student</p>
-              <h3 className="text-xl font-bold text-slate-900">{data.studentName}</h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Student Details</p>
+              <h3 className="text-lg font-bold text-slate-900">{data.studentName}</h3>
               <p className="text-sm text-slate-600">ID: <span className="font-mono text-[#dc2626]">{data.studentId}</span></p>
               <p className="text-sm text-slate-600">Batch: {data.batch}</p>
-              <p className="text-sm text-slate-600 mt-1">Parent ID: <span className="font-mono font-bold">{data.parentId}</span></p>
             </div>
             <div className="text-right">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Payment Details</p>
-              <p className="text-sm font-bold text-slate-900">Receipt No: {data.id ? data.id.slice(0, 8).toUpperCase() : 'N/A'}</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Receipt Info</p>
+              <p className="text-sm font-bold text-slate-900">#: {data.id ? data.id.slice(0, 8).toUpperCase() : 'N/A'}</p>
               <p className="text-sm text-slate-600">Date: {new Date(data.date || Date.now()).toLocaleDateString()}</p>
-              <div className="mt-2 inline-block bg-white px-3 py-1 rounded text-xs font-bold text-[#dc2626] uppercase border border-[#dc2626]">
-                Mode: {data.paymentMode}
+              <div className="mt-1 inline-block bg-white px-2 py-0.5 rounded text-xs font-bold text-[#dc2626] uppercase border border-[#dc2626]">
+                {data.paymentMode}
               </div>
             </div>
           </div>
 
-          <table className="w-full mb-8 border-collapse">
+          {/* TABLE */}
+          <table className="w-full mb-6 border-collapse">
             <thead>
               <tr className="bg-slate-900 text-white">
-                <th className="py-3 px-4 text-left text-xs font-bold uppercase tracking-wider">Description</th>
-                <th className="py-3 px-4 text-right text-xs font-bold uppercase tracking-wider">Amount</th>
+                <th className="py-2 px-4 text-left text-xs font-bold uppercase tracking-wider">Description</th>
+                <th className="py-2 px-4 text-right text-xs font-bold uppercase tracking-wider">Amount</th>
               </tr>
             </thead>
             <tbody>
               <tr className="border-b border-slate-200">
                 <td className="py-4 px-4">
-                  <p className="font-bold text-slate-800">Tuition Fee Payment</p>
-                  <p className="text-xs text-slate-500 italic mt-1">Ref: {data.transactionId || 'N/A'}</p>
+                  <p className="font-bold text-slate-800">Tuition / Academic Fees</p>
+                  <p className="text-xs text-slate-500 italic mt-1">Txn Ref: {data.transactionId || 'N/A'}</p>
                   <p className="text-xs text-slate-500">{data.remarks}</p>
                 </td>
                 <td className="py-4 px-4 text-right font-mono font-bold text-slate-800">
@@ -222,37 +250,57 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
               </tr>
               {isGstEnabled && (
                 <>
-                  <tr className="border-b border-slate-100 text-sm">
-                    <td className="py-2 px-4 text-slate-600">CGST (9%)</td>
-                    <td className="py-2 px-4 text-right font-mono text-slate-600">₹{cgst.toLocaleString()}</td>
+                  <tr className="border-b border-slate-100 text-xs">
+                    <td className="py-1 px-4 text-slate-600">CGST (9%)</td>
+                    <td className="py-1 px-4 text-right font-mono text-slate-600">₹{cgst.toLocaleString()}</td>
                   </tr>
-                  <tr className="border-b border-slate-100 text-sm">
-                    <td className="py-2 px-4 text-slate-600">SGST (9%)</td>
-                    <td className="py-2 px-4 text-right font-mono text-slate-600">₹{sgst.toLocaleString()}</td>
+                  <tr className="border-b border-slate-100 text-xs">
+                    <td className="py-1 px-4 text-slate-600">SGST (9%)</td>
+                    <td className="py-1 px-4 text-right font-mono text-slate-600">₹{sgst.toLocaleString()}</td>
                   </tr>
                 </>
               )}
             </tbody>
           </table>
 
-          <div className="flex justify-end mb-12">
-            <div className="w-1/2 border-t-2 border-slate-900 pt-4">
+          {/* TOTALS */}
+          <div className="flex justify-end mb-8">
+            <div className="w-1/2 border-t-2 border-slate-900 pt-2">
               <div className="flex justify-between items-center">
-                <span className="text-xl font-black text-slate-900 uppercase">Grand Total</span>
-                <span className="text-2xl font-black text-[#dc2626]">₹{(data.amount || 0).toLocaleString()}</span>
+                <span className="text-lg font-black text-slate-900 uppercase">Grand Total</span>
+                <span className="text-xl font-black text-[#dc2626]">₹{(data.amount || 0).toLocaleString()}</span>
               </div>
-              <div className="flex justify-between items-center mt-2 text-slate-500">
-                <span className="text-sm font-bold">Balance Remaining</span>
-                <span className="text-sm font-bold">₹{(data.balanceAfter || 0).toLocaleString()}</span>
+              <div className="flex justify-between items-center mt-1 text-slate-500 text-xs">
+                <span className="font-bold">Remaining Fee Balance</span>
+                <span className="font-bold">₹{(data.balanceAfter || 0).toLocaleString()}</span>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="border-t border-slate-200 pt-6 text-center">
-          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mb-2">Thank you for your payment</p>
-          <p className="text-[10px] text-slate-400">This is a computer-generated document. No signature required.</p>
-          <p className="text-[10px] text-slate-400">AIMS Institute • {new Date().getFullYear()}</p>
+        {/* FOOTER & TERMS */}
+        <div className="border-t-2 border-slate-200 pt-4">
+          <h4 className="text-[10px] font-bold text-slate-800 uppercase mb-2">Payment Terms & Conditions</h4>
+          <ul className="text-[9px] text-slate-500 space-y-1 list-disc pl-3 text-justify leading-tight">
+            <li>The institute will provide breakdown of fees (tuition, registration, etc.) at the start of the academic term.</li>
+            <li>All fees must be paid by the specified due date(s). Deadlines are provided at the start of the term.</li>
+            <li><strong>Late Payment:</strong> If fees are not paid by the due date, a late fee of <strong>₹1200/-</strong> will be charged per month overdue.</li>
+            <li>The institute reserves the right to suspend the student if constantly absent or if fees are unpaid after a specified period.</li>
+            <li>Fees paid are <strong>non-refundable</strong> except in special circumstances.</li>
+            <li>Parents will receive a payment confirmation via WhatsApp or receipt copy after each transaction.</li>
+            <li>Withdrawal Policy: If a student withdraws after the term has started, no refund will be provided.</li>
+            <li>Registration will be cancelled without notification for misbehavior with teachers.</li>
+          </ul>
+          <div className="mt-4 flex justify-between items-end">
+             <div className="text-[9px] text-slate-400">
+               <p>Generated by AIMS ERP • {new Date().toLocaleString()}</p>
+               <p>This is a computer-generated receipt.</p>
+             </div>
+             <div className="text-right">
+                <div className="h-10 w-32 border-b border-slate-300 mb-1"></div>
+                <p className="text-[10px] font-bold text-slate-800">Authorized Signature</p>
+             </div>
+          </div>
         </div>
 
         <div className="absolute top-4 -right-16 flex flex-col gap-2 print-hidden">
@@ -282,9 +330,11 @@ const DirectorLogin = ({ onUnlock }: { onUnlock: () => void }) => {
       <div className="relative z-10 w-full max-w-sm">
         <div className="bg-gradient-to-br from-red-900 to-red-800 backdrop-blur-xl border border-red-700/50 rounded-3xl shadow-2xl overflow-hidden ring-1 ring-white/10">
           <div className="p-8 text-center border-b border-red-700/50">
-            {/* LOGO CONTAINER: Matches Parent Panel Style */}
-            <div className="relative w-24 h-24 mx-auto mb-6 p-2 bg-white rounded-full shadow-lg">
-                <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain" unoptimized />
+            {/* LOGO CONTAINER: Matches Landing Page Style */}
+            <div className="relative w-24 h-24 mx-auto mb-6 bg-white rounded-full shadow-[0_0_20px_rgba(255,255,255,0.2)] ring-4 ring-white/20">
+                <div className="relative w-full h-full bg-white rounded-full overflow-hidden">
+                    <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain p-2" unoptimized />
+                </div>
             </div>
             
             <h3 className="text-2xl font-bold text-white tracking-tight">Director Console</h3>
@@ -315,7 +365,6 @@ const DirectorLogin = ({ onUnlock }: { onUnlock: () => void }) => {
     </div>
   );
 };
-
 // --- MAIN DIRECTOR DASHBOARD ---
 export default function DirectorPage() {
   const [isUnlocked, setIsUnlocked] = useState(false);
@@ -334,8 +383,8 @@ export default function DirectorPage() {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
-  const [results, setResults] = useState<ResultRow[]>([]);
-  
+  const [feeHistory, setFeeHistory] = useState<any[]>([]);
+
   // Pagination & Invoice & Forms
   const [directoryPage, setDirectoryPage] = useState(1);
   const [enquiryPage, setEnquiryPage] = useState(1);
@@ -344,6 +393,11 @@ export default function DirectorPage() {
   const [currentInvoice, setCurrentInvoice] = useState<any>(null);
   const [isGstEnabled, setIsGstEnabled] = useState(false);
   
+  // Search States
+  const [feeSearch, setFeeSearch] = useState('');
+  const [enquirySearch, setEnquirySearch] = useState('');
+  const [enquiryDateFilter, setEnquiryDateFilter] = useState('');
+
   const [admissionData, setAdmissionData] = useState({
     studentName: '', studentId: '', studentPassword: '', studentPhone: '', 
     address: '', batchId: '', fees: 0, waiveOff: 0, penalty: 0, 
@@ -359,14 +413,7 @@ export default function DirectorPage() {
   const [noticeForm, setNoticeForm] = useState({ title: '', content: '', batchId: '' });
   const [enquiryForm, setEnquiryForm] = useState({ studentName: '', mobile: '', course: '', allotedTo: '', remarks: '' });
   const [status, setStatus] = useState('');
-  const [isMarksModalOpen, setIsMarksModalOpen] = useState(false);
-  const [selectedStudentForMarks, setSelectedStudentForMarks] = useState<StudentRecord | null>(null);
-  const [marksForm, setMarksForm] = useState({ examId: '', physics: 0, chemistry: 0, maths: 0 });
-  const [isAttendanceMode, setIsAttendanceMode] = useState(false);
-  const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
-  const [attendanceBatchId, setAttendanceBatchId] = useState('');
-  const [attendanceData, setAttendanceData] = useState<Record<string, boolean>>({});
-
+  
   // --- PERSISTENCE & OFFLINE LOGIC ---
   useEffect(() => { if (typeof window !== 'undefined') { const session = localStorage.getItem('director_session'); if (session) setIsUnlocked(true); } setIsOnline(navigator.onLine); const goOnline = () => { setIsOnline(true); syncOfflineQueue(); }; const goOffline = () => setIsOnline(false); window.addEventListener('online', goOnline); window.addEventListener('offline', goOffline); return () => { window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline); }; }, []);
   useEffect(() => { if (isUnlocked && isOnline) refreshData(); }, [isUnlocked, activeTab, isOnline]);
@@ -374,13 +421,41 @@ export default function DirectorPage() {
 
   const syncOfflineQueue = async () => { if (typeof window === 'undefined') return; const queue = JSON.parse(localStorage.getItem('offline_queue') || '[]'); if (queue.length === 0) return; setStatus('Syncing...'); const remainingQueue = []; for (const item of queue) { try { if (item.type === 'ADMISSION') await erpApi.registerStudent(item.payload); if (item.type === 'ENQUIRY') await erpApi.createEnquiry(item.payload); } catch (e) { remainingQueue.push(item); } } localStorage.setItem('offline_queue', JSON.stringify(remainingQueue)); setStatus(remainingQueue.length === 0 ? 'Sync Complete!' : `Sync Partial.`); refreshData(); };
   const saveToOfflineQueue = (type: string, payload: any) => { const queue = JSON.parse(localStorage.getItem('offline_queue') || '[]'); queue.push({ type, payload, timestamp: Date.now() }); localStorage.setItem('offline_queue', JSON.stringify(queue)); setStatus('Saved Offline.'); };
-  const refreshData = async () => { if (!isOnline) return; setIsLoading(true); if (['users', 'directory', 'academics', 'batches', 'content', 'enquiries', 'accounts'].includes(activeTab)) { erpApi.getBatches().then(setBatches); } if (['users', 'directory', 'academics', 'accounts'].includes(activeTab)) { erpApi.getStudents().then(setStudents); } if (activeTab === 'academics') { erpApi.getExams().then(setExams); } if (activeTab === 'accounts') { erpApi.getExpenses().then(setExpenses); erpApi.getSummary().then(setSummary); } if (activeTab === 'content') { erpApi.getResources().then(setResources); erpApi.getNotices().then(setNotices); } if (activeTab === 'enquiries') { erpApi.getEnquiries().then(setEnquiries); } setIsLoading(false); };
+  
+  const refreshData = async () => { 
+      if (!isOnline) return; 
+      setIsLoading(true); 
+      if (['users', 'directory', 'academics', 'batches', 'content', 'enquiries', 'accounts'].includes(activeTab)) { erpApi.getBatches().then(setBatches); } 
+      if (['users', 'directory', 'academics', 'accounts'].includes(activeTab)) { erpApi.getStudents().then(setStudents); } 
+      if (activeTab === 'academics') { erpApi.getExams().then(setExams); } 
+      if (activeTab === 'accounts') { 
+          erpApi.getExpenses().then(setExpenses); 
+          erpApi.getSummary().then(setSummary); 
+          try {
+             const res = await fetch(`${API_URL}/erp/fees`);
+             if(res.ok) setFeeHistory(await res.json());
+          } catch(e) {}
+      } 
+      if (activeTab === 'content') { erpApi.getResources().then(setResources); erpApi.getNotices().then(setNotices); } 
+      if (activeTab === 'enquiries') { erpApi.getEnquiries().then(setEnquiries); } 
+      setIsLoading(false); 
+  };
 
   const filteredStudents = students.filter(s => { const query = searchQuery.toLowerCase(); return s.name.toLowerCase().includes(query) || s.studentId.toLowerCase().includes(query) || s.parentId.toLowerCase().includes(query) || s.parentMobile.toLowerCase().includes(query); });
   const paginatedStudents = filteredStudents.slice((directoryPage - 1) * ITEMS_PER_PAGE, directoryPage * ITEMS_PER_PAGE);
   const totalDirectoryPages = Math.ceil(filteredStudents.length / ITEMS_PER_PAGE);
-  const paginatedEnquiries = enquiries.slice((enquiryPage - 1) * ITEMS_PER_PAGE, enquiryPage * ITEMS_PER_PAGE);
-  const totalEnquiryPages = Math.ceil(enquiries.length / ITEMS_PER_PAGE);
+
+  // --- ENQUIRY FILTERING LOGIC ---
+  const filteredEnquiries = enquiries.filter(enq => {
+      const matchesSearch = enq.studentName.toLowerCase().includes(enquirySearch.toLowerCase()) || 
+                            enq.mobile.includes(enquirySearch);
+      const matchesDate = enquiryDateFilter 
+          ? new Date(enq.createdAt).toISOString().split('T')[0] === enquiryDateFilter 
+          : true;
+      return matchesSearch && matchesDate;
+  });
+  const paginatedEnquiries = filteredEnquiries.slice((enquiryPage - 1) * ITEMS_PER_PAGE, enquiryPage * ITEMS_PER_PAGE);
+  const totalEnquiryPages = Math.ceil(filteredEnquiries.length / ITEMS_PER_PAGE);
 
   useEffect(() => { if (admissionData.batchId) { const selectedBatch = batches.find(b => b.id === admissionData.batchId); if (selectedBatch && selectedBatch.fee) { setAdmissionData(prev => ({ ...prev, fees: selectedBatch.fee })); } } }, [admissionData.batchId, batches]);
   useEffect(() => { let basePayable = Math.max(0, admissionData.fees - admissionData.waiveOff); if (admissionData.withGst) { basePayable = Math.round(basePayable * 1.18); } const count = admissionData.installments || 1; const baseAmount = Math.floor(basePayable / count); const remainder = basePayable % count; const newSchedule: InstallmentPlan[] = []; const startDate = new Date(admissionData.agreedDate); for (let i = 0; i < count; i++) { const date = new Date(startDate); date.setMonth(startDate.getMonth() + i); newSchedule.push({ id: i + 1, amount: i === 0 ? baseAmount + remainder : baseAmount, dueDate: date.toISOString().split('T')[0] }); } setAdmissionData(prev => ({ ...prev, installmentSchedule: newSchedule })); }, [admissionData.fees, admissionData.waiveOff, admissionData.installments, admissionData.agreedDate, admissionData.withGst]);
@@ -392,38 +467,59 @@ export default function DirectorPage() {
   const handleAddBatch = async (e: React.FormEvent) => { e.preventDefault(); try { await erpApi.createBatch(newBatch); setNewBatch({ name: '', startYear: '', strength: 0, fee: 0 }); refreshData(); } catch (e) { alert("Failed"); } };
   const handleAddExpense = async (e: React.FormEvent) => { e.preventDefault(); try { await erpApi.createExpense(newExpense); setNewExpense({ title: '', amount: 0, category: 'General' }); refreshData(); } catch (e) { alert("Failed"); } };
   const handleDeleteExpense = async (id: string) => { if (!confirm("Delete?")) return; try { await erpApi.deleteExpense(id); refreshData(); } catch (e) { alert("Failed"); } };
-  const handleCollectFee = async (e: React.FormEvent) => { e.preventDefault(); if (!feeForm.studentId || feeForm.amount <= 0) return alert("Invalid Input"); const student = students.find(s => s.id === feeForm.studentId); if (!student) return; try { const res = await erpApi.collectFee(feeForm); setIsGstEnabled(feeForm.withGst); setCurrentInvoice({ id: res.id || 'INV-' + Date.now(), studentName: student.name, studentId: student.studentId, parentId: student.parentId, batch: student.batch, amount: feeForm.amount, date: new Date().toISOString(), remarks: feeForm.remarks || 'Fee Payment', paymentMode: feeForm.paymentMode, transactionId: res.transactionId || feeForm.transactionId, balanceAfter: (student.feeRemaining || 0) - feeForm.amount }); setShowInvoice(true); setFeeForm({ studentId: '', amount: 0, remarks: '', paymentMode: 'CASH', transactionId: '', withGst: false }); refreshData(); } catch (e) { alert("Failed"); } };
-  const handleSaveMarks = async () => { try { await erpApi.updateMarks({ studentId: selectedStudentForMarks?.id, ...marksForm }); alert("Saved"); setIsMarksModalOpen(false); } catch (e) { alert("Failed"); } };
-  const handleSaveAttendance = async () => { if(!attendanceBatchId) return alert("Select Batch"); try { await erpApi.saveAttendance({ date: attendanceDate, batchId: attendanceBatchId, records: attendanceData }); alert("Saved"); setIsAttendanceMode(false); } catch (e) { alert("Failed"); } };
+  const handleCollectFee = async (e: React.FormEvent) => { 
+      e.preventDefault(); 
+      if (!feeForm.studentId || feeForm.amount <= 0) return alert("Invalid Input"); 
+      const student = students.find(s => s.id === feeForm.studentId); 
+      if (!student) return; 
+      
+      try { 
+          // 1. Submit Fee
+          const res = await erpApi.collectFee(feeForm); 
+          
+          // 2. Prepare Invoice Data
+          setIsGstEnabled(feeForm.withGst); 
+          setCurrentInvoice({ 
+              id: res.id || 'INV-' + Date.now(), 
+              studentName: student.name, 
+              studentId: student.studentId, 
+              parentId: student.parentId, 
+              batch: student.batch, 
+              amount: feeForm.amount, 
+              date: new Date().toISOString(), 
+              remarks: feeForm.remarks || 'Fee Payment', 
+              paymentMode: feeForm.paymentMode, 
+              transactionId: res.transactionId || feeForm.transactionId, 
+              balanceAfter: (student.feeRemaining || 0) - feeForm.amount 
+          }); 
+          
+          // 3. Show Invoice
+          setShowInvoice(true); 
+          
+          // 4. Reset Form
+          setFeeForm({ studentId: '', amount: 0, remarks: '', paymentMode: 'CASH', transactionId: '', withGst: false }); 
+          
+          // 5. CRITICAL FIX: Explicitly fetch new history and update state immediately
+          const updatedHistory = await erpApi.getFeeHistory(); // Make sure this API method exists in erpApi
+          setFeeHistory(updatedHistory);
+          
+      } catch (e) { 
+          alert("Failed to record fee"); 
+      } 
+  };
+  
+  // NEW HANDLERS FOR CONTENT TAB
   const handlePublishVideo = async (e: React.FormEvent) => { e.preventDefault(); try { await erpApi.createResource({ ...contentForm, type: 'VIDEO' }); alert("Published"); setContentForm({ title: '', url: '', batchId: '' }); refreshData(); } catch (e) { alert("Failed"); } };
   const handlePostNotice = async (e: React.FormEvent) => { e.preventDefault(); try { await erpApi.createNotice(noticeForm); alert("Posted"); setNoticeForm({ title: '', content: '', batchId: '' }); refreshData(); } catch (e) { alert("Failed"); } };
-  const handleDeleteResource = async (id: string) => { 
-    if (confirm("Delete?")) { 
-      try { 
-        await erpApi.deleteResource(id); 
-        refreshData(); 
-      } catch (e) { 
-        alert("Failed"); 
-      } 
-    } 
-  };
-  const handleDeleteNotice = async (id: string) => { 
-    if (confirm("Delete?")) { 
-      try { 
-        await erpApi.deleteNotice(id); 
-        refreshData(); 
-      } catch (e) { 
-        alert("Failed"); 
-      } 
-    } 
-  };
+  const handleDeleteResource = async (id: string) => { if (confirm("Delete?")) { try { await erpApi.deleteResource(id); refreshData(); } catch (e) { alert("Failed"); } } };
+  const handleDeleteNotice = async (id: string) => { if (confirm("Delete?")) { try { await erpApi.deleteNotice(id); refreshData(); } catch (e) { alert("Failed"); } } };
+
   const handleUpdateEnquiryStatus = async (id: string, newStatus: string, followUp?: number) => { try { await erpApi.updateEnquiryStatus(id, newStatus, followUp); refreshData(); } catch (e) { alert("Failed"); } };
-  const toggleAttendance = (studentId: string) => { setAttendanceData(prev => ({ ...prev, [studentId]: !prev[studentId] })); };
   const handleLogout = () => { if(typeof window !== 'undefined') localStorage.removeItem('director_session'); setIsUnlocked(false); };
 
   if (!isUnlocked) return <DirectorLogin onUnlock={() => setIsUnlocked(true)} />;
 
-  // --- THEME STYLES (PURE LIGHT MODE) ---
+  // --- THEME STYLES ---
   const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl transition-all duration-300";
   const inputStyle = "w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:ring-2 focus:ring-[#c1121f] outline-none transition";
   const labelStyle = "block text-[10px] font-bold text-slate-500 uppercase mb-1";
@@ -431,12 +527,11 @@ export default function DirectorPage() {
   return (
     <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
       
-      {/* SIDEBAR - DARK SLATE FOR CONTRAST */}
+      {/* SIDEBAR */}
       <aside className={`bg-slate-900 border-r border-slate-800 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-64'} shadow-lg relative z-20`}>
         <div className={`p-6 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
           {!isSidebarCollapsed && (
             <div className="flex items-center gap-2">
-              {/* LOGO CONTAINER - SIDEBAR (UPDATED) */}
               <div className="relative w-12 h-12 p-1 bg-white rounded-full shadow-md">
                  <div className="relative w-full h-full bg-white rounded-full overflow-hidden">
                     <Image src={LOGO_PATH} alt="Logo" fill className="object-contain p-0.5" unoptimized />
@@ -480,10 +575,12 @@ export default function DirectorPage() {
         </div>
       </aside>
 
+      {/* MAIN CONTENT */}
       <main className="flex-1 overflow-auto p-4 md:p-8 relative bg-white/50">
         {!isOnline && <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg z-50 flex items-center gap-2"><WifiOff size={14}/> OFFLINE</div>}
         {isOnline && status.includes('Sync') && <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-[#c1121f] text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg z-50 flex items-center gap-2"><RefreshCw size={14} className="animate-spin"/> {status}</div>}
 
+        {/* TAB: NEW ADMISSION */}
         {activeTab === 'users' && (
           <div className="max-w-5xl mx-auto">
             <div className={glassPanel + " p-8"}>
@@ -494,7 +591,6 @@ export default function DirectorPage() {
                   <div className="space-y-4">
                     <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2 mb-4">Student Info</h3>
                     <input className={inputStyle} required placeholder="Student Name" value={admissionData.studentName} onChange={(e) => setAdmissionData({...admissionData, studentName: e.target.value})} />
-                    
                     <div className="grid grid-cols-2 gap-4">
                       <div className="relative">
                         <input type="date" className={inputStyle} required value={admissionData.dob} onChange={(e) => setAdmissionData({...admissionData, dob: e.target.value})} />
@@ -502,19 +598,15 @@ export default function DirectorPage() {
                       </div>
                       <input className={inputStyle} required placeholder="Student ID" value={admissionData.studentId} onChange={(e) => setAdmissionData({...admissionData, studentId: e.target.value})} />
                     </div>
-
                     <div className="grid grid-cols-2 gap-4">
                       <input className={inputStyle} required placeholder="Set Password" value={admissionData.studentPassword} onChange={(e) => setAdmissionData({...admissionData, studentPassword: e.target.value})} />
                       <input className={inputStyle} required placeholder="Mobile (10 digits)" value={admissionData.studentPhone} onChange={(e) => handlePhoneInput(e, setAdmissionData, 'studentPhone')} maxLength={10} />
                     </div>
-                    
                     <div><textarea className={inputStyle} rows={2} placeholder="Address" value={admissionData.address} onChange={(e) => setAdmissionData({...admissionData, address: e.target.value})} /></div>
-                    
                     <div className="grid grid-cols-2 gap-4">
                       <select className={inputStyle} required value={admissionData.batchId} onChange={(e) => setAdmissionData({...admissionData, batchId: e.target.value})}><option value="">Select Batch</option>{batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
                       <div className="relative"><span className="absolute left-3 top-3 text-slate-400">₹</span><input type="number" className={`${inputStyle} pl-8 font-bold`} required placeholder="Fee" value={admissionData.fees} onChange={(e) => setAdmissionData({...admissionData, fees: parseInt(e.target.value) || 0})} /></div>
                     </div>
-                    
                     <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 space-y-4">
                         <h4 className="text-xs font-bold text-[#c1121f] uppercase flex items-center justify-between">
                             Fees & Installments
@@ -527,9 +619,7 @@ export default function DirectorPage() {
                            <div><label className={labelStyle}>Waive Off</label><input type="number" className={inputStyle + " p-2"} placeholder="0" value={admissionData.waiveOff} onChange={(e) => setAdmissionData({...admissionData, waiveOff: parseInt(e.target.value) || 0})} /></div>
                            <div><label className={labelStyle}>Installments</label><select className={inputStyle + " p-2"} value={admissionData.installments} onChange={(e) => setAdmissionData({...admissionData, installments: parseInt(e.target.value)})}>{[1,2,3,4,5,6,9,12].map(n => <option key={n} value={n}>{n}</option>)}</select></div>
                         </div>
-                        
                         {admissionData.installmentSchedule.length > 0 && <div className="mt-2"><div className="bg-white border border-slate-200 rounded-lg overflow-hidden text-xs">{admissionData.installmentSchedule.map((inst, index) => (<div key={index} className="flex border-b border-slate-100 last:border-0"><div className="w-8 py-2 bg-slate-50 text-center text-slate-400 font-bold">{index+1}</div><div className="flex-1 p-1"><input type="date" className="w-full p-1 bg-transparent text-slate-900 outline-none" value={inst.dueDate} onChange={(e) => { const newSchedule = [...admissionData.installmentSchedule]; newSchedule[index].dueDate = e.target.value; setAdmissionData({...admissionData, installmentSchedule: newSchedule}); }}/></div><div className="w-24 p-1 border-l border-slate-100"><input type="number" className="w-full p-1 bg-transparent text-right font-bold text-slate-700 outline-none" value={inst.amount} onChange={(e) => { const newSchedule = [...admissionData.installmentSchedule]; newSchedule[index].amount = parseInt(e.target.value) || 0; setAdmissionData({...admissionData, installmentSchedule: newSchedule}); }}/></div></div>))}</div></div>}
-                        
                         <div className="text-right text-sm font-bold text-slate-800 flex justify-end items-center gap-2 pt-2 border-t border-slate-200">
                             {admissionData.withGst && <span className="text-[10px] text-[#c1121f] bg-red-50 px-2 py-0.5 rounded-full font-bold">GST APPLIED</span>}
                             <span>Total: ₹ {admissionData.installmentSchedule.reduce((a, b) => a + b.amount, 0).toLocaleString()}</span>
@@ -553,7 +643,7 @@ export default function DirectorPage() {
           </div>
         )}
 
-        {/* ... (Batches & Accounts - styled similarly if needed, keeping mostly same for brevity but with glassPanel class) ... */}
+        {/* TAB: BATCHES */}
         {activeTab === 'batches' && (
           <div className="grid grid-cols-2 gap-8 max-w-6xl mx-auto">
             <div className={glassPanel + " p-6"}>
@@ -577,18 +667,38 @@ export default function DirectorPage() {
           </div>
         )}
 
+        {/* TAB: ACCOUNTS & FINANCE */}
         {activeTab === 'accounts' && (
           <div className="space-y-8 max-w-6xl mx-auto">
+            {/* 1. Summary Cards */}
             <div className="grid grid-cols-3 gap-6">
-              <div className="bg-emerald-50/80 backdrop-blur-sm p-6 rounded-2xl border border-emerald-100 shadow-sm"><div className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Total Revenue</div><div className="text-3xl font-black text-emerald-900 tracking-tight">₹ {(summary.revenue || 0).toLocaleString()}</div></div>
-              <div className="bg-red-50/80 backdrop-blur-sm p-6 rounded-2xl border border-red-100 shadow-sm"><div className="text-xs font-bold text-red-600 uppercase tracking-wider mb-1">Total Expenses</div><div className="text-3xl font-black text-red-900 tracking-tight">₹ {(summary.expenses || 0).toLocaleString()}</div></div>
-              <div className="bg-blue-50/80 backdrop-blur-sm p-6 rounded-2xl border border-blue-100 shadow-sm"><div className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Net Profit</div><div className="text-3xl font-black text-blue-900 tracking-tight">₹ {(summary.profit || 0).toLocaleString()}</div></div>
+              <div className="bg-emerald-50/80 backdrop-blur-sm p-6 rounded-2xl border border-emerald-100 shadow-sm">
+                <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Total Revenue</div>
+                <div className="text-3xl font-black text-emerald-900 tracking-tight">₹ {(summary.revenue || 0).toLocaleString()}</div>
+              </div>
+              <div className="bg-red-50/80 backdrop-blur-sm p-6 rounded-2xl border border-red-100 shadow-sm">
+                <div className="text-xs font-bold text-red-600 uppercase tracking-wider mb-1">Total Expenses</div>
+                <div className="text-3xl font-black text-red-900 tracking-tight">₹ {(summary.expenses || 0).toLocaleString()}</div>
+              </div>
+              <div className="bg-blue-50/80 backdrop-blur-sm p-6 rounded-2xl border border-blue-100 shadow-sm">
+                <div className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Net Profit</div>
+                <div className="text-3xl font-black text-blue-900 tracking-tight">₹ {(summary.profit || 0).toLocaleString()}</div>
+              </div>
             </div>
+
+            {/* 2. Forms Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Collect Fee */}
               <div className={glassPanel + " p-6"}>
                 <h3 className="font-bold text-slate-800 mb-4 flex items-center text-lg"><Wallet size={20} className="mr-2 text-emerald-600"/> Collect Fee</h3>
                 <form onSubmit={handleCollectFee} className="space-y-4">
-                  <div><label className={labelStyle}>Select Student</label><select className={inputStyle} value={feeForm.studentId} onChange={e => setFeeForm({...feeForm, studentId: e.target.value})} required><option value="">-- Choose --</option>{students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.studentId})</option>)}</select></div>
+                  <div>
+                    <label className={labelStyle}>Select Student</label>
+                    <select className={inputStyle} value={feeForm.studentId} onChange={e => setFeeForm({...feeForm, studentId: e.target.value})} required>
+                      <option value="">-- Choose --</option>
+                      {students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.studentId})</option>)}
+                    </select>
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div><label className={labelStyle}>Amount</label><input type="number" className={inputStyle} placeholder="₹ 5000" value={feeForm.amount} onChange={e => setFeeForm({...feeForm, amount: parseInt(e.target.value) || 0})} required/></div>
                     <div><label className={labelStyle}>Mode</label><select className={inputStyle} value={feeForm.paymentMode} onChange={e => setFeeForm({...feeForm, paymentMode: e.target.value})}><option value="CASH">CASH</option><option value="ONLINE">ONLINE / UPI</option><option value="CHEQUE">CHEQUE</option></select></div>
@@ -601,18 +711,134 @@ export default function DirectorPage() {
                   <button className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition shadow-lg shadow-emerald-500/20">Record Payment & Print</button>
                 </form>
               </div>
+
+              {/* Log Expense */}
               <div className={glassPanel + " p-6"}>
                 <h3 className="font-bold text-slate-800 mb-4 flex items-center text-lg"><IndianRupee size={20} className="mr-2 text-red-600"/> Log Expense</h3>
                 <form onSubmit={handleAddExpense} className="space-y-4">
-                   <div className="flex gap-4"><div className="flex-1"><label className={labelStyle}>Title</label><input className={inputStyle} placeholder="e.g. Electricity Bill" value={newExpense.title} onChange={e => setNewExpense({...newExpense, title: e.target.value})} required /></div><div className="w-1/3"><label className={labelStyle}>Amount</label><input type="number" className={inputStyle} placeholder="₹" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: parseInt(e.target.value) || 0})} required /></div></div>
+                   <div className="flex gap-4">
+                     <div className="flex-1"><label className={labelStyle}>Title</label><input className={inputStyle} placeholder="e.g. Electricity Bill" value={newExpense.title} onChange={e => setNewExpense({...newExpense, title: e.target.value})} required /></div>
+                     <div className="w-1/3"><label className={labelStyle}>Amount</label><input type="number" className={inputStyle} placeholder="₹" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: parseInt(e.target.value) || 0})} required /></div>
+                   </div>
                    <div><label className={labelStyle}>Category</label><select className={inputStyle} value={newExpense.category} onChange={e => setNewExpense({...newExpense, category: e.target.value})}><option>General</option><option>Salary</option><option>Infra</option></select></div>
                    <button className="w-full bg-[#c1121f] text-white py-3 rounded-xl font-bold hover:bg-red-800 transition shadow-lg shadow-red-500/20">Log Expense</button>
                 </form>
+                <div className="mt-6 border-t border-slate-100 pt-4">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Recent Expenses</h4>
+                    <div className="max-h-40 overflow-y-auto custom-scrollbar space-y-2">
+                        {expenses.map(exp => (
+                            <div key={exp.id} className="flex justify-between items-center text-sm p-2 bg-slate-50 rounded border border-slate-100">
+                                <span className="text-slate-700">{exp.title}</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="font-bold text-slate-900">₹{exp.amount}</span>
+                                    <button onClick={() => handleDeleteExpense(exp.id)} className="text-red-400 hover:text-red-600"><Trash2 size={12}/></button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
               </div>
+            </div>
+
+            {/* 3. Fee History Table */}
+            <div className={glassPanel + " p-6 overflow-hidden flex flex-col"}>
+                <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2 text-lg">
+                        <FileText size={20} className="text-blue-600"/> Fee Payment History
+                    </h3>
+                    <div className="relative w-full md:w-80">
+                        <input 
+                            type="text" 
+                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition" 
+                            placeholder="Search Student, Parent ID or Txn ID..." 
+                            value={feeSearch} 
+                            onChange={(e) => setFeeSearch(e.target.value)} 
+                        />
+                        <Search size={16} className="absolute left-3 top-3 text-slate-400" />
+                    </div>
+                </div>
+                <div className="overflow-x-auto">
+                    <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
+                        <table className="w-full text-left">
+                            <thead className="bg-slate-100 text-slate-500 text-xs uppercase sticky top-0 z-10">
+                                <tr>
+                                    <th className="px-6 py-3">Date</th>
+                                    <th className="px-6 py-3">Student Info</th>
+                                    <th className="px-6 py-3">Amount</th>
+                                    <th className="px-6 py-3">Mode / Txn ID</th>
+                                    <th className="px-6 py-3 text-right">Receipt</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-sm">
+                                {feeHistory
+                                    .map(fee => {
+                                        const student = students.find(s => s.id === fee.studentId);
+                                        return { ...fee, studentName: student?.name || 'Unknown', parentId: student?.parentId || 'N/A' };
+                                    })
+                                    .filter(item => 
+                                        item.studentName.toLowerCase().includes(feeSearch.toLowerCase()) || 
+                                        item.parentId.toLowerCase().includes(feeSearch.toLowerCase()) ||
+                                        (item.transactionId && item.transactionId.toLowerCase().includes(feeSearch.toLowerCase()))
+                                    )
+                                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                    .map((record) => (
+                                    <tr key={record.id} className="hover:bg-slate-50 transition">
+                                        <td className="px-6 py-4 text-slate-500 text-xs font-mono">
+                                            {new Date(record.date).toLocaleDateString()} <br/>
+                                            {new Date(record.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="font-bold text-slate-900">{record.studentName}</div>
+                                            <div className="text-xs text-slate-400">PID: {record.parentId}</div>
+                                        </td>
+                                        <td className="px-6 py-4 font-bold text-emerald-600">
+                                            ₹ {record.amount.toLocaleString()}
+                                        </td>
+                                        <td className="px-6 py-4 text-xs">
+                                            <span className="font-bold text-slate-700">{record.paymentMode}</span>
+                                            {record.transactionId && <div className="text-slate-400 font-mono mt-0.5">{record.transactionId}</div>}
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <button 
+                                                onClick={() => {
+                                                    const s = students.find(std => std.id === record.studentId);
+                                                    if(s) {
+                                                        setCurrentInvoice({
+                                                            id: record.id,
+                                                            studentName: s.name,
+                                                            studentId: s.studentId,
+                                                            parentId: s.parentId,
+                                                            batch: s.batch,
+                                                            amount: record.amount,
+                                                            date: record.date,
+                                                            remarks: record.remarks,
+                                                            paymentMode: record.paymentMode,
+                                                            transactionId: record.transactionId,
+                                                            balanceAfter: (s.feeRemaining || 0)
+                                                        });
+                                                        setShowInvoice(true);
+                                                    }
+                                                }}
+                                                className="p-2 hover:bg-slate-200 rounded-full text-slate-500 transition" 
+                                                title="View Receipt"
+                                            >
+                                                <Printer size={16}/>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {feeHistory.length === 0 && (
+                                    <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-400 italic">No fee records found.</td></tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
           </div>
         )}
 
+        {/* TAB: ENQUIRIES */}
         {activeTab === 'enquiries' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
             <div className={`lg:col-span-1 h-fit ${glassPanel} p-6`}>
@@ -626,14 +852,64 @@ export default function DirectorPage() {
                 <button className="w-full bg-[#c1121f] text-white py-3 rounded-xl font-bold hover:bg-red-800 transition shadow-lg">Save Enquiry</button>
               </form>
             </div>
+            
+            {/* RIGHT COLUMN: ENQUIRY LIST WITH SEARCH & DATE */}
             <div className={`lg:col-span-2 ${glassPanel} overflow-hidden flex flex-col h-[700px]`}>
-              <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center"><h3 className="font-bold text-slate-800">Recent Enquiries</h3><span className="bg-[#c1121f] text-white text-xs font-bold px-2 py-1 rounded">{enquiries.length} Total</span></div>
+              <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex flex-col gap-4">
+                  <div className="flex justify-between items-center">
+                      <h3 className="font-bold text-slate-800">Enquiries Directory</h3>
+                      <span className="bg-[#c1121f] text-white text-xs font-bold px-2 py-1 rounded">{filteredEnquiries.length} Found</span>
+                  </div>
+                  
+                  {/* SEARCH & DATE FILTER BAR */}
+                  <div className="flex gap-2">
+                      <div className="relative flex-1">
+                          <input 
+                              type="text" 
+                              className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-[#c1121f] outline-none" 
+                              placeholder="Search Name or Mobile..." 
+                              value={enquirySearch}
+                              onChange={(e) => setEnquirySearch(e.target.value)}
+                          />
+                          <Search size={14} className="absolute left-3 top-3 text-slate-400"/>
+                      </div>
+                      <input 
+                          type="date" 
+                          className="w-40 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 focus:ring-2 focus:ring-[#c1121f] outline-none"
+                          value={enquiryDateFilter}
+                          onChange={(e) => setEnquiryDateFilter(e.target.value)}
+                      />
+                      {(enquirySearch || enquiryDateFilter) && (
+                          <button 
+                              onClick={() => {setEnquirySearch(''); setEnquiryDateFilter('');}} 
+                              className="px-3 py-2 bg-slate-200 hover:bg-slate-300 rounded-lg text-slate-600 transition"
+                              title="Clear Filters"
+                          >
+                              <X size={16}/>
+                          </button>
+                      )}
+                  </div>
+              </div>
+
               <div className="flex-1 overflow-y-auto custom-scrollbar">
                 <table className="w-full text-left">
-                  <thead className="bg-slate-100 text-slate-500 text-xs uppercase sticky top-0 z-10 backdrop-blur-sm"><tr><th className="px-6 py-3">Name / Mobile</th><th className="px-6 py-3">Details</th><th className="px-6 py-3">Status</th><th className="px-6 py-3 text-right">Action</th></tr></thead>
+                  <thead className="bg-slate-100 text-slate-500 text-xs uppercase sticky top-0 z-10 backdrop-blur-sm">
+                      <tr>
+                          <th className="px-6 py-3">Date</th>
+                          <th className="px-6 py-3">Name / Mobile</th>
+                          <th className="px-6 py-3">Details</th>
+                          <th className="px-6 py-3">Status</th>
+                          <th className="px-6 py-3 text-right">Action</th>
+                      </tr>
+                  </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {paginatedEnquiries.length === 0 ? <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-400 italic">No enquiries found.</td></tr> : paginatedEnquiries.map(enq => (
+                    {paginatedEnquiries.length === 0 ? 
+                        <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-400 italic">No enquiries found matching filters.</td></tr> 
+                    : paginatedEnquiries.map(enq => (
                       <tr key={enq.id} className="hover:bg-slate-50 transition">
+                        <td className="px-6 py-4 text-xs font-mono text-slate-500">
+                            {new Date(enq.createdAt).toLocaleDateString()}
+                        </td>
                         <td className="px-6 py-4">
                             <div className="font-bold text-slate-900">{enq.studentName}</div>
                             <div className="text-xs text-slate-500 font-mono">{enq.mobile}</div>
@@ -656,11 +932,22 @@ export default function DirectorPage() {
                   </tbody>
                 </table>
               </div>
-              {totalEnquiryPages > 1 && <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center text-xs"><span className="text-slate-500">Page {enquiryPage} of {totalEnquiryPages}</span><div className="flex gap-2"><button onClick={() => setEnquiryPage(p => Math.max(1, p - 1))} disabled={enquiryPage === 1} className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50"><ChevronLeft size={16}/></button><button onClick={() => setEnquiryPage(p => Math.min(totalEnquiryPages, p + 1))} disabled={enquiryPage === totalEnquiryPages} className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50"><ChevronRight size={16}/></button></div></div>}
+              
+              {/* Pagination Controls */}
+              {totalEnquiryPages > 1 && (
+                  <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center text-xs">
+                      <span className="text-slate-500">Page {enquiryPage} of {totalEnquiryPages}</span>
+                      <div className="flex gap-2">
+                          <button onClick={() => setEnquiryPage(p => Math.max(1, p - 1))} disabled={enquiryPage === 1} className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50"><ChevronLeft size={16}/></button>
+                          <button onClick={() => setEnquiryPage(p => Math.min(totalEnquiryPages, p + 1))} disabled={enquiryPage === totalEnquiryPages} className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50"><ChevronRight size={16}/></button>
+                      </div>
+                  </div>
+              )}
             </div>
           </div>
         )}
 
+        {/* TAB: DIRECTORY */}
         {activeTab === 'directory' && (
           <div className={`${glassPanel} overflow-hidden max-w-7xl mx-auto`}>
             <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex flex-col md:flex-row justify-between items-center gap-4">
@@ -690,9 +977,153 @@ export default function DirectorPage() {
           </div>
         )}
 
-        {/* ... (Other Tabs: Content & Academics - kept minimal as they were not requested to change) */}
-        {activeTab === 'content' && <div className="p-8 text-center text-gray-400">Content Management Loaded</div>}
-        {activeTab === 'academics' && <div className="p-8 text-center text-gray-400">Academic Stats Loaded</div>}
+        {/* TAB: CONTENT MANAGEMENT */}
+        {activeTab === 'content' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-7xl mx-auto">
+            <div className="space-y-8">
+              <div className={glassPanel + " p-6"}>
+                <h3 className="font-bold text-slate-800 mb-4 flex items-center text-lg border-b border-slate-200 pb-2">
+                   <Video size={20} className="mr-2 text-red-600"/> Upload Lecture / Resource
+                </h3>
+                <form onSubmit={handlePublishVideo} className="space-y-4">
+                  <div>
+                      <label className={labelStyle}>Title</label>
+                      <input className={inputStyle} required placeholder="e.g. Physics - Laws of Motion" value={contentForm.title} onChange={e => setContentForm({...contentForm, title: e.target.value})} />
+                  </div>
+                  <div>
+                      <label className={labelStyle}>YouTube URL / Link</label>
+                      <input className={inputStyle} required placeholder="https://youtu.be/..." value={contentForm.url} onChange={e => setContentForm({...contentForm, url: e.target.value})} />
+                  </div>
+                  <div>
+                      <label className={labelStyle}>Target Batch</label>
+                      <select className={inputStyle} required value={contentForm.batchId} onChange={e => setContentForm({...contentForm, batchId: e.target.value})}>
+                        <option value="">All Batches</option>
+                        {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                      </select>
+                  </div>
+                  <button className="w-full bg-[#dc2626] text-white py-3 rounded-xl font-bold hover:bg-red-800 transition shadow-lg flex items-center justify-center gap-2">
+                      <Plus size={18}/> Publish Resource
+                  </button>
+                </form>
+              </div>
+
+              <div className={glassPanel + " p-6"}>
+                <h3 className="font-bold text-slate-800 mb-4 flex items-center text-lg border-b border-slate-200 pb-2">
+                   <Bell size={20} className="mr-2 text-orange-500"/> Post Notice
+                </h3>
+                <form onSubmit={handlePostNotice} className="space-y-4">
+                  <div>
+                      <label className={labelStyle}>Notice Title</label>
+                      <input className={inputStyle} required placeholder="e.g. Holiday Announcement" value={noticeForm.title} onChange={e => setNoticeForm({...noticeForm, title: e.target.value})} />
+                  </div>
+                  <div>
+                      <label className={labelStyle}>Content</label>
+                      <textarea className={inputStyle} required rows={3} placeholder="Details..." value={noticeForm.content} onChange={e => setNoticeForm({...noticeForm, content: e.target.value})} />
+                  </div>
+                  <div>
+                      <label className={labelStyle}>Target Batch</label>
+                      <select className={inputStyle} value={noticeForm.batchId} onChange={e => setNoticeForm({...noticeForm, batchId: e.target.value})}>
+                        <option value="">All Batches</option>
+                        {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                      </select>
+                  </div>
+                  <button className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold hover:bg-orange-600 transition shadow-lg flex items-center justify-center gap-2">
+                      <Plus size={18}/> Post Notice
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <div className={`lg:col-span-1 ${glassPanel} flex flex-col h-[800px]`}>
+               <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/50">
+                  <h3 className="font-bold text-slate-800">Active Content</h3>
+               </div>
+               <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                  <div>
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Notices</h4>
+                      <div className="space-y-3">
+                         {notices.length === 0 ? <p className="text-slate-400 text-sm italic">No notices posted.</p> : notices.map(n => (
+                            <div key={n.id} className="bg-orange-50 border border-orange-100 p-4 rounded-xl relative group">
+                               <h5 className="font-bold text-slate-800">{n.title}</h5>
+                               <p className="text-sm text-slate-600 mt-1">{n.content}</p>
+                               <div className="mt-2 flex justify-between items-center text-xs text-slate-400">
+                                  <span>{new Date(n.createdAt).toLocaleDateString()}</span>
+                                  <span className="bg-white px-2 py-0.5 rounded border border-orange-200 text-orange-600 font-bold">{n.batch?.name || 'All Batches'}</span>
+                               </div>
+                               <button onClick={() => handleDeleteNotice(n.id)} className="absolute top-2 right-2 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition"><Trash2 size={16}/></button>
+                            </div>
+                         ))}
+                      </div>
+                  </div>
+                  <div>
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Study Resources</h4>
+                      <div className="space-y-3">
+                         {resources.length === 0 ? <p className="text-slate-400 text-sm italic">No resources uploaded.</p> : resources.map(r => (
+                            <div key={r.id} className="bg-white border border-slate-200 p-4 rounded-xl relative group hover:border-blue-200 transition">
+                               <div className="flex items-start gap-3">
+                                  <div className="p-2 bg-red-50 text-red-500 rounded-lg shrink-0"><Video size={20}/></div>
+                                  <div className="flex-1 min-w-0">
+                                     <h5 className="font-bold text-slate-800 truncate">{r.title}</h5>
+                                     <a href={r.url} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline truncate block">{r.url}</a>
+                                     <div className="mt-2 text-xs text-slate-400 flex items-center gap-2">
+                                        <span>{new Date(r.createdAt).toLocaleDateString()}</span>
+                                        <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-bold">{r.batch?.name || 'All Batches'}</span>
+                                     </div>
+                                  </div>
+                               </div>
+                               <button onClick={() => handleDeleteResource(r.id)} className="absolute top-2 right-2 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition"><Trash2 size={16}/></button>
+                            </div>
+                         ))}
+                      </div>
+                  </div>
+               </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: ACADEMICS */}
+        {activeTab === 'academics' && (
+          <div className="space-y-8 max-w-7xl mx-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className={glassPanel + " p-6 flex flex-col h-[600px]"}>
+                   <h3 className="font-bold text-slate-800 mb-4 flex items-center text-lg border-b border-slate-200 pb-2">
+                      <FileBarChart size={20} className="mr-2 text-blue-600"/> Exam Schedule
+                   </h3>
+                   <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3">
+                      {exams.length === 0 ? <p className="text-slate-400 text-sm italic text-center py-10">No exams scheduled.</p> : exams.map(exam => (
+                         <div key={exam.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50 hover:bg-white hover:shadow-md transition-all group">
+                            <div className="flex justify-between items-start">
+                               <div>
+                                  <h4 className="font-bold text-slate-800">{exam.title}</h4>
+                                  <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
+                                     <span className="flex items-center gap-1"><Clock size={12}/> {exam.durationMin || 0} mins</span>
+                                     <span className="flex items-center gap-1"><CheckCircle size={12}/> {exam.totalMarks || 0} Marks</span>
+                                  </div>
+                               </div>
+                            </div>
+                            <div className="mt-3 pt-3 border-t border-slate-200 flex justify-between items-center">
+                               <span className="text-[10px] text-slate-400 font-mono">ID: {exam.id.slice(0,8)}</span>
+                               <button className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1">View Stats <ChevronRight size={12}/></button>
+                            </div>
+                         </div>
+                      ))}
+                   </div>
+                </div>
+                <div className={glassPanel + " p-6 flex flex-col h-[600px]"}>
+                   <h3 className="font-bold text-slate-800 mb-4 flex items-center text-lg border-b border-slate-200 pb-2">
+                      <Activity size={20} className="mr-2 text-green-600"/> Academic Performance
+                   </h3>
+                   <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-center p-8">
+                      <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                         <LayoutGrid size={32} className="text-slate-300"/> 
+                      </div>
+                      <p className="text-sm">Select an exam to view detailed performance analytics.</p>
+                      <p className="text-xs mt-2 text-slate-300">(Detailed Analytics Module connecting to Results)</p>
+                   </div>
+                </div>
+             </div>
+          </div>
+        )}
 
       </main>
       

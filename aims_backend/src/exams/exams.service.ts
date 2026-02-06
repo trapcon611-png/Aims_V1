@@ -20,12 +20,11 @@ export class ExamsService {
     });
   }
 
-  // --- NEW: Get Student Attempts with Analytics Data ---
   async getMyAttempts(userId: string) {
     return this.prisma.testAttempt.findMany({
       where: { 
         userId,
-        status: { in: ['SUBMITTED', 'EVALUATED'] } // Only show finished exams
+        status: { in: ['SUBMITTED', 'EVALUATED'] } 
       },
       include: {
         exam: {
@@ -34,12 +33,12 @@ export class ExamsService {
         answers: {
           include: {
             question: {
-              // CRITICAL FIX: Select all fields needed for frontend analysis
               select: { 
                   subject: true, 
                   difficulty: true,
                   questionText: true,
                   questionImage: true,
+                  solutionImage: true,
                   correctOption: true,
                   options: true 
               } 
@@ -51,7 +50,28 @@ export class ExamsService {
     });
   }
 
-  // --- START EXAM LOGIC ---
+  // --- ADMIN: ANALYTICS LOGIC ---
+  async getExamAnalytics(examId: string) {
+    const attempts = await this.prisma.testAttempt.findMany({
+      where: { examId, status: { in: ['SUBMITTED', 'EVALUATED'] } },
+      include: { user: { include: { studentProfile: true } } },
+      orderBy: { totalScore: 'desc' }
+    });
+
+    return attempts.map((attempt, index) => ({
+      studentId: attempt.userId,
+      studentName: attempt.user.studentProfile?.fullName || attempt.user.username,
+      score: attempt.totalScore,
+      rank: index + 1,
+      attempted: attempt.correctCount + attempt.wrongCount,
+      correct: attempt.correctCount,
+      wrong: attempt.wrongCount,
+      accuracy: (attempt.correctCount + attempt.wrongCount) > 0 
+        ? Math.round((attempt.correctCount / (attempt.correctCount + attempt.wrongCount)) * 100) 
+        : 0
+    }));
+  }
+
   async startAttempt(userId: string, examId: string) {
     const userExists = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!userExists) throw new BadRequestException('User profile not found.');
@@ -109,7 +129,6 @@ export class ExamsService {
     };
   }
 
-  // --- SUBMIT EXAM LOGIC ---
   async submitAttempt(userId: string, examId: string, answers: { questionId: string, selectedOption: string, timeTaken: number }[]) {
     const exam = await this.prisma.exam.findUnique({
         where: { id: examId },

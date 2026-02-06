@@ -91,6 +91,7 @@ interface Batch {
 }
 
 // --- API UTILITIES ---
+// --- API UTILITIES ---
 const adminApi = {
   async login(username: string, password: string) {
     const res = await fetch(`${API_URL}/auth/login`, {
@@ -247,9 +248,24 @@ const adminApi = {
       });
       if (!res.ok) throw new Error('Attendance failed');
       return await res.json();
+  },
+
+  async getExamAnalytics(token: string, examId: string) {
+    const res = await fetch(`${API_URL}/exams/${examId}/analytics`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error('Failed to fetch analytics');
+    return await res.json();
+  },
+
+  async getStudentAttempts(token: string, studentId: string) {
+      const res = await fetch(`${API_URL}/exams/student-attempts?studentId=${studentId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch student details');
+      return await res.json();
   }
 };
-
 // --- HELPER FUNCTIONS ---
 const getQuestionType = (q: Question) => {
     // 1. Check DB 'type' field explicitly first
@@ -352,7 +368,7 @@ const ContentRenderer = ({ content }: { content: string }) => {
     return <LatexRenderer content={content} />;
 };
 
-// --- COMPONENT: AMBER BACKGROUND ---
+// --- COMPONENT: AMBER BACKGROUND (Darker) ---
 const AdminBackground = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -362,8 +378,9 @@ const AdminBackground = () => {
     let width = canvas.width = window.innerWidth; 
     let height = canvas.height = window.innerHeight;
     
+    // Increased particle count and darker colors
     const particles: {x: number, y: number, vx: number, vy: number, r: number}[] = [];
-    for (let i = 0; i < 40; i++) particles.push({ 
+    for (let i = 0; i < 60; i++) particles.push({ 
         x: Math.random() * width, 
         y: Math.random() * height, 
         vx: (Math.random() - 0.5) * 0.3, 
@@ -380,7 +397,8 @@ const AdminBackground = () => {
         
         ctx.beginPath(); 
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); 
-        ctx.fillStyle = `rgba(245, 158, 11, 0.4)`; // Amber
+        // Darker Amber for particles
+        ctx.fillStyle = `rgba(180, 83, 9, 0.6)`; 
         ctx.fill();
         
         for (let j = i + 1; j < particles.length; j++) {
@@ -388,7 +406,8 @@ const AdminBackground = () => {
           const dx = p.x - p2.x, dy = p.y - p2.y, dist = Math.sqrt(dx*dx + dy*dy);
           if (dist < 150) { 
             ctx.beginPath(); 
-            ctx.strokeStyle = `rgba(251, 191, 36, ${0.15 * (1 - dist/150)})`; 
+            // Darker connections
+            ctx.strokeStyle = `rgba(146, 64, 14, ${0.2 * (1 - dist/150)})`; 
             ctx.lineWidth = 0.8; 
             ctx.moveTo(p.x, p.y); 
             ctx.lineTo(p2.x, p2.y); 
@@ -408,7 +427,7 @@ const AdminBackground = () => {
     window.addEventListener('resize', handleResize); animate(); return () => window.removeEventListener('resize', handleResize);
   }, []);
   
-  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none opacity-60 z-0" />;
+  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none opacity-80 z-0" />;
 };
 
 // --- COMPONENT: LOGIN ---
@@ -430,12 +449,14 @@ const AdminLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
   return (
     <div className="min-h-screen w-full flex flex-col justify-center items-center bg-slate-50 font-sans relative transition-colors duration-500 py-10 px-4">
       <AdminBackground />
-      <div className="relative z-10 w-full max-w-sm">
+      {/* Updated Container Size: max-w-md, p-10 to match Parent Panel */}
+      <div className="relative z-10 w-full max-w-md">
         <div className="bg-gradient-to-br from-amber-600 to-orange-700 backdrop-blur-xl border border-orange-500/30 rounded-3xl shadow-2xl overflow-hidden ring-1 ring-white/20">
-          <div className="p-8 text-center border-b border-orange-500/30">
-            <div className="relative w-24 h-24 mx-auto mb-6 p-2 bg-white rounded-full shadow-[0_0_20px_rgba(255,255,255,0.2)] ring-4 ring-white/20">
+          <div className="p-10 text-center border-b border-orange-500/30">
+            {/* Logo Size and Margin matched */}
+            <div className="relative w-24 h-24 mx-auto mb-4  bg-white rounded-full shadow-[0_0_20px_rgba(255,255,255,0.2)] ring-4 ring-white/20">
                 <div className="relative w-full h-full bg-white rounded-full overflow-hidden">
-                    <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain p-2" unoptimized />
+                    <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain" unoptimized />
                 </div>
             </div>
             <h3 className="text-2xl font-bold text-white tracking-tight">Academic Admin</h3>
@@ -443,17 +464,20 @@ const AdminLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
               <BrainCircuit size={14} className="text-white"/> Staff Portal
             </p>
           </div>
-          <form onSubmit={handleLogin} className="p-8 space-y-5">
+          {/* Form Padding and Spacing matched */}
+          <form onSubmit={handleLogin} className="p-10 space-y-6">
             {error && <div className="p-3 bg-red-100/90 border border-red-200 rounded-xl flex items-center gap-3 text-red-700 text-xs font-bold"><AlertCircle size={16} /> {error}</div>}
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <label className="text-xs font-bold text-orange-100 uppercase tracking-wider ml-1">Staff ID</label>
-              <input type="text" className="w-full p-4 bg-orange-900/30 border border-orange-400/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/50 transition-all font-mono placeholder:text-orange-200/50" value={creds.username} onChange={(e) => setCreds({...creds, username: e.target.value})} placeholder="FACULTY-ID"/>
+              {/* Input Text Size text-lg */}
+              <input type="text" className="w-full p-4 bg-orange-900/30 border border-orange-400/30 rounded-xl text-white text-lg focus:outline-none focus:ring-2 focus:ring-white/50 transition-all font-mono placeholder:text-orange-200/50" value={creds.username} onChange={(e) => setCreds({...creds, username: e.target.value})} placeholder="FACULTY-ID"/>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <label className="text-xs font-bold text-orange-100 uppercase tracking-wider ml-1">Password</label>
-              <input type="password" className="w-full p-4 bg-orange-900/30 border border-orange-400/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/50 transition-all font-mono placeholder:text-orange-200/50" value={creds.password} onChange={(e) => setCreds({...creds, password: e.target.value})} placeholder="••••••••"/>
+              {/* Input Text Size text-lg */}
+              <input type="password" className="w-full p-4 bg-orange-900/30 border border-orange-400/30 rounded-xl text-white text-lg focus:outline-none focus:ring-2 focus:ring-white/50 transition-all font-mono placeholder:text-orange-200/50" value={creds.password} onChange={(e) => setCreds({...creds, password: e.target.value})} placeholder="••••••••"/>
             </div>
-            <button disabled={loading} className="w-full bg-white hover:bg-orange-50 text-orange-700 py-4 rounded-xl font-bold text-sm uppercase tracking-wider shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+            <button disabled={loading} className="w-full bg-white hover:bg-orange-50 text-orange-700 py-4 rounded-xl font-bold text-lg uppercase tracking-wider shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2 mt-4 active:scale-95">
               {loading ? <Loader2 className="animate-spin" size={18} /> : <>Access Dashboard <ChevronRight size={16} /></>}
             </button>
             <div className="text-center pt-4 border-t border-orange-500/30">
@@ -634,14 +658,14 @@ const QuestionSelectorModal = ({
                                                             {/* RICH CONTENT RENDERER - MOVED BELOW TEXT */}
                                                             {q.questionImage && (
                                                                 <div className="mb-2 w-full max-w-md h-32 relative border rounded bg-slate-50">
-                                                                    <img src={q.questionImage} alt="Question Image" className="w-full h-full object-contain" />
+                                                                        <img src={q.questionImage} alt="Question Image" className="w-full h-full object-contain" />
                                                                 </div>
                                                             )}
                                                             
                                                             {/* PREVIEW OPTIONS */}
                                                             {qType === 'INTEGER' ? (
                                                                 <div className="mt-2 text-xs font-bold text-slate-600 border px-3 py-1 rounded bg-slate-50 inline-block">
-                                                                    Answer: {getIntegerAnswer(q.correctOption)}
+                                                                        Answer: {getIntegerAnswer(q.correctOption)}
                                                                 </div>
                                                             ) : isOptionImg ? (
                                                                 <div className="mt-2 text-xs text-slate-500 italic">Image Options available</div>
@@ -677,11 +701,11 @@ const QuestionSelectorModal = ({
                                 {/* PAGINATION CONTROLS */}
                                 {totalPages > 1 && (
                                     <div className="p-3 border-t border-slate-200 bg-white flex justify-between items-center text-xs">
-                                        <span className="text-slate-500">Page {page} of {totalPages}</span>
-                                        <div className="flex gap-2">
-                                            <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1} className="p-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"><ChevronLeft size={16}/></button>
-                                            <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages} className="p-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"><ChevronRight size={16}/></button>
-                                        </div>
+                                            <span className="text-slate-500">Page {page} of {totalPages}</span>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1} className="p-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"><ChevronLeft size={16}/></button>
+                                                <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages} className="p-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"><ChevronRight size={16}/></button>
+                                            </div>
                                     </div>
                                 )}
                             </div>
@@ -761,17 +785,17 @@ const QuestionSelectorModal = ({
                                                  </div>
                                              ) : (
                                                  <div className="grid grid-cols-2 gap-4">
-                                                    {Object.entries(q.options || {}).map(([key, val]) => {
-                                                        if (!val) return null;
-                                                        // Check answer match (handle multi/single)
-                                                        const isCorrect = q.correctOption.toLowerCase().includes(key.toLowerCase());
-                                                        return (
-                                                            <div key={key} className={`p-2 border rounded bg-slate-50 text-sm flex items-start gap-2 ${isCorrect ? 'border-green-400 bg-green-50 ring-1 ring-green-200' : ''}`}>
-                                                                <span className={`font-bold uppercase ${isCorrect ? 'text-green-700' : 'text-slate-500'}`}>{key}.</span>
-                                                                <ContentRenderer content={String(val)} />
-                                                            </div>
-                                                        )
-                                                    })}
+                                                     {Object.entries(q.options || {}).map(([key, val]) => {
+                                                         if (!val) return null;
+                                                         // Correct Option Logic for Multiple Answers (Includes check)
+                                                         const isCorrect = q.correctOption.toLowerCase().includes(key.toLowerCase());
+                                                         return (
+                                                             <div key={key} className={`p-2 border rounded bg-slate-50 text-sm flex items-start gap-2 ${isCorrect ? 'border-green-400 bg-green-50 ring-1 ring-green-200' : ''}`}>
+                                                                 <span className={`font-bold uppercase ${isCorrect ? 'text-green-700' : 'text-slate-500'}`}>{key}.</span> 
+                                                                 <ContentRenderer content={String(val)} />
+                                                             </div>
+                                                         )
+                                                     })}
                                                  </div>
                                              )}
                                         </div>
@@ -802,6 +826,89 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
   const [batches, setBatches] = useState<Batch[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
+  // --- NEW STATE FOR RESULTS & ATTENDANCE ---
+  const [analyticsData, setAnalyticsData] = useState<any[] | null>(null);
+  const [analyticsExamId, setAnalyticsExamId] = useState('');
+  const [attendanceSubject, setAttendanceSubject] = useState('');
+  const [attendanceTime, setAttendanceTime] = useState('');
+  // ... inside AdminDashboard component ...
+  
+  // New State for Detailed Results
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [studentDetail, setStudentDetail] = useState<any | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+
+  // Helper to process data when a student row is clicked
+  const handleViewStudentDetail = async (studentId: string) => {
+      setSelectedStudentId(studentId);
+      setLoadingDetail(true);
+      try {
+          // Fetch all attempts for this student
+          const allAttempts = await adminApi.getStudentAttempts(token, studentId);
+          
+          // Filter to find the attempt for the CURRENTLY selected exam
+          // analyticsExamId is the state variable holding the current Exam ID from the dropdown
+          const relevantAttempt = allAttempts.find((a: any) => a.examId === analyticsExamId);
+          
+          setStudentDetail(relevantAttempt || null);
+      } catch (e) {
+          alert("Could not load detailed report.");
+      } finally {
+          setLoadingDetail(false);
+      }
+  };
+  // ... inside AdminDashboard ...
+
+  const generateInsights = (attempt: any) => {
+      if (!attempt || !attempt.answers) return [];
+      
+      const insights = [];
+      const answers = attempt.answers;
+      
+      // 1. Time Management Analysis
+      const avgTimeCorrect = answers.filter((a: any) => a.isCorrect).reduce((acc: number, curr: any) => acc + curr.timeTaken, 0) / (answers.filter((a: any) => a.isCorrect).length || 1);
+      const avgTimeWrong = answers.filter((a: any) => !a.isCorrect && a.selectedOption).reduce((acc: number, curr: any) => acc + curr.timeTaken, 0) / (answers.filter((a: any) => !a.isCorrect && a.selectedOption).length || 1);
+      
+      if (avgTimeWrong > avgTimeCorrect * 1.5) {
+          insights.push({ type: 'WARN', text: "Critical Time Loss: Student is spending significantly more time on wrong answers than correct ones. Suggests conceptual confusion rather than silly mistakes." });
+      }
+
+      // 2. Subject Weakness (Simple Heuristic)
+      const subjects: any = {};
+      answers.forEach((a: any) => {
+          const subj = a.question?.subject || 'General';
+          if (!subjects[subj]) subjects[subj] = { correct: 0, total: 0 };
+          subjects[subj].total++;
+          if (a.isCorrect) subjects[subj].correct++;
+      });
+      
+      Object.entries(subjects).forEach(([subj, data]: any) => {
+          const accuracy = (data.correct / data.total) * 100;
+          if (accuracy < 40) {
+              insights.push({ type: 'CRITICAL', text: `Weak Subject Area: ${subj} (${Math.round(accuracy)}% Accuracy). Needs immediate remedial sessions.` });
+          }
+      });
+
+      // 3. Speed Issues
+      const slowQuestions = answers.filter((a: any) => a.timeTaken > 180); // > 3 mins
+      if (slowQuestions.length > 3) {
+          insights.push({ type: 'INFO', text: `Struggled with Speed: Spent >3 mins on ${slowQuestions.length} questions. Needs drill practice.` });
+      }
+
+      return insights;
+  };
+
+  // --- NEW LOGIC FOR RESULTS ---
+  const handleFetchAnalytics = async (examId: string) => {
+      setAnalyticsExamId(examId);
+      if(!examId) { setAnalyticsData(null); return; }
+      try {
+          const data = await adminApi.getExamAnalytics(token, examId);
+          setAnalyticsData(data);
+      } catch(e) { 
+          alert("Failed to fetch results"); 
+      }
+  };
   
   // -- Question Bank State --
   const [qbPage, setQbPage] = useState(1);
@@ -873,9 +980,19 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
   };
 
   const submitAttendance = async () => {
+      if (!selectedBatch || !attendanceSubject || !attendanceTime) {
+          alert("Please fill in Batch, Subject, and Time.");
+          return;
+      }
       try {
           const presentIds = attendanceList.filter(a => a.status === 'PRESENT').map(a => a.studentId);
-          await adminApi.markAttendance(token, { batchId: selectedBatch, date: attendanceDate, studentIds: presentIds });
+          await adminApi.markAttendance(token, { 
+              batchId: selectedBatch, 
+              date: attendanceDate, 
+              subject: attendanceSubject, // Added Requirement
+              time: attendanceTime,       // Added Requirement
+              studentIds: presentIds 
+          });
           alert("Attendance Marked Successfully");
       } catch (e) {
           alert("Failed to mark attendance");
@@ -1279,8 +1396,27 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
                                                 <div className="text-slate-800 font-medium text-base mb-2"><LatexRenderer content={q.questionText} /></div>
                                                 {/* RICH CONTENT RENDERER - MOVED BELOW TEXT */}
                                                 {q.questionImage && (
-                                                    <div className="w-full max-w-lg h-40 relative border rounded bg-slate-50 mb-4">
+                                                    <div className="mb-2 w-full max-w-md h-32 relative border rounded bg-slate-50">
                                                         <img src={q.questionImage} alt="Question Image" className="w-full h-full object-contain" />
+                                                    </div>
+                                                )}
+                                                
+                                                {/* PREVIEW OPTIONS */}
+                                                {qType === 'INTEGER' ? (
+                                                    <div className="mt-2 text-xs font-bold text-slate-600 border px-3 py-1 rounded bg-slate-50 inline-block">
+                                                        Answer: {getIntegerAnswer(q.correctOption)}
+                                                    </div>
+                                                ) : isOptionImg ? (
+                                                    <div className="mt-2 text-xs text-slate-500 italic">Image Options available</div>
+                                                ) : (
+                                                    <div className="mt-2 grid grid-cols-2 gap-2">
+                                                        {['a','b','c','d'].map(key => (
+                                                            <div key={key} className="text-xs text-slate-500 truncate border px-2 py-1 rounded">
+                                                                <span className="uppercase font-bold mr-1">{key}.</span> 
+                                                                <ContentRenderer content={String(q.options[key] || '')} />
+                                                            </div>
+                                                        ))}
+                                                        {Object.keys(q.options).length > 2 && <div className="text-xs text-slate-400 pl-1">...</div>}
                                                     </div>
                                                 )}
                                             </td>
@@ -1347,7 +1483,7 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
                  </div>
              </div>
          )}
-
+         
          {/* EXAMS TAB (UPDATED LAYOUT) */}
          {activeTab === 'exams' && (
              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -1445,68 +1581,268 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
                  </div>
              </div>
          )}
+         
+         {/* --- ATTENDANCE TAB --- */}
+          {activeTab === 'attendance' && (
+             <div className="flex flex-col h-[85vh] gap-6">
+                <div className={`${glassPanel} p-6`}>
+                    <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
+                        <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                            <Users size={20} className="text-amber-600"/> Mark Attendance
+                        </h3>
+                    </div>
+                    
+                    {/* Attendance Controls */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                        <div>
+                            <label className={labelStyle}>Batch</label>
+                            <select className={inputStyle} value={selectedBatch} onChange={e => setSelectedBatch(e.target.value)}>
+                                <option value="">Select Batch</option>
+                                {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className={labelStyle}>Date</label>
+                            <input type="date" className={inputStyle} value={attendanceDate} onChange={e => setAttendanceDate(e.target.value)} />
+                        </div>
+                        <div>
+                            <label className={labelStyle}>Subject</label>
+                            <input type="text" className={inputStyle} placeholder="e.g. Physics" value={attendanceSubject} onChange={e => setAttendanceSubject(e.target.value)} />
+                        </div>
+                        <div>
+                            <label className={labelStyle}>Timing</label>
+                            <input type="text" className={inputStyle} placeholder="e.g. 10:00 AM - 12:00 PM" value={attendanceTime} onChange={e => setAttendanceTime(e.target.value)} />
+                        </div>
+                    </div>
+                </div>
 
-         {/* ATTENDANCE TAB */}
-         {activeTab === 'attendance' && (
-             <div className="max-w-4xl mx-auto space-y-6">
-                 <div className={glassPanel + " p-6 flex flex-wrap items-end gap-4"}>
-                    <div className="flex-1 min-w-[200px]">
-                        <label className={labelStyle}>Select Batch</label>
-                        <select className={inputStyle} value={selectedBatch} onChange={e => setSelectedBatch(e.target.value)}>
-                            <option value="">-- Choose Batch --</option>
-                            {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                        </select>
-                    </div>
-                    <div className="flex-1 min-w-[200px]">
-                        <label className={labelStyle}>Date</label>
-                        <input type="date" className={inputStyle} value={attendanceDate} onChange={e => setAttendanceDate(e.target.value)} />
-                    </div>
-                    <button className="px-6 py-3 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-700 transition">Fetch List</button>
+                {/* Student List */}
+                <div className={`flex-1 ${glassPanel} flex flex-col overflow-hidden`}>
+                     <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                         <span className="text-xs font-bold text-slate-500 uppercase">Student Roll Call</span>
+                         <span className="text-xs font-bold bg-blue-50 text-blue-600 px-2 py-1 rounded">Total: {attendanceList.length}</span>
+                     </div>
+                     <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                         {attendanceList.length === 0 ? (
+                             <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                                 <Users size={48} className="mb-2 opacity-20"/>
+                                 <p>Select a batch to load students</p>
+                             </div>
+                         ) : (
+                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                 {attendanceList.map((record, idx) => (
+                                     <div key={record.studentId} 
+                                          onClick={() => toggleAttendanceStatus(idx)}
+                                          className={`p-3 rounded-xl border cursor-pointer transition flex items-center justify-between group ${
+                                              record.status === 'PRESENT' 
+                                              ? 'bg-green-50 border-green-200 shadow-sm' 
+                                              : 'bg-red-50 border-red-200 opacity-70'
+                                          }`}
+                                     >
+                                         <div className="flex items-center gap-3">
+                                             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+                                                 record.status === 'PRESENT' ? 'bg-green-200 text-green-700' : 'bg-red-200 text-red-700'
+                                             }`}>
+                                                 {idx + 1}
+                                             </div>
+                                             <span className={`font-medium text-sm ${
+                                                 record.status === 'PRESENT' ? 'text-slate-800' : 'text-slate-500'
+                                             }`}>{record.studentName}</span>
+                                         </div>
+                                         <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                                             record.status === 'PRESENT' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'
+                                         }`}>
+                                             {record.status}
+                                         </div>
+                                     </div>
+                                 ))}
+                             </div>
+                         )}
+                     </div>
+                     <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end">
+                         <button onClick={submitAttendance} disabled={attendanceList.length === 0} className="px-8 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg transition flex items-center gap-2">
+                             <CheckCircle size={18}/> Submit Attendance
+                         </button>
+                     </div>
+                </div>
+             </div>
+          )}
+
+          {/* --- RESULTS & ANALYTICS TAB --- */}
+          {activeTab === 'results' && (
+              <div className="flex flex-col h-[85vh] gap-6">
+                 {/* Header & Controls */}
+                 <div className={`${glassPanel} p-6`}>
+                     <div className="flex justify-between items-center mb-4">
+                         <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                             <Activity size={20} className="text-amber-600"/> 
+                             {selectedStudentId ? "Student Performance Report" : "Exam Analytics Board"}
+                         </h3>
+                         {selectedStudentId && (
+                             <button onClick={() => { setSelectedStudentId(null); setStudentDetail(null); }} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition flex items-center gap-2">
+                                 <ArrowLeft size={16}/> Back to Leaderboard
+                             </button>
+                         )}
+                     </div>
+                     {!selectedStudentId && (
+                         <div className="max-w-md">
+                             <label className={labelStyle}>Select Exam to Analyze</label>
+                             <select className={inputStyle} value={analyticsExamId} onChange={(e) => handleFetchAnalytics(e.target.value)}>
+                                 <option value="">-- Choose Exam --</option>
+                                 {exams.map(e => (
+                                     <option key={e.id} value={e.id}>{e.title}</option>
+                                 ))}
+                             </select>
+                         </div>
+                     )}
                  </div>
 
-                 {selectedBatch && (
-                     <div className={glassPanel + " overflow-hidden"}>
-                        <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/50 flex justify-between items-center">
-                            <h3 className="font-bold text-slate-800">Mark Attendance</h3>
-                            <span className="text-xs text-slate-500 font-mono">{attendanceDate}</span>
-                        </div>
-                        <div className="p-0">
-                            {attendanceList.length === 0 ? (
-                                <div className="p-12 text-center text-slate-400">Select a batch to load students.</div>
-                            ) : (
-                                <table className="w-full text-left">
-                                    <thead className="bg-slate-50 text-xs font-bold text-slate-500 uppercase border-b border-slate-200">
-                                        <tr><th className="px-6 py-3">Student Name</th><th className="px-6 py-3 text-right">Status</th></tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {attendanceList.map((record, idx) => (
-                                            <tr key={record.studentId} className="hover:bg-slate-50 transition cursor-pointer" onClick={() => toggleAttendanceStatus(idx)}>
-                                                <td className="px-6 py-4 font-bold text-slate-800">{record.studentName}</td>
-                                                <td className="px-6 py-4 text-right">
-                                                    <span className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${record.status === 'PRESENT' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                                        {record.status}
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            )}
-                        </div>
-                        {attendanceList.length > 0 && (
-                            <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end">
-                                <button onClick={submitAttendance} className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg transition flex items-center gap-2">
-                                    <CheckCircle size={18}/> Save Attendance
-                                </button>
-                            </div>
-                        )}
-                     </div>
-                 )}
-             </div>
-         )}
-         
-         {/* PLACEHOLDERS FOR OTHER TABS */}
-         {activeTab === 'results' && <div className="p-12 text-center text-slate-400">Results Analysis Loaded.</div>}
+                 {/* MAIN CONTENT AREA */}
+                 <div className={`flex-1 ${glassPanel} overflow-hidden flex flex-col`}>
+                     
+                     {/* VIEW 1: LEADERBOARD (Default) */}
+                     {!selectedStudentId ? (
+                         !analyticsData ? (
+                             <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
+                                 <BarChart2 size={48} className="mb-2 opacity-20"/>
+                                 <p>Select an exam above to view results</p>
+                             </div>
+                         ) : (
+                             <div className="flex-1 overflow-auto custom-scrollbar">
+                                 <table className="w-full text-left">
+                                     <thead className="bg-slate-50 text-xs font-bold text-slate-500 uppercase border-b border-slate-200 sticky top-0 z-10 shadow-sm">
+                                         <tr>
+                                             <th className="px-6 py-4">Rank</th>
+                                             <th className="px-6 py-4">Student</th>
+                                             <th className="px-6 py-4 text-center">Score</th>
+                                             <th className="px-6 py-4 text-center">Accuracy</th>
+                                             <th className="px-6 py-4 text-center">Action</th>
+                                         </tr>
+                                     </thead>
+                                     <tbody className="divide-y divide-slate-100 text-sm">
+                                         {analyticsData.map((row, idx) => (
+                                             <tr key={idx} className="hover:bg-slate-50 transition cursor-pointer" onClick={() => handleViewStudentDetail(row.studentId)}>
+                                                 <td className="px-6 py-4">
+                                                     <span className={`w-8 h-8 rounded-full flex items-center justify-center font-black ${
+                                                         idx < 3 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500'
+                                                     }`}>{row.rank}</span>
+                                                 </td>
+                                                 <td className="px-6 py-4 font-bold text-slate-700">{row.studentName}</td>
+                                                 <td className="px-6 py-4 text-center font-mono text-slate-900">{row.score}</td>
+                                                 <td className="px-6 py-4 text-center">
+                                                     <span className={`px-2 py-1 rounded text-xs font-bold ${row.accuracy > 70 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{row.accuracy}%</span>
+                                                 </td>
+                                                 <td className="px-6 py-4 text-center">
+                                                     <button className="text-blue-600 hover:text-blue-800 text-xs font-bold flex items-center justify-center gap-1 mx-auto">
+                                                         Analyze <ChevronRight size={14}/>
+                                                     </button>
+                                                 </td>
+                                             </tr>
+                                         ))}
+                                     </tbody>
+                                 </table>
+                             </div>
+                         )
+                     ) : (
+                         /* VIEW 2: DETAILED STUDENT REPORT */
+                         loadingDetail ? (
+                             <div className="flex-1 flex items-center justify-center"><Loader2 className="animate-spin text-amber-600"/></div>
+                         ) : !studentDetail ? (
+                             <div className="flex-1 flex items-center justify-center text-slate-400">Student absent or data unavailable.</div>
+                         ) : (
+                             <div className="flex-1 flex flex-col overflow-hidden">
+                                 {/* Report Header */}
+                                 <div className="p-6 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-6">
+                                     <div className="col-span-2">
+                                         <h4 className="font-bold text-lg text-slate-800">Performance Insights</h4>
+                                         <div className="mt-3 space-y-2">
+                                             {generateInsights(studentDetail).map((insight, i) => (
+                                                 <div key={i} className={`text-xs p-3 rounded-lg border flex items-start gap-2 ${
+                                                     insight.type === 'CRITICAL' ? 'bg-red-50 border-red-200 text-red-800' : 
+                                                     insight.type === 'WARN' ? 'bg-orange-50 border-orange-200 text-orange-800' : 
+                                                     'bg-blue-50 border-blue-200 text-blue-800'
+                                                 }`}>
+                                                     <AlertCircle size={14} className="shrink-0 mt-0.5"/>
+                                                     <span>{insight.text}</span>
+                                                 </div>
+                                             ))}
+                                             {generateInsights(studentDetail).length === 0 && <div className="text-xs text-green-600 bg-green-50 p-3 rounded border border-green-200">No critical issues found. Solid performance!</div>}
+                                         </div>
+                                     </div>
+                                     <div className="flex flex-col justify-center items-center gap-2 p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
+                                         <div className="text-xs text-slate-500 uppercase font-bold">Total Score</div>
+                                         <div className="text-4xl font-black text-amber-600">{studentDetail.totalScore}</div>
+                                         <div className="text-xs text-slate-400">Time Taken: {Math.round((new Date(studentDetail.submittedAt).getTime() - new Date(studentDetail.startedAt).getTime())/60000)} mins</div>
+                                     </div>
+                                 </div>
+
+                                 {/* Question Timeline */}
+                                 <div className="flex-1 overflow-y-auto p-6 bg-slate-100/50 custom-scrollbar">
+                                     <h4 className="font-bold text-slate-700 mb-4 text-sm uppercase tracking-wider">Attempt Timeline</h4>
+                                     <div className="space-y-4">
+                                         {studentDetail.answers.map((ans: any, idx: number) => (
+                                             <div key={idx} className={`bg-white rounded-xl border p-4 shadow-sm transition ${ans.isCorrect ? 'border-l-4 border-l-green-500' : 'border-l-4 border-l-red-500'}`}>
+                                                 <div className="flex justify-between items-start mb-3">
+                                                     <div className="flex items-center gap-2">
+                                                         <span className="font-bold text-slate-400 text-sm">Q{idx+1}</span>
+                                                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${ans.question?.subject.includes('PHYSICS') ? 'bg-purple-50 text-purple-700' : ans.question?.subject.includes('MATH') ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>
+                                                             {ans.question?.subject}
+                                                         </span>
+                                                         <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded flex items-center gap-1">
+                                                             <Clock size={10}/> {ans.timeTaken}s
+                                                         </span>
+                                                     </div>
+                                                     <div className={`text-xs font-bold px-2 py-1 rounded ${ans.isCorrect ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                         {ans.isCorrect ? '+ ' + ans.marksAwarded : ans.marksAwarded} Marks
+                                                     </div>
+                                                 </div>
+                                                 
+                                                 {/* Question Content */}
+                                                 <div className="mb-4 text-sm text-slate-800">
+                                                     <LatexRenderer content={ans.question?.questionText || "Question text unavailable"} />
+                                                 </div>
+                                                 {ans.question?.questionImage && (
+                                                     <div className="mb-4 relative h-32 w-full max-w-sm border rounded bg-slate-50">
+                                                         <img src={ans.question.questionImage} className="w-full h-full object-contain" alt="Question Diagram"/>
+                                                     </div>
+                                                 )}
+
+                                                 {/* Analysis Block */}
+                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs mt-3 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                                      <div>
+                                                          <span className="block font-bold text-slate-500 mb-1">Student Selected:</span>
+                                                          <span className={`font-mono font-bold ${ans.isCorrect ? 'text-green-600' : 'text-red-600'}`}>
+                                                              {ans.selectedOption ? ans.selectedOption.toUpperCase() : "SKIPPED"}
+                                                          </span>
+                                                      </div>
+                                                      <div>
+                                                          <span className="block font-bold text-slate-500 mb-1">Correct Answer:</span>
+                                                          <span className="font-mono font-bold text-slate-800">
+                                                              {ans.question?.correctOption?.replace(/[\[\]'"]/g, '').toUpperCase()}
+                                                          </span>
+                                                      </div>
+                                                 </div>
+                                                 
+                                                 {/* Solution Image - Logic: If it exists in the fetched data, show it. */}
+                                                 {ans.question?.solutionImage && (
+                                                     <div className="mt-3 pt-3 border-t border-slate-100">
+                                                         <span className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Solution Reference</span>
+                                                         <div className="relative h-24 w-full max-w-xs border rounded bg-white">
+                                                             <img src={ans.question.solutionImage} className="w-full h-full object-contain" alt="Solution"/>
+                                                         </div>
+                                                     </div>
+                                                 )}
+                                             </div>
+                                         ))}
+                                     </div>
+                                 </div>
+                             </div>
+                         )
+                     )}
+                 </div>
+              </div>
+          )}
+                   {activeTab === 'results' && <div className="p-12 text-center text-slate-400">Results Analysis Loaded.</div>}
 
       </main>
 

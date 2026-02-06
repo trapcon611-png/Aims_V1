@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Request, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards, Request, BadRequestException, InternalServerErrorException, Query } from '@nestjs/common';
 import { ExamsService } from './exams.service';
 import { AuthGuard } from '@nestjs/passport';
 
@@ -12,13 +12,28 @@ export class ExamsController {
     return this.examsService.findAll();
   }
 
-  // --- NEW: Fetch Student's Past Attempts for Dashboard ---
+  // --- STUDENT: Fetch My Past Attempts ---
   @Get('my-attempts')
   @UseGuards(AuthGuard('jwt'))
   getMyAttempts(@Request() req) {
     const userId = req.user?.userId || req.user?.id || req.user?.sub;
     if (!userId) throw new BadRequestException('User identification failed.');
     return this.examsService.getMyAttempts(userId);
+  }
+
+  // --- PARENT: Fetch Specific Student's Attempts ---
+  @Get('student-attempts')
+  @UseGuards(AuthGuard('jwt'))
+  getStudentAttempts(@Query('studentId') studentId: string) {
+    if (!studentId) throw new BadRequestException('Student ID is required.');
+    return this.examsService.getMyAttempts(studentId);
+  }
+
+  // --- ADMIN: Get Detailed Exam Analytics (Leaderboard) ---
+  @Get(':id/analytics')
+  @UseGuards(AuthGuard('jwt'))
+  getExamAnalytics(@Param('id') id: string) {
+    return this.examsService.getExamAnalytics(id);
   }
 
   @Post('questions')

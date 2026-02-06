@@ -321,7 +321,7 @@ const StudentLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
       <div className="relative z-10 w-full max-w-sm">
         <div className="bg-white/90 backdrop-blur-xl border border-white/20 rounded-3xl shadow-2xl overflow-hidden ring-1 ring-white/40">
           <div className="p-8 text-center border-b border-slate-100">
-            <div className="relative w-24 h-24 mx-auto mb-6 p-2 bg-white rounded-full shadow-lg ring-4 ring-blue-50">
+            <div className="relative w-24 h-24 mx-auto mb-6 bg-white rounded-full shadow-lg ring-4 ring-blue-50">
                <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain p-1" unoptimized />
             </div>
             <h3 className="text-2xl font-black text-slate-800 tracking-tight uppercase">Student Portal</h3>
