@@ -1,30 +1,41 @@
-# Use Node.js 20 LTS (Required for newer Next.js versions)
+# 1. Base Image
 FROM node:20-alpine
 
-# Set working directory
+# 2. Set Working Directory
 WORKDIR /app
 
-# Copy package files
+# 3. Copy Dependencies
 COPY package*.json ./
 
-# Install dependencies
+# 4. Install Dependencies
+# We explicitly install the animation libraries here to ensure they exist
 RUN npm install
+RUN npm install three postprocessing @types/three
 
-# Copy source code
+# 5. Copy Prisma Schema explicitly
+# This is CRITICAL for the next step
+COPY prisma ./prisma/
+
+# 6. Generate Prisma Client INSIDE the container
+# This fixes "Module not found: Can't resolve '@prisma/client'"
+RUN npx prisma generate
+
+# 7. Copy Source Code
 COPY . .
 
-# --- CRITICAL FIX: Capture Build Arguments ---
-# This reads the arg passed from docker-compose.yml
+# --- BUILD ARGUMENTS ---
+# Capture the API URL from docker-compose
 ARG NEXT_PUBLIC_API_URL
-# This sets it as an environment variable so 'npm run build' can use it
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-# ---------------------------------------------
+# -----------------------
 
-# Build Next.js app
+# 8. Build the Next.js App
+# Disable linting during build to prevent minor style errors from stopping deployment
+ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-# Expose Frontend port
+# 9. Expose Port
 EXPOSE 3000
 
-# Start Next.js
+# 10. Start Command
 CMD ["npm", "start"]
