@@ -10,52 +10,40 @@ export class FinanceService {
   // --- 1. PARENT / STUDENT FEATURES ---
 
   async getParentFinancials(userId: string) {
-    // Find the parent profile associated with the logged-in user
     const parent = await this.prisma.parentProfile.findUnique({
       where: { userId },
       include: {
         children: {
           include: {
-            feesPaid: {
-              orderBy: { date: 'desc' }
-            },
+            feesPaid: { orderBy: { date: 'desc' } },
             batch: true
           }
         }
       }
     });
 
-    if (!parent) {
-      return []; 
-    }
+    if (!parent) return []; 
 
-    // Map data to a clean format for the frontend dashboard
     return parent.children.map((child: any) => {
-      // Using 'any' cast to ensure access to new schema fields like installmentSchedule
-      const totalAgreed = child.feeAgreed || 0;
       const totalPaid = child.feesPaid.reduce((sum: number, record: any) => sum + record.amount, 0);
-      
-      // Calculate Pending: (Agreed - WaiveOff) - Paid
       const netFee = Math.max(0, (child.feeAgreed || 0) - (child.waiveOff || 0));
       const pending = Math.max(0, netFee - totalPaid);
 
       return {
-        studentId: child.id,
+        studentId: child.id,     // Used for Fees
+        userId: child.userId,    // <--- NEW: Used for Exam Results
         name: child.fullName,
         batch: child.batch?.name || "Unassigned",
         totalFees: child.feeAgreed,
         paidFees: totalPaid,
         pendingFees: pending,
         history: child.feesPaid,
-        // MAP THE SCHEDULE: Pass the JSON from DB to the frontend
-        // Ensure we return an empty array if null
         installments: child.installmentSchedule || []
       };
     });
   }
 
   // --- 2. EXPENSE MANAGEMENT ---
-
   async createExpense(data: CreateExpenseDto) {
     return this.prisma.expense.create({
       data: {
@@ -70,19 +58,12 @@ export class FinanceService {
   }
 
   async findAllExpenses() {
-    return this.prisma.expense.findMany({
-      orderBy: { date: 'desc' }
-    });
+    return this.prisma.expense.findMany({ orderBy: { date: 'desc' } });
   }
 
   async getSummary() {
-    const fees = await this.prisma.feeRecord.aggregate({
-      _sum: { amount: true }
-    });
-    
-    const expenses = await this.prisma.expense.aggregate({
-      _sum: { amount: true }
-    });
+    const fees = await this.prisma.feeRecord.aggregate({ _sum: { amount: true } });
+    const expenses = await this.prisma.expense.aggregate({ _sum: { amount: true } });
 
     return {
       totalCollected: fees._sum.amount || 0,
@@ -91,8 +72,7 @@ export class FinanceService {
     };
   }
 
-  // --- 3. FEE COLLECTION (ADMIN) ---
-
+  // --- 3. FEE COLLECTION ---
   async checkFeeStatus(studentId: string) {
     const student = await this.prisma.studentProfile.findUnique({
       where: { id: studentId },
@@ -100,10 +80,7 @@ export class FinanceService {
     });
 
     if (!student) return { error: "Student not found" };
-
-    // Cast to any to access new fields
     const s = student as any;
-
     const paid = s.feesPaid.reduce((acc: number, curr: any) => acc + curr.amount, 0);
     const netFee = Math.max(0, (s.feeAgreed || 0) - (s.waiveOff || 0));
 

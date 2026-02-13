@@ -4,31 +4,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { 
-  BookOpen, 
-  Clock, 
-  FileText, 
-  LogOut, 
-  User, 
-  Award, 
-  PlayCircle, 
-  CheckCircle, 
-  AlertCircle, 
-  Loader2,
-  ChevronRight,
-  ChevronLeft,
-  ChevronUp,
-  ChevronDown,
-  LayoutDashboard,
-  GraduationCap,
-  Eye,       
-  Timer,     
-  BarChart2, 
-  X,          
-  Bell,      
-  Megaphone, 
-  Zap,
-  ArrowRight,
-  PieChart
+  BookOpen, Clock, FileText, LogOut, User, Award, PlayCircle, CheckCircle, 
+  AlertCircle, Loader2, ChevronRight, ChevronLeft, ChevronUp, ChevronDown, 
+  LayoutDashboard, GraduationCap, Eye, Timer, BarChart2, X, Bell, Megaphone, 
+  Zap, ArrowRight, PieChart, Image as ImageIcon
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -53,7 +32,9 @@ interface QuestionMetric {
   viewCount: number;
   subject?: string;
   questionText?: string;
-  questionImage?: string; // Added image field
+  questionImage?: string; 
+  type?: string; // 'INTEGER' | 'SINGLE' | 'MULTIPLE'
+  options?: any; // To show what Option A/B/C was
   selectedOption?: string;
   correctOption?: string;
   marks?: number;
@@ -95,6 +76,79 @@ interface StudentProfile {
   avatar?: string;
 }
 
+// --- HELPER FUNCTIONS ---
+const isImageUrl = (url: string) => {
+    if (!url || typeof url !== 'string') return false;
+    return (url.startsWith('http') || url.startsWith('/')) && 
+           (url.match(/\.(jpeg|jpg|gif|png|webp|svg|bmp|tiff)$/i) != null || url.includes('cloudinary') || url.includes('blob') || url.includes('images'));
+};
+
+// --- RENDERERS ---
+const LatexRenderer = React.memo(({ content }: { content: string }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const loadKatex = async () => {
+        if ((window as any).katex) { renderMath(); return; }
+        // Load CSS
+        if (!document.getElementById('katex-css')) {
+            const link = document.createElement("link");
+            link.id = 'katex-css';
+            link.rel = "stylesheet";
+            link.href = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css";
+            document.head.appendChild(link);
+        }
+        // Load JS
+        if (!document.getElementById('katex-js')) {
+            const script = document.createElement("script");
+            script.id = 'katex-js';
+            script.src = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js";
+            script.onload = () => loadAutoRender();
+            document.head.appendChild(script);
+        } else { loadAutoRender(); }
+    };
+
+    const loadAutoRender = () => {
+        if (!document.getElementById('katex-auto-render')) {
+            const script = document.createElement("script");
+            script.id = 'katex-auto-render';
+            script.src = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js";
+            script.onload = renderMath;
+            document.head.appendChild(script);
+        } else { renderMath(); }
+    };
+
+    const renderMath = () => {
+         if (containerRef.current && (window as any).renderMathInElement) {
+             (window as any).renderMathInElement(containerRef.current, {
+                 delimiters: [
+                     {left: '$$', right: '$$', display: true},
+                     {left: '$', right: '$', display: false}
+                 ],
+                 throwOnError : false
+             });
+         }
+    };
+    loadKatex();
+  }, [content]);
+
+  if (!content) return null;
+  return <div ref={containerRef} dangerouslySetInnerHTML={{__html: content}} className="latex-content text-sm leading-relaxed inline"/>;
+});
+LatexRenderer.displayName = 'LatexRenderer';
+
+const ContentRenderer = ({ content }: { content: string }) => {
+    if (!content) return null;
+    if (isImageUrl(content)) {
+        return (
+            <div className="relative w-full h-20 my-1 border border-slate-100 rounded-md overflow-hidden bg-white">
+                 <img src={content} alt="Content" className="w-full h-full object-contain" />
+            </div>
+        );
+    }
+    return <LatexRenderer content={content} />;
+};
+
 // --- API UTILITIES ---
 const studentApi = {
   async login(username: string, password: string) {
@@ -119,18 +173,20 @@ const studentApi = {
 
   async getExams(token: string) {
     try {
-      const res = await fetch(`${API_URL}/exams`, {
+      const res = await fetch(`${API_URL}/erp/exams`, { // Changed to use erp/exams or standard /exams route
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) return [];
-      return await res.json();
+      const data = await res.json();
+      // Filter for Published exams only for students
+      return Array.isArray(data) ? data.filter((e:any) => e.isPublished || e.status === 'PUBLISHED') : [];
     } catch (e) { return []; }
   },
 
-  // UPDATED: Fetches 'TestAttempt' records correctly based on Schema
-  async getResults(token: string, studentId: string) {
+  // UPDATED: Fetches 'TestAttempt' records correctly via my-attempts endpoint
+  async getResults(token: string) {
     try {
-      // Trying the endpoint that corresponds to ExamsService.getMyAttempts
+      // Use the dedicated endpoint for the logged-in user
       const res = await fetch(`${API_URL}/exams/my-attempts`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -140,17 +196,7 @@ const studentApi = {
           return [];
       }
       
-      // Fix for "Unexpected end of JSON input" error
-      const text = await res.text();
-      if (!text) return []; 
-
-      let attempts;
-      try {
-        attempts = JSON.parse(text);
-      } catch (err) {
-        console.error("Invalid JSON from results API", err);
-        return [];
-      }
+      const attempts = await res.json();
 
       if (!Array.isArray(attempts)) return [];
       
@@ -163,16 +209,26 @@ const studentApi = {
                 status = ans.isCorrect ? 'CORRECT' : 'WRONG';
             }
 
+            // Ensure options is an object/parsed if it's a string
+            let options = ans.question?.options;
+            if (typeof options === 'string') {
+                try { options = JSON.parse(options); } catch (e) {}
+            }
+
             return {
-                id: idx + 1, // Simple sequential ID for display
+                id: idx + 1, 
                 status: status,
                 timeSpent: ans.timeTaken || 0,
                 viewCount: 1, 
                 subject: ans.question?.subject || 'General',
                 questionText: ans.question?.questionText || 'Question text not available',
-                questionImage: ans.question?.questionImage, // Map image
+                questionImage: ans.question?.questionImage, 
+                
+                type: ans.question?.type,
+                options: options || {},
+                
                 selectedOption: ans.selectedOption,
-                correctOption: ans.question?.correctOption, // Map correct option
+                correctOption: ans.question?.correctOption, 
                 marks: ans.marksAwarded
             };
         });
@@ -182,7 +238,7 @@ const studentApi = {
             examTitle: attempt.exam?.title || 'Unknown Exam',
             score: attempt.totalScore || 0,
             totalMarks: attempt.exam?.totalMarks || 0,
-            rank: '-', 
+            rank: attempt.rank || '-', 
             date: attempt.submittedAt || attempt.startedAt || new Date().toISOString(),
             analytics: {
                 questions: questionMetrics
@@ -207,7 +263,7 @@ const studentApi = {
 
   async getNotices(token: string) {
     try {
-      const res = await fetch(`${API_URL}/notices`, {
+      const res = await fetch(`${API_URL}/erp/notices`, { // Assuming /erp/notices or /notices
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) return [];
@@ -224,71 +280,6 @@ const getYoutubeId = (url: string) => {
     return (match && match[2].length === 11) ? match[2] : null;
 };
 
-// --- LATEX RENDERER COMPONENT (Reused for Results) ---
-const LatexRenderer = React.memo(({ content }: { content: string }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const loadKatex = async () => {
-        if ((window as any).katex) { renderMath(); return; }
-
-        if (!document.getElementById('katex-css')) {
-            const link = document.createElement("link");
-            link.id = 'katex-css';
-            link.rel = "stylesheet";
-            link.href = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css";
-            link.crossOrigin = "anonymous";
-            document.head.appendChild(link);
-        }
-
-        if (!document.getElementById('katex-js')) {
-            const script = document.createElement("script");
-            script.id = 'katex-js';
-            script.src = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js";
-            script.crossOrigin = "anonymous";
-            script.onload = () => loadAutoRender();
-            document.head.appendChild(script);
-        } else {
-            loadAutoRender();
-        }
-    };
-
-    const loadAutoRender = () => {
-        if (!document.getElementById('katex-auto-render')) {
-            const script = document.createElement("script");
-            script.id = 'katex-auto-render';
-            script.src = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js";
-            script.crossOrigin = "anonymous";
-            script.onload = renderMath;
-            document.head.appendChild(script);
-        } else {
-            renderMath();
-        }
-    };
-
-    const renderMath = () => {
-         if (containerRef.current && (window as any).renderMathInElement) {
-             (window as any).renderMathInElement(containerRef.current, {
-                 delimiters: [
-                     {left: '$$', right: '$$', display: true},
-                     {left: '$', right: '$', display: false},
-                     {left: '\\(', right: '\\)', display: false},
-                     {left: '\\[', right: '\\]', display: true}
-                 ],
-                 throwOnError : false
-             });
-         }
-    };
-
-    loadKatex();
-  }, [content]);
-
-  if (!content) return null;
-  return <div ref={containerRef} dangerouslySetInnerHTML={{__html: content}} className="latex-content text-sm leading-relaxed inline"/>;
-});
-LatexRenderer.displayName = 'LatexRenderer';
-
-
 // --- COMPONENT: STUDENT LOGIN ---
 const StudentLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
   const [creds, setCreds] = useState({ username: '', password: '' });
@@ -301,7 +292,6 @@ const StudentLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
     setError('');
     try {
       const data = await studentApi.login(creds.username, creds.password);
-      // Robust role check
       const role = data.user?.role?.toUpperCase();
       if (role !== 'STUDENT') throw new Error("Access Restricted: Students Only");
       onLogin(data);
@@ -351,7 +341,6 @@ const StudentLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
 
 // --- COMPONENT: RESULT ANALYSIS MODAL ---
 const ResultAnalysisModal = ({ result, onClose }: { result: Result, onClose: () => void }) => {
-  // State for expanding row details
   const [expandedRow, setExpandedRow] = useState<string | number | null>(null);
 
   if (!result.analytics || !result.analytics.questions || result.analytics.questions.length === 0) {
@@ -373,11 +362,9 @@ const ResultAnalysisModal = ({ result, onClose }: { result: Result, onClose: () 
   const totalTime = questions.reduce((acc, q) => acc + (q.timeSpent || 0), 0);
   const avgTime = questions.length > 0 ? Math.round(totalTime / questions.length) : 0;
   
-  // Safe reduces with initial values
   const slowestQ = questions.length > 0 ? questions.reduce((prev, current) => (prev.timeSpent > current.timeSpent) ? prev : current) : { id: '-', timeSpent: 0 };
   const mostViewedQ = questions.length > 0 ? questions.reduce((prev, current) => (prev.viewCount > current.viewCount) ? prev : current) : { id: '-', viewCount: 0 };
 
-  // Subject-wise Analysis
   const subjects = questions.reduce((acc, q) => {
     const sub = q.subject || 'General';
     if (!acc[sub]) acc[sub] = { total: 0, correct: 0, skipped: 0, wrong: 0 };
@@ -400,7 +387,7 @@ const ResultAnalysisModal = ({ result, onClose }: { result: Result, onClose: () 
 
   return (
     <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95 duration-200">
-      <div className="bg-white w-full max-w-5xl h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col relative text-slate-900">
+      <div className="bg-white w-full max-w-6xl h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col relative text-slate-900">
         
         {/* HEADER */}
         <div className="bg-slate-900 p-6 text-white flex justify-between items-center shrink-0">
@@ -501,7 +488,6 @@ const ResultAnalysisModal = ({ result, onClose }: { result: Result, onClose: () 
                           <th className="px-6 py-3">Subject</th>
                           <th className="px-6 py-3">Status</th>
                           <th className="px-6 py-3 text-right">Time Taken</th>
-                          <th className="px-6 py-3 text-right">Insight</th>
                           <th className="px-6 py-3 text-center">Details</th>
                        </tr>
                     </thead>
@@ -522,15 +508,6 @@ const ResultAnalysisModal = ({ result, onClose }: { result: Result, onClose: () 
                                 <td className="px-6 py-3 text-right font-mono text-slate-600">
                                     {formatTime(q.timeSpent)}
                                 </td>
-                                <td className="px-6 py-3 text-right">
-                                    {avgTime > 0 && q.timeSpent > avgTime * 2 ? (
-                                    <span className="text-[10px] text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded">Too Slow</span>
-                                    ) : avgTime > 0 && q.timeSpent < avgTime * 0.3 ? (
-                                    <span className="text-[10px] text-blue-500 font-bold bg-blue-50 px-2 py-0.5 rounded">Fast</span>
-                                    ) : (
-                                    <span className="text-[10px] text-slate-400 font-bold">-</span>
-                                    )}
-                                </td>
                                 <td className="px-6 py-3 text-center">
                                     {expandedRow === q.id ? <ChevronUp size={16} className="text-blue-500"/> : <ChevronDown size={16} className="text-slate-400"/>}
                                 </td>
@@ -539,28 +516,54 @@ const ResultAnalysisModal = ({ result, onClose }: { result: Result, onClose: () 
                             {expandedRow === q.id && (
                                 <tr className="bg-slate-50 border-b border-slate-100">
                                     <td colSpan={6} className="px-6 py-4">
-                                        <div className="space-y-3">
-                                            <div className="p-3 bg-white border border-slate-200 rounded-lg">
-                                                <p className="text-xs font-bold text-slate-400 uppercase mb-1">Question</p>
-                                                <LatexRenderer content={q.questionText || "Question text unavailable"} />
+                                        <div className="space-y-4">
+                                            {/* QUESTION TEXT & IMAGE */}
+                                            <div className="p-4 bg-white border border-slate-200 rounded-lg">
+                                                <p className="text-xs font-bold text-slate-400 uppercase mb-2">Question</p>
+                                                <div className="text-slate-800 text-sm mb-2"><LatexRenderer content={q.questionText || "Unavailable"} /></div>
                                                 {q.questionImage && (
-                                                    <div className="mt-2">
-                                                        <img src={q.questionImage} alt="Question" className="max-w-[200px] max-h-[150px] object-contain rounded border border-slate-200" />
+                                                    <div className="mt-2 h-40 w-full relative border rounded overflow-hidden">
+                                                        <img src={q.questionImage} alt="Question" className="w-full h-full object-contain" />
                                                     </div>
                                                 )}
                                             </div>
+                                            
+                                            {/* ANSWER COMPARISON */}
                                             <div className="grid grid-cols-2 gap-4">
-                                                <div className={`p-3 border rounded-lg ${q.status === 'CORRECT' ? 'bg-green-50 border-green-200' : q.status === 'WRONG' ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200'}`}>
-                                                    <p className="text-xs font-bold text-slate-400 uppercase mb-1">Your Answer</p>
-                                                    <p className={`font-mono font-bold ${q.status === 'CORRECT' ? 'text-green-700' : q.status === 'WRONG' ? 'text-red-700' : 'text-slate-500'}`}>
-                                                        {q.selectedOption ? q.selectedOption.toUpperCase() : <span className="text-slate-400 italic">Skipped</span>}
-                                                    </p>
+                                                {/* YOUR ANSWER */}
+                                                <div className={`p-4 border rounded-lg ${q.status === 'CORRECT' ? 'bg-green-50 border-green-200' : q.status === 'WRONG' ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200'}`}>
+                                                    <p className="text-xs font-bold text-slate-400 uppercase mb-2">Your Answer</p>
+                                                    {q.selectedOption ? (
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={`text-xl font-black ${q.status === 'CORRECT' ? 'text-green-600' : 'text-red-600'}`}>
+                                                                {q.selectedOption.toUpperCase()}
+                                                            </span>
+                                                            {/* Try to show content if it's an MCQ */}
+                                                            {q.options && q.options[q.selectedOption.toLowerCase()] && (
+                                                                <div className="text-sm text-slate-600 border-l pl-2 border-slate-300">
+                                                                    <ContentRenderer content={q.options[q.selectedOption.toLowerCase()]}/>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-slate-400 italic">Skipped</span>
+                                                    )}
                                                 </div>
-                                                <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
-                                                    <p className="text-xs font-bold text-blue-400 uppercase mb-1">Correct Answer</p>
-                                                    <p className="font-mono font-bold text-blue-700">
-                                                        {q.correctOption ? q.correctOption.toUpperCase().replace(/[\[\]'"]/g, '') : "N/A"}
-                                                    </p>
+
+                                                {/* CORRECT ANSWER */}
+                                                <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg">
+                                                    <p className="text-xs font-bold text-blue-400 uppercase mb-2">Correct Answer</p>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xl font-black text-blue-700">
+                                                            {q.correctOption ? q.correctOption.toUpperCase().replace(/[\[\]'"]/g, '') : "N/A"}
+                                                        </span>
+                                                        {/* Show Content for MCQ Correct Answer */}
+                                                        {q.options && q.correctOption && q.options[q.correctOption.toLowerCase()] && (
+                                                            <div className="text-sm text-slate-600 border-l pl-2 border-blue-200">
+                                                                <ContentRenderer content={q.options[q.correctOption.toLowerCase()]}/>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -610,10 +613,9 @@ const StudentDashboard = ({ user, token, onLogout }: { user: any, token: string,
             avatar: ''
         });
 
-        // Parallel Fetch for efficiency
         const [examsData, resultsData, resourceData, noticesData] = await Promise.all([
             studentApi.getExams(token),
-            studentApi.getResults(token, user.sub),
+            studentApi.getResults(token), // Removed user.sub
             studentApi.getResources(token),
             studentApi.getNotices(token)
         ]);
@@ -644,7 +646,6 @@ const StudentDashboard = ({ user, token, onLogout }: { user: any, token: string,
     ? Math.round(results.reduce((acc, curr) => acc + (curr.totalMarks > 0 ? (curr.score / curr.totalMarks * 100) : 0), 0) / results.length) 
     : 0;
 
-  // Since rank isn't in TestAttempt, we check if it's available or not
   const latestRank = results.length > 0 && results[0].rank !== '-' ? results[0].rank : null;
 
   return (
@@ -945,12 +946,12 @@ const StudentDashboard = ({ user, token, onLogout }: { user: any, token: string,
                                  {/* CONTENT INFO */}
                                  <div className="p-5 flex-1 flex flex-col">
                                      <div className="flex justify-between items-start mb-2">
-                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${res.type === 'VIDEO' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
-                                            {res.type === 'VIDEO' ? 'Lecture' : 'Notes'}
-                                        </span>
-                                        <span className="text-[10px] text-slate-400">
-                                            {new Date(res.createdAt).toLocaleDateString()}
-                                        </span>
+                                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${res.type === 'VIDEO' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
+                                             {res.type === 'VIDEO' ? 'Lecture' : 'Notes'}
+                                         </span>
+                                         <span className="text-[10px] text-slate-400">
+                                             {new Date(res.createdAt).toLocaleDateString()}
+                                         </span>
                                      </div>
                                      <h4 className="font-bold text-slate-800 text-sm mb-1 leading-snug line-clamp-2" title={res.title}>{res.title}</h4>
                                      <p className="text-xs text-slate-500 mt-auto pt-2">{res.subject || 'General'}</p>

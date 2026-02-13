@@ -20,10 +20,12 @@ import {
   Square,
   CheckSquare,
   List,
-  FileText
+  FileText,
+  Image as ImageIcon
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const AI_API_URL = 'https://prishaa-question-paper.hf.space'; // Base URL for relative images
 const LOGO_PATH = '/logo.png';
 
 // --- TYPES ---
@@ -56,40 +58,36 @@ interface ExamData {
 
 // --- HELPER FUNCTIONS ---
 
+const resolveImageUrl = (url: string | null | undefined) => {
+    if (!url || typeof url !== 'string') return null;
+    if (url.startsWith('http') || url.startsWith('blob') || url.startsWith('data')) return url;
+    // Handle relative paths from external API
+    return `${AI_API_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
 const getQuestionType = (q: Question, examTypeRaw: string = '') => {
-    const examType = examTypeRaw.toUpperCase();
+    // 1. Check explicit type from DB
+    const dbType = q.type ? q.type.toUpperCase() : '';
+    if (dbType === 'INTEGER' || dbType === 'NUMERICAL') return 'INTEGER';
+    if (dbType === 'MULTIPLE' || dbType === 'MULTI') return 'MULTIPLE';
+    
+    // 2. Check Options (Integers MUST have empty options or null)
+    const hasOptions = q.options && Object.keys(q.options).length > 0;
+    if (!hasOptions) return 'INTEGER';
 
-    if (q.type && (q.type.toLowerCase().trim() === 'integer' || q.type.toLowerCase().trim() === 'numerical')) {
-        return 'INTEGER';
-    }
-
-    const normalizeOptions = (opts: any) => {
-      if (!opts) return [];
-      if (Array.isArray(opts)) return opts.map(x => String(x).trim());
-      if (typeof opts === "object") return Object.values(opts).map(x => String(x).trim());
-      return [];
-    };
-
-    const cleaned = normalizeOptions(q.options);
-    const hasRealOptions = cleaned.some(v => v && v.toLowerCase() !== "null" && v.toLowerCase() !== "undefined" && v !== "-" && v !== "--" && v.trim() !== "");
-
-    if (!hasRealOptions) return 'INTEGER';
-
+    // 3. Fallback Heuristics
     if (q.tags && q.tags.some(t => t.toLowerCase().includes('integer') || t.toLowerCase().includes('numerical'))) return 'INTEGER';
 
+    const examType = examTypeRaw.toUpperCase();
     if (examType.includes('ADVANCE')) return 'MULTIPLE';
-    if (examType.includes('MAIN') || examType.includes('NEET')) return 'SINGLE';
-
-    if (q.type && q.type.toLowerCase().includes('multi')) return 'MULTIPLE';
-    if (q.tags && q.tags.some(t => t.toLowerCase().includes('multiple'))) return 'MULTIPLE';
-
+    
     return 'SINGLE';
 };
 
 const isImageUrl = (url: string) => {
     if (!url || typeof url !== 'string') return false;
-    return (url.startsWith('http') || url.startsWith('/')) && 
-           (url.match(/\.(jpeg|jpg|gif|png|webp|svg)$/i) != null || url.includes('cloudinary') || url.includes('blob'));
+    return (url.startsWith('http') || url.startsWith('/') || url.startsWith('blob')) && 
+           (url.match(/\.(jpeg|jpg|gif|png|webp|svg|bmp|tiff)$/i) != null || url.includes('cloudinary') || url.includes('blob') || url.includes('images') || url.includes('img'));
 };
 
 const getToken = () => {
@@ -164,21 +162,27 @@ const LatexRenderer = React.memo(({ content }: { content: string }) => {
 });
 LatexRenderer.displayName = 'LatexRenderer';
 
-// --- CONTENT RENDERER ---
+// --- CONTENT RENDERER (Handles Images in Options) ---
 const ContentRenderer = ({ content, isOption = false }: { content: string, isOption?: boolean }) => {
     if (!content) return null;
     
     if (isImageUrl(content)) {
+        const imgSrc = resolveImageUrl(content);
+        if (!imgSrc) return null;
+
         return (
             <div className={`w-full flex justify-center my-1 ${isOption ? 'bg-white p-1 rounded' : ''}`}>
                  <img 
-                    src={content} 
-                    alt="Content" 
+                    src={imgSrc} 
+                    alt="Option" 
                     className={
                         isOption 
                         ? "max-w-[200px] max-h-[120px] w-auto h-auto object-contain" 
                         : "max-w-[90%] max-h-[40vh] h-auto object-contain rounded-md border border-slate-100"
                     } 
+                    onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                    }}
                  />
             </div>
         );
@@ -304,7 +308,6 @@ export default function ExamPage() {
       const savedReview = localStorage.getItem(`exam_review_${data.attemptId}`);
       if (savedReview) setMarkedForReview(JSON.parse(savedReview));
 
-      // UPDATED: Load Saved Time Spent on Refresh
       const savedTimeSpent = localStorage.getItem(`exam_timeSpent_${data.attemptId}`);
       if (savedTimeSpent) setTimeSpent(JSON.parse(savedTimeSpent));
 
@@ -324,7 +327,6 @@ export default function ExamPage() {
           setTimeLeft(remaining);
       }
       
-      // Init Timer Ref
       lastSwitchTime.current = Date.now();
 
     } catch (e: any) {
@@ -359,7 +361,6 @@ export default function ExamPage() {
 
   // --- HANDLERS ---
   
-  // Update time spent when switching questions
   const handleQuestionSwitch = (newIndex: number) => {
       if (!examData) return;
       const now = Date.now();
@@ -370,7 +371,6 @@ export default function ExamPage() {
       if (currentQId) {
           setTimeSpent(prev => {
               const updated = { ...prev, [currentQId]: (prev[currentQId] || 0) + diff };
-              // Persist to localStorage
               if (examData.attemptId) {
                   localStorage.setItem(`exam_timeSpent_${examData.attemptId}`, JSON.stringify(updated));
               }
@@ -404,7 +404,6 @@ export default function ExamPage() {
              return;
         }
     } else {
-        // SINGLE choice - just replace
         newVal = optionKey;
     }
 
@@ -418,7 +417,7 @@ export default function ExamPage() {
      const qId = examData?.questions[currentQIndex].id;
      if (!qId) return;
      
-     // Allow negative and decimal
+     // Allow only numbers, negative sign, and one decimal point
      if (!/^-?\d*\.?\d*$/.test(val)) return;
 
      const newAnswers = { ...answers, [qId]: val };
@@ -455,7 +454,6 @@ export default function ExamPage() {
         return;
     }
 
-    // Finalize time for the current question
     const now = Date.now();
     const diff = (now - lastSwitchTime.current) / 1000;
     const currentQId = examData?.questions[currentQIndex]?.id;
@@ -465,11 +463,10 @@ export default function ExamPage() {
         finalTimeSpent[currentQId] = (finalTimeSpent[currentQId] || 0) + diff;
     }
 
-    // Prepare payload with timeTaken
     const payload = Object.entries(answers).map(([qId, opt]) => ({ 
         questionId: qId, 
         selectedOption: Array.isArray(opt) ? opt.join(',') : opt, 
-        timeTaken: Math.round(finalTimeSpent[qId] || 0) // Send rounded seconds
+        timeTaken: Math.round(finalTimeSpent[qId] || 0) 
     }));
 
     try {
@@ -481,14 +478,13 @@ export default function ExamPage() {
 
         if (!res.ok) throw new Error("Submission failed");
         
-        // Success: Status set to COMPLETED which triggers the "Submission Successful" UI
         setSubmissionStatus('COMPLETED');
         
         if (examData?.attemptId) {
             localStorage.removeItem(`exam_answers_${examData.attemptId}`);
             localStorage.removeItem(`exam_review_${examData.attemptId}`);
             localStorage.removeItem(`exam_start_${examData.attemptId}`);
-            localStorage.removeItem(`exam_timeSpent_${examData.attemptId}`); // Clear time records
+            localStorage.removeItem(`exam_timeSpent_${examData.attemptId}`); 
         }
     } catch (e: any) {
         alert(`Error submitting exam: ${e.message}`);
@@ -520,7 +516,6 @@ export default function ExamPage() {
       </div>
   );
 
-  // --- SUCCESS SCREEN (After database push) ---
   if (submissionStatus === 'COMPLETED') return (
       <div className="min-h-screen bg-slate-50 p-4 flex flex-col items-center justify-center font-sans">
           <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-slate-200 p-8 text-center">
@@ -549,8 +544,8 @@ export default function ExamPage() {
   const examType = examData?.exam.examType || examData?.exam.title || '';
   const qType = getQuestionType(question, examType);
   
-  // Only check for option images if it's NOT an integer question.
-  // This logic is crucial to prevent the integer input from being hidden.
+  // Resolve image URL (handle relative/absolute)
+  const questionImgSrc = resolveImageUrl(question.questionImage);
   const isOptionImg = qType !== 'INTEGER' && isImageUrl(question.options?.a || '');
 
   const optionKeys = Object.keys(question.options || {}).sort();
@@ -572,7 +567,6 @@ export default function ExamPage() {
                 <Clock size={18}/> {formatTime(timeLeft)}
              </div>
              
-             {/* QUESTION PAPER BUTTON */}
              <button 
                 onClick={() => setIsQuestionPaperOpen(true)}
                 className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition text-sm font-bold"
@@ -609,17 +603,24 @@ export default function ExamPage() {
                  <div className="text-base md:text-lg text-slate-800 font-medium leading-relaxed mb-4">
                      <LatexRenderer content={question.questionText} />
                  </div>
-                 {question.questionImage && (
+                 {/* Corrected Image Rendering Logic */}
+                 {questionImgSrc && (
                      <div className="w-full flex justify-center my-4">
-                         {/* Zoomed out question image constraint */}
-                         <img src={question.questionImage} alt="Question" className="max-w-[85%] max-h-[40vh] h-auto object-contain rounded-lg border border-slate-200 shadow-sm"/>
+                         <img 
+                            src={questionImgSrc} 
+                            alt="Question" 
+                            className="max-w-[85%] max-h-[40vh] h-auto object-contain rounded-lg border border-slate-200 shadow-sm"
+                            onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                         />
                      </div>
                  )}
              </div>
 
              {/* Options / Input Area */}
              <div className="p-4 bg-slate-50 border-t border-slate-200 max-h-[40vh] overflow-y-auto custom-scrollbar shadow-inner">
-                 {/* CRITICAL CHANGE: Explicitly Check for INTEGER Type First and Render Input */}
+                 {/* Explicitly Check for INTEGER Type */}
                  {qType === 'INTEGER' ? (
                      <div className="flex flex-col items-center justify-center py-6 bg-slate-50 rounded-xl border border-dashed border-slate-300">
                          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full max-w-sm flex flex-col items-center">
@@ -634,14 +635,13 @@ export default function ExamPage() {
                                 value={answers[question.id] || ''} 
                                 onChange={(e) => handleIntegerInput(e.target.value)}
                                 autoFocus
-                            />
+                             />
                              <p className="text-[11px] text-slate-400 mt-3 font-medium text-center">Type your answer. Integers and decimals allowed.</p>
                          </div>
                      </div>
                  ) : isOptionImg ? (
                      <div className="flex flex-col items-center">
                          <div className="mb-4 bg-white p-2 rounded border border-slate-200 shadow-sm">
-                             {/* Display the 'Option A' image which likely contains all options if it's a composite image */}
                              <img 
                                 src={question.options.a} 
                                 alt="Options" 
@@ -655,13 +655,13 @@ export default function ExamPage() {
                                     : answers[question.id] === key;
                                  
                                  return (
-                                    <button 
-                                        key={key} 
-                                        onClick={() => handleOptionSelect(key, qType as any)} 
-                                        className={`w-10 h-10 rounded-full font-bold text-sm border-2 transition-all flex items-center justify-center shadow-sm ${isSelected ? 'bg-blue-600 border-blue-600 text-white shadow-blue-200 scale-110' : 'bg-white border-slate-300 text-slate-500 hover:border-blue-400 hover:text-blue-600'}`}
-                                    >
-                                        {key.toUpperCase()}
-                                    </button>
+                                     <button 
+                                         key={key} 
+                                         onClick={() => handleOptionSelect(key, qType as any)} 
+                                         className={`w-10 h-10 rounded-full font-bold text-sm border-2 transition-all flex items-center justify-center shadow-sm ${isSelected ? 'bg-blue-600 border-blue-600 text-white shadow-blue-200 scale-110' : 'bg-white border-slate-300 text-slate-500 hover:border-blue-400 hover:text-blue-600'}`}
+                                     >
+                                         {key.toUpperCase()}
+                                     </button>
                                  );
                              })}
                          </div>
@@ -776,7 +776,10 @@ export default function ExamPage() {
                                   <span className="font-bold text-slate-900">Q.{idx+1}</span>
                                   <div className="flex-1 text-sm text-slate-700">
                                       <LatexRenderer content={q.questionText} />
-                                      {q.questionImage && <img src={q.questionImage} alt="Question" className="max-w-[200px] h-auto mt-2 rounded border border-slate-200"/>}
+                                      {/* Corrected Image Rendering in Modal */}
+                                      {resolveImageUrl(q.questionImage) && (
+                                          <img src={resolveImageUrl(q.questionImage)!} alt="Question" className="max-w-[200px] h-auto mt-2 rounded border border-slate-200"/>
+                                      )}
                                   </div>
                               </div>
                           </div>

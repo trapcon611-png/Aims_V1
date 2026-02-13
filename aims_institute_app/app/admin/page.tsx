@@ -23,23 +23,27 @@ import {
   Clock, 
   Filter, 
   Download, 
-  Loader2,
-  Activity,
-  Layers,
-  GraduationCap,
-  BrainCircuit,
-  FileQuestion,
-  ArrowLeft,
-  Settings,
-  Image as ImageIcon,
-  Hash,
-  Printer,
-  Eye
+  Loader2, 
+  Activity, 
+  Layers, 
+  GraduationCap, 
+  BrainCircuit, 
+  FileQuestion, 
+  ArrowLeft, 
+  Settings, 
+  Image as ImageIcon, 
+  Hash, 
+  Printer, 
+  Eye, 
+  Phone, 
+  IndianRupee, 
+  MessageSquare
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const AI_API_URL = 'https://prishaa-question-paper.hf.space';
 const LOGO_PATH = '/logo.png';
 
 // --- TYPES ---
@@ -68,13 +72,15 @@ interface Exam {
   durationMin: number;
   scheduledAt: string;
   status: 'DRAFT' | 'PUBLISHED' | 'COMPLETED';
-  examType?: string; // e.g. JEE_MAINS
+  examType?: string; 
   questions?: Question[];
 }
 
 interface Student {
   id: string;
   name: string;
+  fullName?: string; // Added for robustness
+  userId?: string;   // Added for mapping
   rollNo: string;
   batchId: string;
 }
@@ -90,7 +96,6 @@ interface Batch {
   name: string;
 }
 
-// --- API UTILITIES ---
 // --- API UTILITIES ---
 const adminApi = {
   async login(username: string, password: string) {
@@ -108,7 +113,7 @@ const adminApi = {
         totalExams: exams.length,
         activeStudents: studentsCount,
         questionBanks: questions.length, 
-        avgAttendance: 88 
+        avgAttendance: 88
     };
   },
 
@@ -162,30 +167,121 @@ const adminApi = {
     return await res.json();
   },
 
-  async addQuestionsToExam(token: string, examId: string, questionIds: string[]) {
-    const res = await fetch(`${API_URL}/exams/questions`, {
+  // --- AI & IMPORT INTEGRATIONS ---
+  async generateAiPaper(payload: any) {
+    const res = await fetch(`${AI_API_URL}/generate-paper`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error('AI Generation Failed');
+    return await res.json();
+  },
+
+  async searchQuestionsExternal(query: string, subject: string, difficulty: string) {
+    const payload = {
+        query: query || "",
+        limit: 20,
+        subject: subject || undefined,
+        difficulty: difficulty || undefined
+    };
+    
+    const res = await fetch(`${AI_API_URL}/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.questions || [];
+  },
+
+  async importQuestionsToExam(token: string, examId: string, questions: any[]) {
+     // Format questions for local DB
+     const formattedQuestions = questions.map((q: any) => {
+        // Robust Type Check - Look for both INTEGER and NUMERICAL
+        const qTypeRaw = q.question_type ? String(q.question_type).toUpperCase() : 'SINGLE';
+        const isInteger = qTypeRaw.includes('INTEGER') || qTypeRaw.includes('NUMERICAL');
+        
+        let optionsObj: any = {};
+        let correctKey = '';
+
+        if (isInteger) {
+            // --- INTEGER LOGIC ---
+            optionsObj = {}; // No options for integers
+            // FIX: Use the raw answer. If missing, default to "0" (NOT "a")
+            const rawAns = q.correct_answer;
+            correctKey = (rawAns !== undefined && rawAns !== null && String(rawAns).trim() !== '') 
+                ? String(rawAns) 
+                : '0'; 
+        } else {
+            // --- MCQ LOGIC ---
+            const keys = ['a', 'b', 'c', 'd'];
+            
+            // Map Text Options
+            if (Array.isArray(q.options)) {
+                q.options.forEach((opt: string, i: number) => {
+                    if (i < 4) optionsObj[keys[i]] = opt;
+                });
+            } else {
+                optionsObj = q.options || {};
+            }
+
+            // Map Option Images (Override text if available)
+            if (Array.isArray(q.option_images) && q.option_images.length > 0) {
+                 q.option_images.forEach((img: string, i: number) => {
+                    if (i < 4 && img) optionsObj[keys[i]] = img;
+                 });
+            }
+
+            // Determine Correct Key
+            const correctRaw = String(q.correct_answer).trim();
+            // Check direct key match (A, B, C, D)
+            let matchedKey = keys.find((k, i) => k === correctRaw.toLowerCase() || String(i) === correctRaw);
+            
+            // If no direct match, try matching option content
+            if (!matchedKey) {
+                const foundEntry = Object.entries(optionsObj).find(([k, v]) => String(v).trim() === correctRaw);
+                if (foundEntry) matchedKey = foundEntry[0];
+            }
+
+            correctKey = matchedKey || 'a';
+        }
+
+        // FIX: Extract first image correctly from array
+        const mainImage = (q.question_images && Array.isArray(q.question_images) && q.question_images.length > 0) 
+            ? q.question_images[0] 
+            : null;
+
+        return {
+            questionText: q.question_text || "Question Text Missing",
+            questionImage: mainImage,
+            subject: q.subject || 'General',
+            topic: q.topic || 'General',
+            difficulty: (q.difficulty || 'MEDIUM').toUpperCase(),
+            type: isInteger ? 'INTEGER' : 'MCQ', 
+            options: optionsObj,
+            correctOption: correctKey,
+            marks: 4
+        };
+     });
+
+     // Updated Path matching your structure
+     const res = await fetch(`/student/exam/${examId}/import-questions`, {
         method: 'POST',
         headers: { 
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ examId, questionIds })
-    });
-    
-    if (!res.ok) {
-        if (res.status === 401) {
-             throw new Error('Session expired. Please login again.');
-        }
-        let errorMessage = 'Failed to add questions to exam';
-        try {
-            const errorData = await res.json();
-            errorMessage = errorData.message || errorMessage;
-        } catch (e) {
-            errorMessage += ` (Status: ${res.status})`;
-        }
-        throw new Error(errorMessage);
-    }
-    return await res.json();
+        body: JSON.stringify({ questions: formattedQuestions })
+     });
+     
+     const responseData = await res.json();
+     if (!res.ok) {
+         console.error("Backend Error Details:", responseData);
+         throw new Error(responseData.details || responseData.error || 'Failed to save imported questions');
+     }
+     return responseData;
   },
 
   async getQuestions(token: string) {
@@ -193,14 +289,10 @@ const adminApi = {
         const res = await fetch(`${API_URL}/erp/questions`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        
         if (!res.ok) return [];
-        
         const data = await res.json();
         return Array.isArray(data) ? data : (data.data || []); 
-    } catch (e) { 
-        return []; 
-    }
+    } catch (e) { return []; }
   },
 
   async createQuestion(token: string, data: any) {
@@ -264,32 +356,35 @@ const adminApi = {
       });
       if (!res.ok) throw new Error('Failed to fetch student details');
       return await res.json();
+  },
+
+  // Mock Enquiries since backend endpoint might not be ready
+  async getEnquiries(token: string) {
+      return [
+          { id: '1', studentName: 'Aditya Verma', mobile: '9876543210', status: 'PENDING', course: 'JEE-2025' },
+          { id: '2', studentName: 'Sneha Gupta', mobile: '9988776655', status: 'CALLED', course: 'NEET-2026' },
+          { id: '3', studentName: 'Rahul Singh', mobile: '8877665544', status: 'ADMITTED', course: 'MHT-CET' },
+      ];
   }
 };
+
 // --- HELPER FUNCTIONS ---
 const getQuestionType = (q: Question) => {
-    // 1. Check DB 'type' field explicitly first
-    if (q.type && (q.type.toLowerCase().trim() === 'integer' || q.type.toLowerCase().trim() === 'numerical')) {
-        return 'INTEGER';
-    }
-
-    // 2. Check tags
-    if (q.tags && q.tags.length > 0) {
-        const lowerTags = q.tags.map(t => t.toLowerCase());
-        if (lowerTags.some(t => t.includes('multiple') || t.includes('multi'))) return 'MULTIPLE';
-        if (lowerTags.some(t => t.includes('integer') || t.includes('numerical'))) return 'INTEGER';
-    }
+    // 1. Check Explicit Type
+    if (q.type && (q.type === 'INTEGER' || q.type === 'NUMERICAL')) return 'INTEGER';
     
-    // 3. Heuristic: If correctOption looks like a number (e.g. "[4]", "25") and isn't A/B/C/D
-    const ans = q.correctOption.replace(/[\[\]'"]/g, '').trim().toLowerCase();
-    if (!isNaN(Number(ans)) && !['a','b','c','d'].includes(ans)) return 'INTEGER';
+    // 2. Check Answer Format (Fallback)
+    const ans = String(q.correctOption).replace(/[\[\]'"]/g, '').trim().toLowerCase();
+    const isNumber = !isNaN(Number(ans)) && !['a','b','c','d'].includes(ans);
     
-    // Default
-    return 'SINGLE';
+    // 3. Check Options existence (Integers have no options)
+    const hasOptions = q.options && Object.keys(q.options).length > 0;
+    
+    if (isNumber && !hasOptions) return 'INTEGER';
+    return 'MCQ';
 };
 
 const getIntegerAnswer = (correctOption: string) => {
-    // Robust cleaner for integer answers stored like [5] or "5" or '5'
     if (!correctOption) return '';
     return correctOption.replace(/[\[\]'"]/g, '').trim();
 };
@@ -297,15 +392,12 @@ const getIntegerAnswer = (correctOption: string) => {
 const isImageUrl = (url: string) => {
     if (!url || typeof url !== 'string') return false;
     return (url.startsWith('http') || url.startsWith('/')) && 
-           (url.match(/\.(jpeg|jpg|gif|png|webp|svg)$/i) != null || url.includes('cloudinary') || url.includes('blob'));
+           (url.match(/\.(jpeg|jpg|gif|png|webp|svg|bmp)$/i) != null || url.includes('cloudinary') || url.includes('blob') || url.includes('images'));
 };
 
-// --- HELPER COMPONENTS FOR RENDERING ---
-
-// 1. Latex Renderer
+// --- RENDER HELPERS ---
 const LatexRenderer = ({ content }: { content: string }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     if (!document.getElementById('katex-css')) {
       const link = document.createElement("link");
@@ -323,7 +415,6 @@ const LatexRenderer = ({ content }: { content: string }) => {
     } else {
       loadAutoRender();
     }
-
     function loadAutoRender() {
         if (!document.getElementById('katex-auto-render')) {
             const script = document.createElement("script");
@@ -331,36 +422,28 @@ const LatexRenderer = ({ content }: { content: string }) => {
             script.src = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js";
             script.onload = renderMath;
             document.head.appendChild(script);
-        } else {
-            renderMath();
-        }
+        } else { renderMath(); }
     }
-
     function renderMath() {
          if (containerRef.current && (window as any).renderMathInElement) {
              (window as any).renderMathInElement(containerRef.current, {
                  delimiters: [
                      {left: '$$', right: '$$', display: true},
-                     {left: '$', right: '$', display: false},
-                     {left: '\\(', right: '\\)', display: false},
-                     {left: '\\[', right: '\\]', display: true}
+                     {left: '$', right: '$', display: false}
                  ],
                  throwOnError : false
              });
          }
     }
   }, [content]);
-
   return <span ref={containerRef} dangerouslySetInnerHTML={{__html: content}} />;
 };
 
-// 2. Smart Content Renderer
 const ContentRenderer = ({ content }: { content: string }) => {
     if (!content) return null;
-    
     if (isImageUrl(content)) {
         return (
-            <div className="relative w-full h-32 my-1 border border-slate-100 rounded-md overflow-hidden bg-slate-50">
+            <div className="relative w-full h-24 my-2 border border-slate-100 rounded-md overflow-hidden bg-white">
                  <img src={content} alt="Content" className="w-full h-full object-contain" />
             </div>
         );
@@ -368,6 +451,7 @@ const ContentRenderer = ({ content }: { content: string }) => {
     return <LatexRenderer content={content} />;
 };
 
+// --- BACKGROUND ---
 // --- COMPONENT: AMBER BACKGROUND (Darker) ---
 const AdminBackground = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -429,7 +513,6 @@ const AdminBackground = () => {
   
   return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none opacity-80 z-0" />;
 };
-
 // --- COMPONENT: LOGIN ---
 const AdminLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
   const [creds, setCreds] = useState({ username: '', password: '' });
@@ -449,11 +532,9 @@ const AdminLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
   return (
     <div className="min-h-screen w-full flex flex-col justify-center items-center bg-slate-50 font-sans relative transition-colors duration-500 py-10 px-4">
       <AdminBackground />
-      {/* Updated Container Size: max-w-md, p-10 to match Parent Panel */}
       <div className="relative z-10 w-full max-w-md">
         <div className="bg-gradient-to-br from-amber-600 to-orange-700 backdrop-blur-xl border border-orange-500/30 rounded-3xl shadow-2xl overflow-hidden ring-1 ring-white/20">
           <div className="p-10 text-center border-b border-orange-500/30">
-            {/* Logo Size and Margin matched */}
             <div className="relative w-24 h-24 mx-auto mb-4  bg-white rounded-full shadow-[0_0_20px_rgba(255,255,255,0.2)] ring-4 ring-white/20">
                 <div className="relative w-full h-full bg-white rounded-full overflow-hidden">
                     <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain" unoptimized />
@@ -464,17 +545,14 @@ const AdminLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
               <BrainCircuit size={14} className="text-white"/> Staff Portal
             </p>
           </div>
-          {/* Form Padding and Spacing matched */}
           <form onSubmit={handleLogin} className="p-10 space-y-6">
             {error && <div className="p-3 bg-red-100/90 border border-red-200 rounded-xl flex items-center gap-3 text-red-700 text-xs font-bold"><AlertCircle size={16} /> {error}</div>}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-orange-100 uppercase tracking-wider ml-1">Staff ID</label>
-              {/* Input Text Size text-lg */}
               <input type="text" className="w-full p-4 bg-orange-900/30 border border-orange-400/30 rounded-xl text-white text-lg focus:outline-none focus:ring-2 focus:ring-white/50 transition-all font-mono placeholder:text-orange-200/50" value={creds.username} onChange={(e) => setCreds({...creds, username: e.target.value})} placeholder="FACULTY-ID"/>
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-orange-100 uppercase tracking-wider ml-1">Password</label>
-              {/* Input Text Size text-lg */}
               <input type="password" className="w-full p-4 bg-orange-900/30 border border-orange-400/30 rounded-xl text-white text-lg focus:outline-none focus:ring-2 focus:ring-white/50 transition-all font-mono placeholder:text-orange-200/50" value={creds.password} onChange={(e) => setCreds({...creds, password: e.target.value})} placeholder="••••••••"/>
             </div>
             <button disabled={loading} className="w-full bg-white hover:bg-orange-50 text-orange-700 py-4 rounded-xl font-bold text-lg uppercase tracking-wider shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2 mt-4 active:scale-95">
@@ -490,194 +568,258 @@ const AdminLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
   );
 };
 
-// --- COMPONENT: QUESTION SELECTION MODAL ---
+// --- COMPONENT: VIEW EXAM DETAILS MODAL ---
+const ViewExamModal = ({ 
+  token,
+  examId, 
+  onClose,
+  onDelete,
+  onPrint
+}: { 
+  token: string,
+  examId: string, 
+  onClose: () => void,
+  onDelete: (id: string) => void,
+  onPrint: (exam: Exam) => void
+}) => {
+    const [loading, setLoading] = useState(true);
+    const [examData, setExamData] = useState<Exam | null>(null);
+
+    useEffect(() => {
+        const fetchDetails = async () => {
+            try {
+                const data = await adminApi.getExamById(token, examId);
+                setExamData(data);
+            } catch (e) {
+                alert("Failed to load exam details");
+                onClose();
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchDetails();
+    }, [examId, token, onClose]);
+
+    if (loading || !examData) return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <Loader2 className="animate-spin text-white w-10 h-10"/>
+        </div>
+    );
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-white w-full max-w-5xl h-[85vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col relative">
+                {/* Header */}
+                <div className="bg-slate-900 p-6 flex justify-between items-center text-white">
+                    <div>
+                        <h2 className="text-xl font-bold flex items-center gap-2">
+                            <FileText className="text-amber-500"/> {examData.title}
+                        </h2>
+                        <div className="text-xs text-slate-400 mt-1 flex gap-3">
+                            <span>Duration: {examData.durationMin} mins</span>
+                            <span>•</span>
+                            <span>Total Marks: {examData.totalMarks}</span>
+                            <span>•</span>
+                            <span>{examData.questions?.length || 0} Questions</span>
+                        </div>
+                    </div>
+                    <div className="flex gap-2">
+                        <button onClick={() => onPrint(examData)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 text-sm font-bold transition">
+                            <Printer size={16}/> Print PDF
+                        </button>
+                        <button onClick={() => { 
+                            if(confirm("Delete this exam permanently?")) {
+                                onDelete(examData.id);
+                                onClose();
+                            }
+                        }} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center gap-2 text-sm font-bold transition">
+                            <Trash2 size={16}/> Delete
+                        </button>
+                        <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg"><X size={20}/></button>
+                    </div>
+                </div>
+
+                {/* Questions List */}
+                <div className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-slate-50">
+                    <div className="max-w-4xl mx-auto space-y-6">
+                        {examData.questions?.map((q, idx) => {
+                            const qType = getQuestionType(q);
+                            // Parse Options if JSON string
+                            let opts = q.options;
+                            try { if(typeof opts==='string') opts=JSON.parse(opts); } catch(e){}
+                            
+                            return (
+                                <div key={q.id} className="p-6 border border-slate-200 rounded-xl bg-white shadow-sm">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div className="flex items-center gap-2">
+                                            <span className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-700 text-sm">{idx + 1}</span>
+                                            <span className="text-xs font-bold bg-amber-50 text-amber-700 px-2 py-0.5 rounded uppercase">{q.subject}</span>
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${qType === 'INTEGER' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                {qType}
+                                            </span>
+                                        </div>
+                                        <span className="text-xs font-bold text-slate-400">Marks: {q.marks}</span>
+                                    </div>
+                                    
+                                    <div className="mb-4 text-slate-800"><LatexRenderer content={q.questionText} /></div>
+                                    {q.questionImage && (
+                                        <div className="mb-4 max-h-60 border rounded bg-slate-50 overflow-hidden relative">
+                                            <img src={q.questionImage} className="w-full h-full object-contain" alt="Question Image"/>
+                                        </div>
+                                    )}
+
+                                    {/* Display Answer based on Type */}
+                                    {qType === 'INTEGER' ? (
+                                        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3">
+                                            <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Correct Answer:</span>
+                                            <span className="text-xl font-mono font-black text-slate-900">{q.correctOption}</span>
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                                            {['a','b','c','d'].map((key) => {
+                                                const isCorrect = String(q.correctOption).toLowerCase() === key;
+                                                return (
+                                                    <div key={key} className={`p-3 border rounded-lg text-sm flex items-start gap-2 ${isCorrect ? 'bg-green-50 border-green-300 ring-1 ring-green-200' : 'bg-white border-slate-100'}`}>
+                                                        <span className={`font-bold uppercase ${isCorrect ? 'text-green-700' : 'text-slate-400'}`}>{key}.</span>
+                                                        <div className={`flex-1 ${isCorrect ? 'text-green-800 font-medium' : 'text-slate-600'}`}>
+                                                            {opts && opts[key] ? <ContentRenderer content={opts[key]}/> : <span className="italic text-slate-300">Empty</span>}
+                                                        </div>
+                                                        {isCorrect && <CheckCircle size={16} className="ml-auto text-green-600 shrink-0"/>}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                        {(!examData.questions || examData.questions.length === 0) && (
+                            <div className="text-center py-20 text-slate-400">
+                                <FileQuestion size={48} className="mx-auto mb-4 opacity-20"/>
+                                <p>No questions found in this exam.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- COMPONENT: QUESTION SELECTOR MODAL (MANUAL BUILDER) ---
 const QuestionSelectorModal = ({ 
   exam, 
-  allQuestions, 
   onClose,
   onFinalize
 }: { 
   exam: Exam, 
-  allQuestions: Question[], 
   onClose: () => void,
-  onFinalize: (selectedIds: string[]) => void
+  onFinalize: (questions: any[]) => void 
 }) => {
-    const [search, setSearch] = useState('');
-    const [subject, setSubject] = useState('');
-    const [difficulty, setDifficulty] = useState('');
-    const [selectedIds, setSelectedIds] = useState<string[]>([]);
-    const [page, setPage] = useState(1);
-    const [viewMode, setViewMode] = useState<'SELECT' | 'CONFIRM'>('SELECT');
+    const [loading, setLoading] = useState(false);
     
-    // Pattern Tracking
-    const typeMatch = exam.title.match(/^\[(.*?)\]/);
-    const examType = exam.examType || (typeMatch ? typeMatch[1] : '');
+    // Manual Search State
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchSubject, setSearchSubject] = useState('');
+    const [searchDiff, setSearchDiff] = useState('');
+    const [repoQuestions, setRepoQuestions] = useState<any[]>([]); 
+    const [selectedQuestions, setSelectedQuestions] = useState<any[]>([]);
+    const [view, setView] = useState<'SEARCH' | 'REVIEW'>('SEARCH');
 
-    // Define Target Patterns
-    const PATTERNS: any = {
-        'JEE_MAINS': { PHYSICS: 30, CHEMISTRY: 30, MATHS: 30 },
-        'JEE_ADVANCED': { PHYSICS: 20, CHEMISTRY: 20, MATHS: 20 },
-        'NEET': { PHYSICS: 45, CHEMISTRY: 45, BIOLOGY: 90 },
-        'MHT_CET': { PHYSICS: 50, CHEMISTRY: 50, MATHS: 50 },
-        'SUBJECT_PHYSICS': { PHYSICS: 50 },
-        'SUBJECT_CHEMISTRY': { CHEMISTRY: 50 },
-        'SUBJECT_MATHS': { MATHS: 50 },
-        'SUBJECT_BIOLOGY': { BIOLOGY: 50 }
-    };
-    
-    const target = PATTERNS[examType] || { Total: 'Any' };
-
-    const selectedQuestions = allQuestions.filter(q => selectedIds.includes(q.id));
-
-    // Normalization helper
-    const normalizeSubject = (s: string) => {
-        const upper = s.toUpperCase();
-        if (upper === 'MATHEMATICS') return 'MATHS';
-        return upper;
-    };
-
-    const stats = {
-        Physics: selectedQuestions.filter(q => normalizeSubject(q.subject) === 'PHYSICS').length,
-        Chemistry: selectedQuestions.filter(q => normalizeSubject(q.subject) === 'CHEMISTRY').length,
-        Maths: selectedQuestions.filter(q => normalizeSubject(q.subject) === 'MATHS').length,
-        Biology: selectedQuestions.filter(q => normalizeSubject(q.subject) === 'BIOLOGY').length,
-        Total: selectedQuestions.length
-    };
-
-    const toggleSelection = (id: string) => {
-        if (selectedIds.includes(id)) {
-            setSelectedIds(selectedIds.filter(sid => sid !== id));
-        } else {
-            setSelectedIds([...selectedIds, id]);
-        }
-    };
-
-    // Filter Logic based on Exam Type
-    const filteredQuestions = allQuestions.filter(q => {
-        const matchesSearch = q.questionText.toLowerCase().includes(search.toLowerCase());
-        const matchesSubjectFilter = subject ? normalizeSubject(q.subject) === subject : true;
-        const matchesDiff = difficulty ? q.difficulty === difficulty : true;
-        
-        // Auto-filter by Exam Type (Subject)
-        let matchesExamType = true;
-        const s = normalizeSubject(q.subject);
-
-        if (examType.includes('JEE') || examType.includes('CET')) {
-            matchesExamType = ['PHYSICS', 'CHEMISTRY', 'MATHS', 'GENERAL'].includes(s);
-        } else if (examType.includes('NEET')) {
-            matchesExamType = ['PHYSICS', 'CHEMISTRY', 'BIOLOGY', 'GENERAL'].includes(s);
-        } else if (examType === 'SUBJECT_PHYSICS') {
-            matchesExamType = s === 'PHYSICS';
-        } else if (examType === 'SUBJECT_CHEMISTRY') {
-            matchesExamType = s === 'CHEMISTRY';
-        } else if (examType === 'SUBJECT_MATHS') {
-            matchesExamType = s === 'MATHS';
-        } else if (examType === 'SUBJECT_BIOLOGY') {
-            matchesExamType = s === 'BIOLOGY';
-        }
-
-        return matchesSearch && matchesSubjectFilter && matchesDiff && matchesExamType;
-    });
-    
-    // Pagination Logic
-    const ITEMS_PER_PAGE = 5;
-    const totalPages = Math.ceil(filteredQuestions.length / ITEMS_PER_PAGE);
-    const paginatedQuestions = filteredQuestions.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
-
+    // Immediate Search on Mount & Filter Change
     useEffect(() => {
-        setPage(1);
-    }, [search, subject, difficulty]);
-    
-    const getCountColor = (current: number, target: number) => {
-        if (!target) return 'bg-white/10';
-        return current >= target ? 'bg-green-500 text-white font-bold' : 'bg-white/10 text-slate-200';
+        const fetchQuestions = async () => {
+            setLoading(true);
+            try {
+                // Fetch even if query is empty to show "All"
+                const results = await adminApi.searchQuestionsExternal(searchQuery, searchSubject, searchDiff);
+                setRepoQuestions(results);
+            } catch(e) { console.error(e); }
+            setLoading(false);
+        };
+        const delayDebounce = setTimeout(fetchQuestions, 300);
+        return () => clearTimeout(delayDebounce);
+    }, [searchQuery, searchSubject, searchDiff]);
+
+    const toggleSelection = (question: any) => {
+        const exists = selectedQuestions.find(q => q.question_id === question.question_id);
+        if (exists) {
+            setSelectedQuestions(prev => prev.filter(q => q.question_id !== question.question_id));
+        } else {
+            setSelectedQuestions(prev => [...prev, question]);
+        }
     };
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-6 animate-in fade-in zoom-in-95 duration-200">
             <div className="bg-white w-full max-w-7xl h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col relative text-slate-900">
-                {/* MODAL HEADER */}
+                {/* HEADER */}
                 <div className="bg-slate-900 p-6 flex justify-between items-center text-white shrink-0">
                     <div>
-                        <h2 className="text-xl font-bold tracking-tight flex items-center gap-2"><ClipboardCheck className="text-amber-500"/> {exam?.title || 'Exam Selector'}</h2>
-                        <p className="text-xs text-slate-400 mt-1">Paper Generator: <span className="text-amber-400 font-bold">{examType}</span> Pattern</p>
+                        <h2 className="text-xl font-bold tracking-tight flex items-center gap-2"><ClipboardCheck className="text-amber-500"/> {exam.title}</h2>
+                        <p className="text-xs text-slate-400 mt-1">Manual Builder</p>
                     </div>
                     <div className="flex items-center gap-4">
-                        <div className="flex gap-2 text-xs">
-                             {target.PHYSICS && <span className={`px-3 py-1 rounded transition-colors ${getCountColor(stats.Physics, target.PHYSICS)}`}>P: {stats.Physics}/{target.PHYSICS}</span>}
-                             {target.CHEMISTRY && <span className={`px-3 py-1 rounded transition-colors ${getCountColor(stats.Chemistry, target.CHEMISTRY)}`}>C: {stats.Chemistry}/{target.CHEMISTRY}</span>}
-                             {target.MATHS && <span className={`px-3 py-1 rounded transition-colors ${getCountColor(stats.Maths, target.MATHS)}`}>M: {stats.Maths}/{target.MATHS}</span>}
-                             {target.BIOLOGY && <span className={`px-3 py-1 rounded transition-colors ${getCountColor(stats.Biology, target.BIOLOGY)}`}>B: {stats.Biology}/{target.BIOLOGY}</span>}
-                             <span className="px-3 py-1 bg-amber-500 text-slate-900 font-bold rounded">Total: {stats.Total}</span>
-                        </div>
+                        <span className="px-3 py-1 bg-amber-500 text-slate-900 font-bold rounded text-xs">Selected: {selectedQuestions.length}</span>
                         <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition"><X size={20}/></button>
                     </div>
                 </div>
 
+                {/* BODY CONTENT */}
                 <div className="flex-1 flex overflow-hidden">
-                    {viewMode === 'SELECT' ? (
+                    {view === 'SEARCH' ? (
                         <>
-                            {/* LEFT: REPOSITORY */}
+                            {/* REPOSITORY PANEL */}
                             <div className="flex-1 flex flex-col border-r border-slate-200 bg-slate-50/50">
                                 <div className="p-4 border-b border-slate-200 bg-white flex gap-2">
                                     <div className="relative flex-1">
                                         <Search size={16} className="absolute left-3 top-3 text-slate-400"/>
-                                        <input className="w-full pl-10 p-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-amber-500" placeholder="Search repository..." value={search} onChange={e => setSearch(e.target.value)}/>
+                                        <input className="w-full pl-10 p-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-amber-500" 
+                                            placeholder="Search topics..." 
+                                            value={searchQuery} 
+                                            onChange={e => setSearchQuery(e.target.value)}
+                                        />
                                     </div>
-                                    <select className="p-2 border rounded-lg text-sm bg-white outline-none" value={subject} onChange={e => setSubject(e.target.value)}>
+                                    <select className="p-2 border rounded-lg text-sm bg-white outline-none" value={searchSubject} onChange={e => setSearchSubject(e.target.value)}>
                                         <option value="">All Subjects</option>
-                                        <option value="PHYSICS">Physics</option>
-                                        <option value="CHEMISTRY">Chemistry</option>
-                                        <option value="MATHS">Maths</option>
-                                        <option value="BIOLOGY">Biology</option>
+                                        <option value="Physics">Physics</option>
+                                        <option value="Chemistry">Chemistry</option>
+                                        <option value="Mathematics">Maths</option>
+                                        <option value="Biology">Biology</option>
                                     </select>
-                                    <select className="p-2 border rounded-lg text-sm bg-white outline-none" value={difficulty} onChange={e => setDifficulty(e.target.value)}>
+                                    <select className="p-2 border rounded-lg text-sm bg-white outline-none" value={searchDiff} onChange={e => setSearchDiff(e.target.value)}>
                                         <option value="">Any Difficulty</option>
-                                        <option value="EASY">Easy</option>
-                                        <option value="MEDIUM">Medium</option>
-                                        <option value="HARD">Hard</option>
+                                        <option value="easy">Easy</option>
+                                        <option value="medium">Medium</option>
+                                        <option value="hard">Hard</option>
                                     </select>
                                 </div>
+                                
                                 <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-                                    {paginatedQuestions.map(q => {
-                                        const isSelected = selectedIds.includes(q.id);
-                                        const qType = getQuestionType(q);
-                                        const isOptionImg = isImageUrl(q.options?.a || '');
-
-                                        return (
-                                            <div key={q.id} onClick={() => toggleSelection(q.id)} className={`p-4 rounded-xl border transition cursor-pointer group ${isSelected ? 'bg-amber-50 border-amber-500 shadow-sm' : 'bg-white border-slate-200 hover:border-amber-300'}`}>
+                                    {loading ? (
+                                        <div className="flex justify-center p-10"><Loader2 className="animate-spin text-amber-600"/></div>
+                                    ) : repoQuestions.length === 0 ? (
+                                        <div className="text-center text-slate-400 p-10">No questions found. Try changing filters.</div>
+                                    ) : (
+                                        repoQuestions.map(q => {
+                                            const isSelected = selectedQuestions.some(sq => sq.question_id === q.question_id);
+                                            // Handle case-insensitive question type check
+                                            const isInteger = q.question_type?.toUpperCase() === 'INTEGER' || q.question_type?.toUpperCase() === 'NUMERICAL';
+                                            
+                                            return (
+                                                <div key={q.question_id} onClick={() => toggleSelection(q)} className={`p-4 rounded-xl border transition cursor-pointer group ${isSelected ? 'bg-amber-50 border-amber-500 shadow-sm' : 'bg-white border-slate-200 hover:border-amber-300'}`}>
                                                     <div className="flex justify-between items-start gap-4">
-                                                        <div className="flex-1 min-w-0">
+                                                        <div className="flex-1">
                                                             <div className="flex items-center gap-2 mb-2">
-                                                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${qType === 'INTEGER' ? 'bg-purple-100 text-purple-700' : qType === 'MULTIPLE' ? 'bg-orange-100 text-orange-700' : 'bg-blue-50 text-blue-700'}`}>
-                                                                    {qType === 'INTEGER' ? 'Integer' : qType === 'MULTIPLE' ? 'Multi' : 'Single'}
-                                                                </span>
-                                                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${q.difficulty === 'HARD' ? 'bg-red-50 text-red-600' : q.difficulty === 'MEDIUM' ? 'bg-yellow-50 text-yellow-600' : 'bg-green-50 text-green-600'}`}>{q.difficulty}</span>
+                                                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 uppercase">{q.subject}</span>
+                                                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${isInteger ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{q.question_type}</span>
                                                             </div>
-                                                            <div className="text-sm font-medium text-slate-800 line-clamp-3 mb-2"><LatexRenderer content={q.questionText} /></div>
-                                                            {/* RICH CONTENT RENDERER - MOVED BELOW TEXT */}
-                                                            {q.questionImage && (
-                                                                <div className="mb-2 w-full max-w-md h-32 relative border rounded bg-slate-50">
-                                                                        <img src={q.questionImage} alt="Question Image" className="w-full h-full object-contain" />
-                                                                </div>
-                                                            )}
-                                                            
-                                                            {/* PREVIEW OPTIONS */}
-                                                            {qType === 'INTEGER' ? (
-                                                                <div className="mt-2 text-xs font-bold text-slate-600 border px-3 py-1 rounded bg-slate-50 inline-block">
-                                                                        Answer: {getIntegerAnswer(q.correctOption)}
-                                                                </div>
-                                                            ) : isOptionImg ? (
-                                                                <div className="mt-2 text-xs text-slate-500 italic">Image Options available</div>
-                                                            ) : (
-                                                                <div className="mt-2 grid grid-cols-2 gap-2">
-                                                                    {['a','b','c','d'].map(key => (
-                                                                        <div key={key} className="text-xs text-slate-500 truncate border px-2 py-1 rounded">
-                                                                            <span className="uppercase font-bold mr-1">{key}.</span> 
-                                                                            <ContentRenderer content={String(q.options[key] || '')} />
-                                                                        </div>
-                                                                    ))}
-                                                                    {Object.keys(q.options).length > 2 && <div className="text-xs text-slate-400 pl-1">...</div>}
+                                                            <div className="text-sm font-medium text-slate-800 line-clamp-3 mb-2">
+                                                                <LatexRenderer content={q.question_text} />
+                                                            </div>
+                                                            {q.question_images && q.question_images.length > 0 && (
+                                                                <div className="h-24 w-full relative border rounded bg-slate-50 overflow-hidden">
+                                                                    <img src={q.question_images[0]} className="w-full h-full object-contain"/>
                                                                 </div>
                                                             )}
                                                         </div>
@@ -685,129 +827,99 @@ const QuestionSelectorModal = ({
                                                             {isSelected && <CheckCircle size={14} className="fill-current"/>}
                                                         </div>
                                                     </div>
-                                                    <div className="mt-2 flex items-center gap-2 text-xs border-t pt-2 border-slate-100">
-                                                        <span className="font-bold text-slate-500">{q.subject}</span>
-                                                        <span className="text-slate-300">•</span>
-                                                        <span className="font-mono text-slate-400">ID: {q.id.slice(0,6)}</span>
-                                                    </div>
-                                            </div>
-                                        );
-                                    })}
-                                    {paginatedQuestions.length === 0 && (
-                                        <div className="p-8 text-center text-slate-400">No questions found matching criteria.</div>
+                                                </div>
+                                            )
+                                        })
                                     )}
                                 </div>
-                                
-                                {/* PAGINATION CONTROLS */}
-                                {totalPages > 1 && (
-                                    <div className="p-3 border-t border-slate-200 bg-white flex justify-between items-center text-xs">
-                                            <span className="text-slate-500">Page {page} of {totalPages}</span>
-                                            <div className="flex gap-2">
-                                                <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1} className="p-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"><ChevronLeft size={16}/></button>
-                                                <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages} className="p-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"><ChevronRight size={16}/></button>
-                                            </div>
-                                    </div>
-                                )}
                             </div>
-
-                            {/* RIGHT: SELECTED LIST */}
+                            
+                            {/* SELECTED PANEL */}
                             <div className="w-1/3 flex flex-col bg-white">
                                 <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-                                    <h3 className="font-bold text-slate-700">Selected Questions</h3>
-                                    <button onClick={() => setSelectedIds([])} className="text-xs text-red-500 hover:underline">Clear All</button>
+                                    <h3 className="font-bold text-slate-700">Selected ({selectedQuestions.length})</h3>
+                                    <button onClick={() => setView('REVIEW')} disabled={selectedQuestions.length === 0} className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 disabled:opacity-50">Review & Save</button>
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-                                    {selectedQuestions.length === 0 ? (
-                                        <div className="h-full flex flex-col items-center justify-center text-slate-400 text-sm">
-                                            <FileQuestion size={48} className="mb-2 opacity-20"/>
-                                            <p>No questions selected.</p>
-                                        </div>
-                                    ) : (
-                                        selectedQuestions.map((q, idx) => (
-                                            <div key={q.id} className="p-3 rounded-lg border border-amber-100 bg-amber-50/30 flex justify-between items-start gap-2">
-                                                <div className="flex-1 min-w-0">
-                                                    <span className="text-[10px] font-bold text-amber-700 mr-2 block">Q{idx+1}</span>
-                                                    <div className="text-xs text-slate-700 line-clamp-2 mb-1"><LatexRenderer content={q.questionText}/></div>
-                                                    {q.questionImage && (
-                                                        <div className="w-full h-16 relative border rounded bg-white">
-                                                            <img src={q.questionImage} alt="Preview" className="w-full h-full object-contain" />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <button onClick={() => toggleSelection(q.id)} className="text-slate-400 hover:text-red-500"><X size={14}/></button>
+                                    {selectedQuestions.map((q, idx) => (
+                                        <div key={q.question_id || idx} className="p-3 rounded-lg border border-amber-100 bg-amber-50/30 flex justify-between items-start gap-2">
+                                            <div className="flex-1 min-w-0">
+                                                <span className="text-[10px] font-bold text-amber-700 mr-2">Q{idx+1}</span>
+                                                <div className="text-xs text-slate-700 line-clamp-2"><LatexRenderer content={q.question_text}/></div>
                                             </div>
-                                        ))
-                                    )}
-                                </div>
-                                <div className="p-4 border-t border-slate-200 bg-slate-50">
-                                    <button 
-                                        onClick={() => setViewMode('CONFIRM')}
-                                        disabled={selectedIds.length === 0}
-                                        className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition shadow-lg flex items-center justify-center gap-2"
-                                    >
-                                        <Eye size={18}/> Review & Finalize
-                                    </button>
+                                            <button onClick={() => toggleSelection(q)} className="text-slate-400 hover:text-red-500"><X size={14}/></button>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         </>
                     ) : (
+                        // REVIEW VIEW
                         <div className="flex-1 flex flex-col bg-white">
-                            {/* CONFIRMATION VIEW */}
                             <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-                                <h3 className="font-bold text-slate-800 text-lg">Confirm Question Paper</h3>
-                                <button onClick={() => setViewMode('SELECT')} className="px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-600 hover:bg-white">Back to Selection</button>
+                                <h3 className="font-bold text-slate-800 text-lg">Finalize Paper</h3>
+                                <button onClick={() => setView('SEARCH')} className="px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-600 hover:bg-white">Back to Search</button>
                             </div>
                             <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
                                 <div className="max-w-4xl mx-auto space-y-6">
                                     {selectedQuestions.map((q, idx) => {
-                                         const qType = getQuestionType(q);
-                                         return (
-                                        <div key={q.id} className="p-6 border border-slate-200 rounded-xl bg-white shadow-sm">
-                                            <div className="flex justify-between items-start mb-4">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-700 text-sm">{idx + 1}</span>
-                                                    <span className="text-xs font-bold bg-amber-50 text-amber-700 px-2 py-0.5 rounded uppercase">{q.subject}</span>
-                                                    <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded">{qType}</span>
+                                        const isInteger = q.question_type?.toUpperCase() === 'INTEGER' || q.question_type?.toUpperCase() === 'NUMERICAL';
+                                        return (
+                                            <div key={q.question_id || idx} className="p-6 border border-slate-200 rounded-xl bg-white shadow-sm">
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-700 text-sm">{idx + 1}</span>
+                                                        <span className="text-xs font-bold bg-amber-50 text-amber-700 px-2 py-0.5 rounded uppercase">{q.subject}</span>
+                                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${isInteger ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{q.question_type}</span>
+                                                    </div>
                                                 </div>
-                                                <span className="text-xs font-bold text-slate-400">Marks: {q.marks}</span>
+                                                <div className="mb-4 text-slate-800"><LatexRenderer content={q.question_text} /></div>
+                                                {q.question_images && q.question_images.length > 0 && (
+                                                    <div className="mb-4 h-48 border rounded bg-slate-50"><img src={q.question_images[0]} className="w-full h-full object-contain"/></div>
+                                                )}
+                                                
+                                                {/* Correct Display logic for Review */}
+                                                {isInteger ? (
+                                                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm font-bold text-blue-800">
+                                                        Answer: {q.correct_answer}
+                                                    </div>
+                                                ) : (
+                                                    // Logic for MCQ Options (With Images)
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                        {['a', 'b', 'c', 'd'].map((key, i) => {
+                                                            let optContent = "";
+                                                            if (q.option_images && q.option_images[i]) {
+                                                                optContent = q.option_images[i];
+                                                            } else if (q.options && Array.isArray(q.options) && q.options[i]) {
+                                                                optContent = q.options[i];
+                                                            }
+                                                            
+                                                            let isCorrect = false;
+                                                            const correctRaw = String(q.correct_answer).trim().toLowerCase();
+                                                            if (correctRaw === key || correctRaw === `option ${key}` || correctRaw === String(i)) {
+                                                                isCorrect = true;
+                                                            } else if (String(optContent).toLowerCase() === correctRaw) {
+                                                                isCorrect = true;
+                                                            }
+
+                                                            return (
+                                                                <div key={key} className={`p-2 border rounded text-sm flex items-start gap-2 ${isCorrect ? 'bg-green-50 border-green-300 font-bold' : ''}`}>
+                                                                    <span className="uppercase">{key}.</span>
+                                                                    <div className="flex-1"><ContentRenderer content={optContent}/></div>
+                                                                    {isCorrect && <CheckCircle size={14} className="text-green-600"/>}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
                                             </div>
-                                            <div className="mb-4 text-slate-800"><LatexRenderer content={q.questionText} /></div>
-                                            {q.questionImage && (
-                                                <div className="mb-4 w-full max-w-lg h-48 relative border rounded bg-slate-50">
-                                                    <img src={q.questionImage} alt="Question" className="w-full h-full object-contain" />
-                                                </div>
-                                            )}
-                                            
-                                            {/* Options Display for Review */}
-                                             {qType === 'INTEGER' ? (
-                                                 <div className="p-3 bg-slate-50 border rounded-lg text-sm font-bold text-slate-700">
-                                                     Correct Answer: {getIntegerAnswer(q.correctOption)}
-                                                 </div>
-                                             ) : (
-                                                 <div className="grid grid-cols-2 gap-4">
-                                                     {Object.entries(q.options || {}).map(([key, val]) => {
-                                                         if (!val) return null;
-                                                         // Correct Option Logic for Multiple Answers (Includes check)
-                                                         const isCorrect = q.correctOption.toLowerCase().includes(key.toLowerCase());
-                                                         return (
-                                                             <div key={key} className={`p-2 border rounded bg-slate-50 text-sm flex items-start gap-2 ${isCorrect ? 'border-green-400 bg-green-50 ring-1 ring-green-200' : ''}`}>
-                                                                 <span className={`font-bold uppercase ${isCorrect ? 'text-green-700' : 'text-slate-500'}`}>{key}.</span> 
-                                                                 <ContentRenderer content={String(val)} />
-                                                             </div>
-                                                         )
-                                                     })}
-                                                 </div>
-                                             )}
-                                        </div>
-                                    )})}
+                                        );
+                                    })}
                                 </div>
                             </div>
                             <div className="p-6 border-t border-slate-200 bg-slate-50 flex justify-end">
-                                <button 
-                                    onClick={() => onFinalize(selectedIds)}
-                                    className="px-8 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg flex items-center gap-2 transition"
-                                >
-                                    <Save size={18}/> Publish Final Paper
+                                <button onClick={() => onFinalize(selectedQuestions)} className="px-8 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg flex items-center gap-2 transition">
+                                    <Save size={18}/> Publish to Database
                                 </button>
                             </div>
                         </div>
@@ -822,126 +934,53 @@ const QuestionSelectorModal = ({
 const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, onLogout: () => void }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  
+  // Data States
   const [stats, setStats] = useState<any>(null);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
-  // --- NEW STATE FOR RESULTS & ATTENDANCE ---
-  const [analyticsData, setAnalyticsData] = useState<any[] | null>(null);
-  const [analyticsExamId, setAnalyticsExamId] = useState('');
-  const [attendanceSubject, setAttendanceSubject] = useState('');
-  const [attendanceTime, setAttendanceTime] = useState('');
-  // ... inside AdminDashboard component ...
+  const [topRankers, setTopRankers] = useState<any[]>([]); // REPLACED enquiries with topRankers
   
-  // New State for Detailed Results
-  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
-  const [studentDetail, setStudentDetail] = useState<any | null>(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
-
-  // Helper to process data when a student row is clicked
-  const handleViewStudentDetail = async (studentId: string) => {
-      setSelectedStudentId(studentId);
-      setLoadingDetail(true);
-      try {
-          // Fetch all attempts for this student
-          const allAttempts = await adminApi.getStudentAttempts(token, studentId);
-          
-          // Filter to find the attempt for the CURRENTLY selected exam
-          // analyticsExamId is the state variable holding the current Exam ID from the dropdown
-          const relevantAttempt = allAttempts.find((a: any) => a.examId === analyticsExamId);
-          
-          setStudentDetail(relevantAttempt || null);
-      } catch (e) {
-          alert("Could not load detailed report.");
-      } finally {
-          setLoadingDetail(false);
-      }
-  };
-  // ... inside AdminDashboard ...
-
-  const generateInsights = (attempt: any) => {
-      if (!attempt || !attempt.answers) return [];
-      
-      const insights = [];
-      const answers = attempt.answers;
-      
-      // 1. Time Management Analysis
-      const avgTimeCorrect = answers.filter((a: any) => a.isCorrect).reduce((acc: number, curr: any) => acc + curr.timeTaken, 0) / (answers.filter((a: any) => a.isCorrect).length || 1);
-      const avgTimeWrong = answers.filter((a: any) => !a.isCorrect && a.selectedOption).reduce((acc: number, curr: any) => acc + curr.timeTaken, 0) / (answers.filter((a: any) => !a.isCorrect && a.selectedOption).length || 1);
-      
-      if (avgTimeWrong > avgTimeCorrect * 1.5) {
-          insights.push({ type: 'WARN', text: "Critical Time Loss: Student is spending significantly more time on wrong answers than correct ones. Suggests conceptual confusion rather than silly mistakes." });
-      }
-
-      // 2. Subject Weakness (Simple Heuristic)
-      const subjects: any = {};
-      answers.forEach((a: any) => {
-          const subj = a.question?.subject || 'General';
-          if (!subjects[subj]) subjects[subj] = { correct: 0, total: 0 };
-          subjects[subj].total++;
-          if (a.isCorrect) subjects[subj].correct++;
-      });
-      
-      Object.entries(subjects).forEach(([subj, data]: any) => {
-          const accuracy = (data.correct / data.total) * 100;
-          if (accuracy < 40) {
-              insights.push({ type: 'CRITICAL', text: `Weak Subject Area: ${subj} (${Math.round(accuracy)}% Accuracy). Needs immediate remedial sessions.` });
-          }
-      });
-
-      // 3. Speed Issues
-      const slowQuestions = answers.filter((a: any) => a.timeTaken > 180); // > 3 mins
-      if (slowQuestions.length > 3) {
-          insights.push({ type: 'INFO', text: `Struggled with Speed: Spent >3 mins on ${slowQuestions.length} questions. Needs drill practice.` });
-      }
-
-      return insights;
-  };
-
-  // --- NEW LOGIC FOR RESULTS ---
-  const handleFetchAnalytics = async (examId: string) => {
-      setAnalyticsExamId(examId);
-      if(!examId) { setAnalyticsData(null); return; }
-      try {
-          const data = await adminApi.getExamAnalytics(token, examId);
-          setAnalyticsData(data);
-      } catch(e) { 
-          alert("Failed to fetch results"); 
-      }
-  };
-  
-  // -- Question Bank State --
-  const [qbPage, setQbPage] = useState(1);
-  const [qbSubjectFilter, setQbSubjectFilter] = useState('');
-  const [qbDifficultyFilter, setQbDifficultyFilter] = useState('');
-  const [qbSearch, setQbSearch] = useState('');
-  
-  // -- Exam Manager State --
+  // Creation & Viewing States
+  const [examCreationMode, setExamCreationMode] = useState<'SELECT' | 'AI_FORM' | 'MANUAL_FORM'>('SELECT');
   const [selectedExamId, setSelectedExamId] = useState<string | null>(null);
-  
-  // Forms & Selections
+  const [viewingExamId, setViewingExamId] = useState<string | null>(null);
+
+  const [aiConfig, setAiConfig] = useState({
+      difficulty: 'medium',
+      physics_mcq: 0, physics_integer: 0,
+      chemistry_mcq: 0, chemistry_integer: 0,
+      mathematics_mcq: 0, mathematics_integer: 0,
+      biology_mcq: 0,
+      image_ratio: 0.1,
+  });
+
+  // Attendance States
   const [selectedBatch, setSelectedBatch] = useState('');
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
   const [attendanceList, setAttendanceList] = useState<AttendanceRecord[]>([]);
   
+  // Form State
   const [newExam, setNewExam] = useState({ 
       title: '', 
-      examType: '', // Added for filtering
-      totalMarks: 0, 
-      durationMin: 0, 
+      examType: '', 
+      totalMarks: 300, 
+      durationMin: 180, 
       scheduledAt: '', 
       batchId: '' 
   });
-  
-  const [newQuestion, setNewQuestion] = useState({
-    questionText: '',
-    subject: '',
-    topic: '',
-    difficulty: 'MEDIUM',
-    marks: 4,
-    options: { a: '', b: '', c: '', d: '' },
-    correctOption: 'a'
-  });
+
+  // Analytics States
+  const [analyticsData, setAnalyticsData] = useState<any[] | null>(null);
+  const [analyticsExamId, setAnalyticsExamId] = useState('');
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [studentDetail, setStudentDetail] = useState<any | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [attendanceSubject, setAttendanceSubject] = useState('');
+  const [attendanceTime, setAttendanceTime] = useState('');
+
+  // --- ACTIONS ---
 
   const refreshData = async () => {
     const batchData = await adminApi.getBatches(token);
@@ -951,20 +990,109 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
     setExams(examData);
 
     const qData = await adminApi.getQuestions(token);
-    const validQuestions = Array.isArray(qData) ? qData : [];
-    setQuestions(validQuestions);
+    setQuestions(Array.isArray(qData) ? qData : []);
 
     const studentData = await adminApi.getStudents(token);
     
-    const statsData = await adminApi.getStats(token, examData, validQuestions, studentData.length);
+    const statsData = await adminApi.getStats(token, examData, Array.isArray(qData) ? qData : [], studentData.length);
     setStats(statsData);
+
+    // Fetch Recent Rankers (From the latest exam)
+    if (examData.length > 0) {
+        // Get latest exam
+        const sortedExams = [...examData].sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime());
+        const latest = sortedExams[0];
+        
+        if (latest) {
+            try {
+                // Fetch analytics for the latest exam to show rankers
+                const analytics = await adminApi.getExamAnalytics(token, latest.id);
+                
+                // Create lookup maps
+                const studentByUserId: Record<string, Student> = {};
+                const studentById: Record<string, Student> = {};
+                
+                if (Array.isArray(studentData)) {
+                    studentData.forEach((s: any) => {
+                        if (s.userId) studentByUserId[s.userId] = s;
+                        if (s.id) studentById[s.id] = s;
+                    });
+                }
+
+                // MAP NAMES CORRECTLY
+                const rankersWithNames = Array.isArray(analytics) ? analytics.map((entry: any) => {
+                    // Precise matching strategy
+                    const student = studentByUserId[entry.userId] || studentById[entry.studentId];
+                    
+                    return {
+                        ...entry,
+                        studentName: student?.fullName || student?.name || entry.studentName || 'Unknown Student'
+                    };
+                }) : [];
+
+                const top = rankersWithNames.sort((a: any, b: any) => a.rank - b.rank).slice(0, 5);
+                setTopRankers(top);
+            } catch (e) { 
+                console.log("No analytics data found for latest exam"); 
+                setTopRankers([]); 
+            }
+        }
+    }
   };
 
   useEffect(() => {
     refreshData();
   }, [token]);
 
-  // Handle Attendance Load
+  // Handle Manual Draft Creation
+  const handleCreateDraft = async (e: React.FormEvent) => {
+      e.preventDefault();
+      try {
+          const createdExam = await adminApi.createExam(token, { ...newExam, subject: 'Combined', examType: 'MANUAL' });
+          refreshData();
+          setNewExam({ title: '', examType: '', totalMarks: 300, durationMin: 180, scheduledAt: '', batchId: '' });
+          
+          setSelectedExamId(createdExam.id);
+          setExamCreationMode('SELECT'); // Reset view
+      } catch (e) { alert("Failed to create draft"); }
+  };
+
+  // Handle AI Generation Flow
+  const handleGenerateAI = async (e: React.FormEvent) => {
+      e.preventDefault();
+      try {
+          // 1. Create Exam
+          const createdExam = await adminApi.createExam(token, { ...newExam, subject: 'Combined', examType: 'AI_GENERATED' });
+          
+          // 2. Fetch from AI
+          const aiPayload = { ...aiConfig, title: newExam.title };
+          const aiRes = await adminApi.generateAiPaper(aiPayload);
+          
+          // 3. Save to DB
+          if (aiRes && aiRes.questions) {
+              await adminApi.importQuestionsToExam(token, createdExam.id, aiRes.questions);
+              alert(`Success! Generated & Saved ${aiRes.questions.length} questions.`);
+              refreshData();
+              setExamCreationMode('SELECT');
+          }
+      } catch (e) { alert("AI Generation Flow Failed. Check parameters."); }
+  };
+
+  // Handle Question Import/Finalize
+  const handleFinalizePaper = async (questions: any[]) => {
+      if (!selectedExamId) return;
+      try {
+          await adminApi.importQuestionsToExam(token, selectedExamId, questions);
+          alert(`Success! Imported ${questions.length} questions into the exam.`);
+          setSelectedExamId(null); 
+          refreshData();
+      } catch (e: any) {
+          console.error(e);
+          alert(e.message || "Failed to save questions to exam.");
+      }
+  };
+
+  // Attendance Logic
   useEffect(() => {
     if (selectedBatch && activeTab === 'attendance') {
         adminApi.getStudentsByBatch(token, selectedBatch).then((students: any[]) => {
@@ -989,8 +1117,8 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
           await adminApi.markAttendance(token, { 
               batchId: selectedBatch, 
               date: attendanceDate, 
-              subject: attendanceSubject, // Added Requirement
-              time: attendanceTime,       // Added Requirement
+              subject: attendanceSubject, 
+              time: attendanceTime,        
               studentIds: presentIds 
           });
           alert("Attendance Marked Successfully");
@@ -999,590 +1127,317 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
       }
   };
 
-  // --- ADDED: Delete Exam Functionality ---
-  const handleDeleteExam = async (e: React.MouseEvent, id: string) => {
-      e.stopPropagation(); // Prevent opening the modal
-      if (!confirm("Are you sure you want to delete this exam?")) return;
-      
+  // Exam Management
+  const handleDeleteExam = async (id: string) => {
       try {
           await adminApi.deleteExam(token, id);
           alert("Exam Deleted");
           refreshData();
-      } catch (e) {
-          alert("Failed to delete exam");
-      }
+      } catch (e) { alert("Failed to delete exam"); }
   };
 
-  const handleCreateExam = async (e: React.FormEvent) => {
-      e.preventDefault();
-      try {
-          const examPayload = {
-              ...newExam,
-              subject: 'Combined', 
-              title: newExam.examType ? `[${newExam.examType}] ${newExam.title}` : newExam.title
-          };
-          
-          const createdExam = await adminApi.createExam(token, examPayload);
-          alert("Exam Draft Created. Opening Question Manager...");
-          refreshData();
-          setNewExam({ title: '', examType: '', totalMarks: 0, durationMin: 0, scheduledAt: '', batchId: '' });
-          
-          if (createdExam && createdExam.id) {
-              setSelectedExamId(createdExam.id);
-          }
-      } catch (e) {
-          alert("Failed to create exam");
-      }
-  };
-
-  // --- ADDED: Finalize Paper Functionality ---
-  const handleFinalizePaper = async (selectedIds: string[]) => {
-      if (!selectedExamId) return;
-      try {
-          await adminApi.addQuestionsToExam(token, selectedExamId, selectedIds);
-          alert(`Success! Exam paper finalized with ${selectedIds.length} questions.`);
-          setSelectedExamId(null); // Close modal
-          refreshData();
-      } catch (e: any) {
-          console.error(e);
-          alert(e.message || "Failed to save questions to exam.");
-      }
-  };
-
-  // --- ADDED: PDF Download Functionality for ALL exams ---
-  const handleDownloadPDF = async (e: React.MouseEvent, exam: Exam) => {
-      e.stopPropagation();
+  // PDF Generation with Watermark
+  const handleDownloadPDF = async (exam: Exam) => {
       try {
           const fullExamData = await adminApi.getExamById(token, exam.id);
           const questionsList = fullExamData.questions || [];
-          
           const printWindow = window.open('', '_blank', 'width=900,height=800');
           if(!printWindow) return alert("Pop-up blocked. Please allow pop-ups to print.");
           
-          let html = `
-            <html>
-              <head>
-                <title>${exam.title} - Question Paper</title>
-                <style>
-                  body { font-family: 'Times New Roman', serif; padding: 40px; font-size: 14px; }
-                  .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 15px; }
-                  .header h1 { margin: 0 0 10px 0; font-size: 24px; text-transform: uppercase; }
-                  .meta { display: flex; justify-content: space-between; font-weight: bold; font-size: 16px; }
-                  .q-container { display: flex; flex-wrap: wrap; justify-content: space-between; }
-                  .q-item { width: 48%; margin-bottom: 25px; page-break-inside: avoid; border: 1px solid #eee; padding: 10px; border-radius: 5px; }
-                  .q-text { font-weight: bold; margin-bottom: 10px; }
-                  .q-img { max-width: 100%; max-height: 150px; display: block; margin: 10px 0; border: 1px solid #ccc; }
-                  .options { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; }
-                  .opt-img { max-width: 100px; max-height: 50px; vertical-align: middle; }
-                  @media print { .q-item { width: 100%; border: none; padding: 0; } }
-                </style>
-                <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-                <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
-                <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-              </head>
-              <body>
-                <div class="header">
-                  <h1>AIMS INSTITUTE - ${exam.examType || 'TEST'}</h1>
-                  <div class="meta">
-                    <span>${exam.title}</span>
-                    <span>Duration: ${exam.durationMin} mins | Max Marks: ${exam.totalMarks}</span>
-                  </div>
-                </div>
-                <div class="q-container">
-          `;
+          let html = `<html><head><title>${exam.title}</title>
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+            <style>
+                body{font-family:serif;padding:40px;position:relative;}
+                .q-item{margin-bottom:20px;break-inside:avoid}
+                .options{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+                .watermark {
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%) rotate(-45deg);
+                    font-size: 100px;
+                    color: rgba(0,0,0,0.05);
+                    z-index: -1;
+                    white-space: nowrap;
+                    pointer-events: none;
+                    font-weight: bold;
+                }
+            </style>
+            <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+            </head><body>
+            <div class="watermark">AIMS INSTITUTE</div>
+            <h1 style="text-align:center">${exam.title}</h1>
+            <div style="text-align:center;margin-bottom:30px">Duration: ${exam.durationMin}m | Marks: ${exam.totalMarks}</div>`;
           
           questionsList.forEach((q: any, idx: number) => {
-             // Parse options if they are stored as JSON string
              let opts = q.options;
-             if (typeof opts === 'string' && opts.startsWith('{')) {
-                 try { opts = JSON.parse(opts); } catch(e) {}
-             }
+             try { if(typeof opts==='string') opts=JSON.parse(opts); } catch(e){}
+             const renderOpt = (v:any) => typeof v==='string' && v.startsWith('http') ? `<img src="${v}" height="40"/>` : v;
 
-             // Check type to determine rendering style
-             // Use the same helper function if possible, or replicate logic
-             // Simple check here: if correctOption is number and options empty/weird
-             let isInteger = false;
-             if (q.type && (q.type.toLowerCase().includes('integer') || q.type.toLowerCase().includes('numerical'))) isInteger = true;
-             
-             const renderOpt = (val: any) => {
-                 if(typeof val === 'string' && val.match(/^https?:\/\//)) {
-                     return `<img src="${val}" class="opt-img"/>`;
-                 }
-                 return val;
-             };
-
-             html += `
-               <div class="q-item">
-                 <div class="q-text">Q${idx+1}. ${q.questionText || ''}</div>
-                 ${q.questionImage ? `<img src="${q.questionImage}" class="q-img"/>` : ''}
-                 ${isInteger ? 
-                    `<div style="margin-top:15px; border-bottom:1px solid #000; width:150px; height:30px;">Ans: </div>` :
-                    `<div class="options">
-                        ${opts.a ? `<div>(A) ${renderOpt(opts.a)}</div>` : ''}
-                        ${opts.b ? `<div>(B) ${renderOpt(opts.b)}</div>` : ''}
-                        ${opts.c ? `<div>(C) ${renderOpt(opts.c)}</div>` : ''}
-                        ${opts.d ? `<div>(D) ${renderOpt(opts.d)}</div>` : ''}
-                     </div>`
-                 }
-               </div>
-             `;
-          });
-          
-          html += `
+             html += `<div class="q-item">
+                <div><strong>Q${idx+1}. </strong> ${q.questionText}</div>
+                ${q.questionImage ? `<img src="${q.questionImage}" style="max-height:150px;display:block;margin:10px 0"/>` : ''}
+                <div class="options">
+                    ${opts.a ? `<div>(A) ${renderOpt(opts.a)}</div>` : ''}
+                    ${opts.b ? `<div>(B) ${renderOpt(opts.b)}</div>` : ''}
+                    ${opts.c ? `<div>(C) ${renderOpt(opts.c)}</div>` : ''}
+                    ${opts.d ? `<div>(D) ${renderOpt(opts.d)}</div>` : ''}
                 </div>
-                <script>
-                    document.addEventListener("DOMContentLoaded", function() {
-                        renderMathInElement(document.body, {delimiters: [{left: "$$", right: "$$", display: true},{left: "$", right: "$", display: false}]});
-                        setTimeout(() => window.print(), 1000);
-                    });
-                </script>
-              </body></html>`;
-          
+             </div>`;
+          });
+          html += `<script>document.addEventListener("DOMContentLoaded", function() { renderMathInElement(document.body); setTimeout(()=>window.print(),1000); });</script></body></html>`;
           printWindow.document.write(html);
           printWindow.document.close();
-          
-      } catch(err) {
-          alert("Failed to generate PDF. Questions might not be loaded.");
-      }
+      } catch(err) { alert("Failed to generate PDF."); }
   };
-  
-  const handleAddQuestion = async (e: React.FormEvent) => {
-      e.preventDefault();
+
+  // Analytics Helpers
+  const handleViewStudentDetail = async (studentId: string) => {
+      setSelectedStudentId(studentId);
+      setLoadingDetail(true);
       try {
-          await adminApi.createQuestion(token, newQuestion);
-          alert("Question Added to Bank");
-          refreshData();
-          setNewQuestion({
-            questionText: '',
-            subject: '',
-            topic: '',
-            difficulty: 'MEDIUM',
-            marks: 4,
-            options: { a: '', b: '', c: '', d: '' },
-            correctOption: 'a'
-          });
-      } catch (e) {
-          alert("Failed to add question");
-      }
+          const allAttempts = await adminApi.getStudentAttempts(token, studentId);
+          const relevantAttempt = allAttempts.find((a: any) => a.examId === analyticsExamId);
+          setStudentDetail(relevantAttempt || null);
+      } catch (e) { alert("Could not load detailed report."); } 
+      finally { setLoadingDetail(false); }
   };
 
-  // --- FILTER & PAGINATION LOGIC ---
-  const ITEMS_PER_PAGE = 5;
-  const filteredQuestions = questions.filter(q => {
-      const matchesSearch = q.questionText.toLowerCase().includes(qbSearch.toLowerCase()) || q.topic?.toLowerCase().includes(qbSearch.toLowerCase());
-      const matchesSubject = qbSubjectFilter ? q.subject === qbSubjectFilter : true;
-      const matchesDiff = qbDifficultyFilter ? q.difficulty === qbDifficultyFilter : true;
-      return matchesSearch && matchesSubject && matchesDiff;
-  });
-  
-  const paginatedQuestions = filteredQuestions.slice((qbPage - 1) * ITEMS_PER_PAGE, qbPage * ITEMS_PER_PAGE);
-  const totalPages = Math.ceil(filteredQuestions.length / ITEMS_PER_PAGE);
+  const handleFetchAnalytics = async (examId: string) => {
+      setAnalyticsExamId(examId);
+      if(!examId) { setAnalyticsData(null); return; }
+      try {
+          const data = await adminApi.getExamAnalytics(token, examId);
+          setAnalyticsData(data);
+      } catch(e) { alert("Failed to fetch results"); }
+  };
 
-  // Styles
+  const generateInsights = (attempt: any) => {
+      if (!attempt || !attempt.answers) return [];
+      const insights = [];
+      const answers = attempt.answers;
+      const avgTimeCorrect = answers.filter((a: any) => a.isCorrect).reduce((acc: number, curr: any) => acc + curr.timeTaken, 0) / (answers.filter((a: any) => a.isCorrect).length || 1);
+      const avgTimeWrong = answers.filter((a: any) => !a.isCorrect && a.selectedOption).reduce((acc: number, curr: any) => acc + curr.timeTaken, 0) / (answers.filter((a: any) => !a.isCorrect && a.selectedOption).length || 1);
+      
+      if (avgTimeWrong > avgTimeCorrect * 1.5) insights.push({ type: 'WARN', text: "Critical Time Loss on wrong answers." });
+      
+      const slowQuestions = answers.filter((a: any) => a.timeTaken > 180); 
+      if (slowQuestions.length > 3) insights.push({ type: 'INFO', text: "Struggling with speed." });
+
+      return insights;
+  };
+
+  // --- STYLES ---
   const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl transition-all duration-300";
   const inputStyle = "w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500 outline-none transition";
   const labelStyle = "block text-[10px] font-bold text-slate-500 uppercase mb-1";
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
-      
-      {/* SIDEBAR - DARK SLATE with AMBER ACCENTS */}
+      {/* SIDEBAR */}
       <aside className={`bg-slate-900 border-r border-slate-800 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-64'} shadow-lg relative z-20`}>
         <div className={`p-6 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
           {!isSidebarCollapsed && (
             <div className="flex items-center gap-2">
-              <div className="relative w-12 h-12 p-1 bg-white rounded-full shadow-md">
-                 <div className="relative w-full h-full bg-white rounded-full overflow-hidden">
-                    <Image src={LOGO_PATH} alt="Logo" fill className="object-contain p-0.5" unoptimized />
-                 </div>
-              </div>
+              <div className="relative w-12 h-12 p-1 bg-white rounded-full shadow-md"><div className="relative w-full h-full bg-white rounded-full overflow-hidden"><Image src={LOGO_PATH} alt="Logo" fill className="object-contain p-0.5" unoptimized /></div></div>
               <div><h2 className="text-lg font-bold text-white leading-none">AIMS</h2><p className="text-[9px] text-amber-500 font-bold uppercase">Academic</p></div>
             </div>
           )}
-          <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400">
-            {isSidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-          </button>
+          <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400">{isSidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}</button>
         </div>
-        
         <nav className="p-3 space-y-1 flex-1 overflow-y-auto custom-scrollbar">
           {[
             { id: 'dashboard', label: 'Dashboard', icon: BarChart2 },
-            { id: 'questions', label: 'Question Bank', icon: FileQuestion },
-            { id: 'exams', label: 'Create Exam Paper', icon: ClipboardCheck },
+            { id: 'exams', label: 'Create Exam', icon: ClipboardCheck },
             { id: 'attendance', label: 'Attendance', icon: Users },
             { id: 'results', label: 'Results & Reports', icon: Activity },
           ].map(tab => (
-             <button key={tab.id} onClick={() => setActiveTab(tab.id)} 
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${
-                  activeTab === tab.id 
-                  ? 'bg-amber-600 text-white shadow-md shadow-amber-900/20' 
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                } ${isSidebarCollapsed ? 'justify-center' : ''}`}
-                title={tab.label}
-             >
+             <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${activeTab === tab.id ? 'bg-amber-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`}>
                 <tab.icon size={20} />
                 {!isSidebarCollapsed && <span>{tab.label}</span>}
              </button>
           ))}
         </nav>
-        
         <div className="p-4 border-t border-slate-800">
-          <button onClick={onLogout} className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} text-red-400 hover:bg-red-900/20 hover:text-red-300 w-full p-2 rounded-lg transition`}>
-            <LogOut size={18} className={!isSidebarCollapsed ? "mr-2" : ""} /> 
-            {!isSidebarCollapsed && "Logout"}
-          </button>
+          <button onClick={onLogout} className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} text-red-400 hover:bg-red-900/20 hover:text-red-300 w-full p-2 rounded-lg transition`}><LogOut size={18} className={!isSidebarCollapsed ? "mr-2" : ""} /> {!isSidebarCollapsed && "Logout"}</button>
         </div>
       </aside>
 
       {/* MAIN CONTENT */}
       <main className="flex-1 overflow-auto p-4 md:p-8 relative bg-slate-50">
-         
-         {/* HEADER */}
          <div className="flex justify-between items-center mb-8">
-            <div>
-                <h1 className="text-2xl font-bold text-slate-800">Academic Administration</h1>
-                <p className="text-slate-500 text-sm">Manage curriculum, exams, and student progress.</p>
-            </div>
-            <div className="flex items-center gap-4">
-                <div className="px-4 py-2 bg-white rounded-full border border-slate-200 text-xs font-bold text-slate-600 shadow-sm">
-                    {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                </div>
-                <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center text-amber-700 font-bold border-2 border-white shadow-md">
-                    AD
-                </div>
-            </div>
+            <div><h1 className="text-2xl font-bold text-slate-800">Academic Administration</h1><p className="text-slate-500 text-sm">Welcome back, Admin</p></div>
+            <div className="px-4 py-2 bg-white rounded-full border border-slate-200 text-xs font-bold text-slate-600 shadow-sm">{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
          </div>
 
-         {/* DASHBOARD */}
+         {/* DASHBOARD TAB (UPDATED) */}
          {activeTab === 'dashboard' && (
             <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    {/* Card 1: Exams */}
                     <div className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl p-6 text-white shadow-lg shadow-orange-200">
                         <div className="flex justify-between items-start">
                             <div><p className="text-orange-100 text-xs font-bold uppercase">Total Exams</p><h3 className="text-3xl font-black mt-1">{stats?.totalExams || 0}</h3></div>
                             <ClipboardCheck size={24} className="text-orange-200"/>
                         </div>
                     </div>
-                    <div className={glassPanel + " p-6"}>
-                        <div className="flex justify-between items-start">
-                            <div><p className="text-slate-400 text-xs font-bold uppercase">Total Questions</p><h3 className="text-3xl font-black text-slate-800 mt-1">{stats?.questionBanks || 0}</h3></div>
-                            <FileQuestion size={24} className="text-amber-600"/>
-                        </div>
-                    </div>
+                    {/* Card 2: Students */}
                     <div className={glassPanel + " p-6"}>
                         <div className="flex justify-between items-start">
                             <div><p className="text-slate-400 text-xs font-bold uppercase">Active Students</p><h3 className="text-3xl font-black text-slate-800 mt-1">{stats?.activeStudents || 0}</h3></div>
                             <Users size={24} className="text-blue-600"/>
                         </div>
                     </div>
+                    {/* Card 3: Question Bank (Replaces Enquiries) */}
                     <div className={glassPanel + " p-6"}>
                         <div className="flex justify-between items-start">
-                            <div><p className="text-slate-400 text-xs font-bold uppercase">Avg. Attendance</p><h3 className="text-3xl font-black text-slate-800 mt-1">{stats?.avgAttendance || 0}%</h3></div>
-                            <Activity size={24} className="text-green-600"/>
+                            <div><p className="text-slate-400 text-xs font-bold uppercase">Question Bank</p><h3 className="text-3xl font-black text-slate-800 mt-1">{stats?.questionBanks || 0}</h3></div>
+                            <FileQuestion size={24} className="text-purple-600"/>
+                        </div>
+                    </div>
+                    {/* Card 4: Batches (Replaces Collection) */}
+                    <div className={glassPanel + " p-6"}>
+                        <div className="flex justify-between items-start">
+                            <div><p className="text-slate-400 text-xs font-bold uppercase">Active Batches</p><h3 className="text-3xl font-black text-slate-800 mt-1">{batches.length}</h3></div>
+                            <Layers size={24} className="text-green-600"/>
                         </div>
                     </div>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* UPCOMING EXAMS */}
+                    {/* UPCOMING EXAMS LIST */}
                     <div className={glassPanel + " p-6 flex flex-col h-96"}>
-                        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Clock size={18} className="text-amber-600"/> Upcoming Exams</h3>
+                        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Clock size={18} className="text-amber-600"/> Upcoming & Recent Exams</h3>
                         <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3">
-                            {exams.length === 0 ? <p className="text-slate-400 text-sm italic text-center py-10">No upcoming exams.</p> : exams.map(exam => (
-                                <div key={exam.id} className="p-4 rounded-xl border border-slate-100 bg-slate-50 flex justify-between items-center">
+                            {exams.length === 0 ? <p className="text-slate-400 text-sm italic text-center py-10">No exams scheduled.</p> : exams.map(exam => (
+                                <div key={exam.id} className="p-4 rounded-xl border border-slate-100 bg-slate-50 flex justify-between items-center hover:bg-white hover:shadow-md transition cursor-pointer group" onClick={() => setViewingExamId(exam.id)}>
                                     <div>
-                                        <h4 className="font-bold text-slate-800 text-sm">{exam.title}</h4>
+                                        <h4 className="font-bold text-slate-800 text-sm group-hover:text-amber-700 transition">{exam.title}</h4>
                                         <p className="text-xs text-slate-500">{new Date(exam.scheduledAt).toLocaleDateString()} • {exam.durationMin} mins</p>
                                     </div>
-                                    <span className="text-[10px] font-bold bg-white border border-slate-200 px-2 py-1 rounded text-slate-600">{exam.subject || 'General'}</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-bold bg-white border border-slate-200 px-2 py-1 rounded text-slate-600">{exam.totalMarks} Marks</span>
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); handleDownloadPDF(exam); }}
+                                            className="p-1.5 rounded-full bg-slate-200 text-slate-600 hover:bg-blue-600 hover:text-white transition"
+                                            title="Print with Watermark"
+                                        >
+                                            <Printer size={12}/>
+                                        </button>
+                                    </div>
                                 </div>
                             ))}
                         </div>
                     </div>
 
-                    {/* RECENT QUESTIONS PREVIEW */}
+                    {/* RECENT RANKERS (Replaces Enquiries List) */}
                     <div className={glassPanel + " p-6 flex flex-col h-96"}>
-                        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><FileQuestion size={18} className="text-blue-600"/> Recent Questions</h3>
+                        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><GraduationCap size={18} className="text-blue-600"/> Recent Exam Rankers</h3>
                         <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3">
-                            {questions.slice(0, 5).map(q => {
-                                const qType = getQuestionType(q);
-                                return (
-                                    <div key={q.id} className="p-4 rounded-xl border border-slate-100 bg-slate-50 hover:border-blue-200 transition">
-                                            <div className="flex justify-between items-start gap-4">
-                                                <div className="flex-1 min-w-0">
-                                                    {/* RICH CONTENT RENDERER (Preview) */}
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${qType === 'INTEGER' ? 'bg-purple-100 text-purple-700' : qType === 'MULTIPLE' ? 'bg-orange-100 text-orange-700' : 'bg-blue-50 text-blue-700'}`}>
-                                                            {qType === 'INTEGER' ? 'Integer' : qType === 'MULTIPLE' ? 'Multi' : 'Single'}
-                                                        </span>
-                                                    </div>
-                                                    <div className="text-sm text-slate-700 font-medium line-clamp-2 mb-1"><LatexRenderer content={q.questionText} /></div>
-                                                    {q.questionImage && <ImageIcon size={16} className="text-slate-400"/>}
-                                                </div>
-                                                <span className={`text-[10px] font-bold px-2 py-1 rounded shrink-0 ${q.difficulty === 'HARD' ? 'bg-red-50 text-red-600' : q.difficulty === 'MEDIUM' ? 'bg-yellow-50 text-yellow-600' : 'bg-green-50 text-green-600'}`}>{q.difficulty}</span>
-                                            </div>
-                                            <div className="mt-2 text-xs text-slate-400 flex gap-2">
-                                                <span>{q.subject}</span>
-                                                <span>•</span>
-                                                <span>{q.topic}</span>
-                                            </div>
+                            {topRankers.length === 0 ? (
+                                <div className="text-center text-slate-400 text-sm italic py-10 flex flex-col items-center">
+                                    <Activity size={32} className="mb-2 opacity-20"/>
+                                    <p>No results published yet.</p>
+                                </div>
+                            ) : topRankers.map((student, i) => (
+                                <div key={i} className="p-4 rounded-xl border border-slate-100 bg-slate-50 flex justify-between items-center">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${i===0 ? 'bg-yellow-100 text-yellow-700' : i===1 ? 'bg-slate-200 text-slate-700' : i===2 ? 'bg-orange-100 text-orange-800' : 'bg-slate-100 text-slate-500'}`}>
+                                            {student.rank}
+                                        </div>
+                                        <div>
+                                            <h4 className="font-bold text-slate-800 text-sm">{student.studentName}</h4>
+                                            <p className="text-xs text-slate-500 font-mono">Score: {student.score}</p>
+                                        </div>
                                     </div>
-                                );
-                            })}
-                            {questions.length === 0 && <p className="text-center text-slate-400 text-sm italic py-10">No questions found in bank.</p>}
+                                    <span className={`text-[10px] font-bold px-2 py-1 rounded ${student.accuracy > 80 ? 'bg-green-100 text-green-700' : 'bg-blue-50 text-blue-700'}`}>
+                                        {student.accuracy}% Acc
+                                    </span>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>
             </div>
          )}
-
-         {/* QUESTION BANK TAB */}
-         {activeTab === 'questions' && (
-             <div className="grid grid-cols-1 gap-8">
-                 <div className={`col-span-1 ${glassPanel} flex flex-col h-[800px]`}>
-                     <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/50 flex flex-col gap-4">
-                         <div className="flex justify-between items-center">
-                            <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><FileQuestion size={20} className="text-amber-600"/> Question Repository</h3>
-                            <span className="bg-amber-100 text-amber-800 text-xs font-bold px-3 py-1 rounded-full">{filteredQuestions.length} Matches</span>
-                         </div>
-                         
-                         {/* FILTERS */}
-                         <div className="flex gap-4 items-center">
-                            <div className="relative flex-1">
-                                <Search size={16} className="absolute left-3 top-3 text-slate-400"/>
-                                <input className={inputStyle + " pl-10 py-2"} placeholder="Search questions..." value={qbSearch} onChange={e => setQbSearch(e.target.value)} />
-                            </div>
-                            <select className={inputStyle + " w-40 py-2"} value={qbSubjectFilter} onChange={e => setQbSubjectFilter(e.target.value)}>
-                                <option value="">All Subjects</option>
-                                <option value="PHYSICS">Physics</option>
-                                <option value="CHEMISTRY">Chemistry</option>
-                                <option value="MATHS">Maths</option>
-                                <option value="BIOLOGY">Biology</option>
-                            </select>
-                            <select className={inputStyle + " w-40 py-2"} value={qbDifficultyFilter} onChange={e => setQbDifficultyFilter(e.target.value)}>
-                                <option value="">Any Difficulty</option>
-                                <option value="EASY">Easy</option>
-                                <option value="MEDIUM">Medium</option>
-                                <option value="HARD">Hard</option>
-                            </select>
-                         </div>
-                     </div>
-
-                     <div className="flex-1 overflow-y-auto p-0">
-                        <table className="w-full text-left">
-                            <thead className="bg-slate-50 text-xs font-bold text-slate-500 uppercase border-b border-slate-200 sticky top-0 z-10">
-                                <tr>
-                                    <th className="px-6 py-4 w-[60%]">Question</th>
-                                    <th className="px-6 py-4">Options</th>
-                                    <th className="px-6 py-4 text-right">Meta</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 text-sm">
-                                {paginatedQuestions.map(q => {
-                                    const qType = getQuestionType(q);
-                                    // Check if options are image based (e.g. Option A is URL)
-                                    const isOptionImg = isImageUrl(q.options?.a || '');
-
-                                    return (
-                                    <tr key={q.id} className="hover:bg-slate-50/50 transition">
-                                            <td className="px-6 py-6 align-top">
-                                                <div className="flex gap-2 mb-2">
-                                                    <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{q.subject}</span>
-                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${q.difficulty === 'HARD' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>{q.difficulty}</span>
-                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${qType === 'INTEGER' ? 'bg-purple-100 text-purple-700' : qType === 'MULTIPLE' ? 'bg-orange-100 text-orange-700' : 'bg-blue-50 text-blue-600'}`}>
-                                                        {qType === 'INTEGER' ? 'Integer' : qType === 'MULTIPLE' ? 'Multi' : 'Single'}
-                                                    </span>
-                                                </div>
-                                                <div className="text-slate-800 font-medium text-base mb-2"><LatexRenderer content={q.questionText} /></div>
-                                                {/* RICH CONTENT RENDERER - MOVED BELOW TEXT */}
-                                                {q.questionImage && (
-                                                    <div className="mb-2 w-full max-w-md h-32 relative border rounded bg-slate-50">
-                                                        <img src={q.questionImage} alt="Question Image" className="w-full h-full object-contain" />
-                                                    </div>
-                                                )}
-                                                
-                                                {/* PREVIEW OPTIONS */}
-                                                {qType === 'INTEGER' ? (
-                                                    <div className="mt-2 text-xs font-bold text-slate-600 border px-3 py-1 rounded bg-slate-50 inline-block">
-                                                        Answer: {getIntegerAnswer(q.correctOption)}
-                                                    </div>
-                                                ) : isOptionImg ? (
-                                                    <div className="mt-2 text-xs text-slate-500 italic">Image Options available</div>
-                                                ) : (
-                                                    <div className="mt-2 grid grid-cols-2 gap-2">
-                                                        {['a','b','c','d'].map(key => (
-                                                            <div key={key} className="text-xs text-slate-500 truncate border px-2 py-1 rounded">
-                                                                <span className="uppercase font-bold mr-1">{key}.</span> 
-                                                                <ContentRenderer content={String(q.options[key] || '')} />
-                                                            </div>
-                                                        ))}
-                                                        {Object.keys(q.options).length > 2 && <div className="text-xs text-slate-400 pl-1">...</div>}
-                                                    </div>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-6 align-top">
-                                                {qType === 'INTEGER' ? (
-                                                    <div className="mt-2 text-xs font-bold text-slate-600 border px-3 py-1 rounded bg-slate-50 inline-block">
-                                                        Answer: {getIntegerAnswer(q.correctOption)}
-                                                    </div>
-                                                ) : isOptionImg ? (
-                                                    <div>
-                                                        <div className="mb-2 w-full h-32 relative border rounded bg-white">
-                                                             <img src={q.options.a} alt="Options" className="w-full h-full object-contain" />
-                                                        </div>
-                                                        <div className="grid grid-cols-4 gap-2">
-                                                            {['a','b','c','d'].map(key => {
-                                                                // Correct Option Logic for Multiple Answers (Includes check)
-                                                                const isCorrect = q.correctOption.toLowerCase().includes(key);
-                                                                return (
-                                                                    <div key={key} className={`text-center py-1 rounded text-xs font-bold border ${isCorrect ? 'bg-green-100 text-green-700 border-green-300' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
-                                                                        {key.toUpperCase()}
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <div className="grid grid-cols-2 gap-2 text-xs">
-                                                        {Object.entries(q.options || {}).map(([key, val]) => {
-                                                            // Correct Option Logic for Multiple Answers (Includes check)
-                                                            const isOptionCorrect = q.correctOption.toLowerCase().includes(key.toLowerCase());
-                                                            return (
-                                                                <div key={key} className={`p-2 rounded border flex flex-col ${isOptionCorrect ? 'bg-green-50 border-green-200 text-green-800 font-bold' : 'bg-white border-slate-100 text-slate-600'}`}>
-                                                                    <span className="uppercase mr-1 mb-1">{key}.</span> 
-                                                                    <ContentRenderer content={String(val)} />
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-6 align-top text-right">
-                                                <div className="text-slate-500 font-mono text-xs mb-1">Marks: {q.marks}</div>
-                                                <button className="text-xs text-red-400 hover:text-red-600 font-bold flex items-center justify-end gap-1 ml-auto"><Trash2 size={12}/> Delete</button>
-                                            </td>
-                                    </tr>
-                                )})}
-                                {paginatedQuestions.length === 0 && (
-                                    <tr><td colSpan={3} className="px-6 py-12 text-center text-slate-400 italic">No matching questions found.</td></tr>
-                                )}
-                            </tbody>
-                        </table>
-                     </div>
-
-                     {/* PAGINATION */}
-                     {totalPages > 1 && (
-                         <div className="p-4 border-t border-slate-200 flex justify-between items-center bg-slate-50/50">
-                             <span className="text-xs text-slate-500 font-bold">Page {qbPage} of {totalPages}</span>
-                             <div className="flex gap-2">
-                                 <button onClick={() => setQbPage(p => Math.max(1, p - 1))} disabled={qbPage === 1} className="p-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"><ChevronLeft size={16}/></button>
-                                 <button onClick={() => setQbPage(p => Math.min(totalPages, p + 1))} disabled={qbPage === totalPages} className="p-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"><ChevronRight size={16}/></button>
-                             </div>
-                         </div>
-                     )}
-                 </div>
-             </div>
-         )}
          
-         {/* EXAMS TAB (UPDATED LAYOUT) */}
+         {/* CREATE EXAM TAB */}
          {activeTab === 'exams' && (
-             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                 {/* CREATE EXAM FORM */}
-                 <div className={`lg:col-span-2 h-fit ${glassPanel} p-6`}>
-                    <h3 className="font-bold text-slate-800 mb-4 flex items-center border-b border-slate-200 pb-3 text-lg"><Plus size={20} className="mr-2 text-amber-600"/> Create Exam Paper</h3>
-                    <form onSubmit={handleCreateExam} className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                             {/* Exam Type Filter */}
-                             <div>
-                                <label className={labelStyle}>Target Exam</label>
-                                <select className={inputStyle} required value={newExam.examType} onChange={e => setNewExam({...newExam, examType: e.target.value})}>
-                                    <option value="">Select Target</option>
-                                    <option value="JEE_MAINS">JEE Mains</option>
-                                    <option value="JEE_ADVANCED">JEE Advanced</option>
-                                    <option value="NEET">NEET</option>
-                                    <option value="MHT_CET">MHT-CET</option>
-                                    <option disabled>--- Single Subject ---</option>
-                                    <option value="SUBJECT_PHYSICS">Physics Only</option>
-                                    <option value="SUBJECT_CHEMISTRY">Chemistry Only</option>
-                                    <option value="SUBJECT_MATHS">Maths Only</option>
-                                    <option value="SUBJECT_BIOLOGY">Biology Only</option>
-                                </select>
-                                {/* Added Helper Text for Logic Clarification */}
-                                {newExam.examType && (
-                                    <p className="text-[10px] text-amber-600 font-bold mt-1 ml-1 flex items-center gap-1">
-                                        <AlertCircle size={10}/>
-                                        {newExam.examType.includes('ADVANCED') 
-                                            ? "Multi-Choice Enabled" 
-                                            : "Single-Choice Only (Radio Buttons)"}
-                                    </p>
-                                )}
-                             </div>
-                             <div>
-                                <label className={labelStyle}>Exam Title</label>
-                                <input className={inputStyle} required placeholder="e.g. Weekly Test 4" value={newExam.title} onChange={e => setNewExam({...newExam, title: e.target.value})}/>
-                             </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div><label className={labelStyle}>Batch</label><select className={inputStyle} required value={newExam.batchId} onChange={e => setNewExam({...newExam, batchId: e.target.value})}><option value="">Select</option>{batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
-                            <div><label className={labelStyle}>Duration (Min)</label><input type="number" className={inputStyle} required placeholder="180" value={newExam.durationMin} onChange={e => setNewExam({...newExam, durationMin: parseInt(e.target.value) || 0})}/></div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div><label className={labelStyle}>Total Marks</label><input type="number" className={inputStyle} required placeholder="300" value={newExam.totalMarks} onChange={e => setNewExam({...newExam, totalMarks: parseInt(e.target.value) || 0})}/></div>
-                            <div><label className={labelStyle}>Schedule Date</label><input type="datetime-local" className={inputStyle} required value={newExam.scheduledAt} onChange={e => setNewExam({...newExam, scheduledAt: e.target.value})}/></div>
-                        </div>
-                        <div className="pt-2 border-t border-slate-100 flex justify-end">
-                            <button className="bg-amber-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-amber-700 transition shadow-lg flex items-center justify-center gap-2"><Save size={18}/> Create Draft</button>
-                        </div>
-                    </form>
-                 </div>
+             <div className="grid grid-cols-1 gap-8">
+                 {/* VIEW 1: SELECTION MODE */}
+                 {examCreationMode === 'SELECT' && (
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 h-[600px]">
+                         <div onClick={() => setExamCreationMode('AI_FORM')} className={`${glassPanel} p-10 flex flex-col items-center justify-center text-center cursor-pointer hover:shadow-xl hover:border-amber-400 group transition`}>
+                             <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition"><BrainCircuit size={40} className="text-amber-600"/></div>
+                             <h3 className="text-2xl font-bold text-slate-800 mb-2">AI Auto-Generator</h3>
+                             <p className="text-slate-500 max-w-xs">Generate a complete exam paper instantly by specifying subjects, difficulty, and question counts.</p>
+                         </div>
+                         <div onClick={() => setExamCreationMode('MANUAL_FORM')} className={`${glassPanel} p-10 flex flex-col items-center justify-center text-center cursor-pointer hover:shadow-xl hover:border-blue-400 group transition`}>
+                             <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition"><Edit3 size={40} className="text-blue-600"/></div>
+                             <h3 className="text-2xl font-bold text-slate-800 mb-2">Manual Builder</h3>
+                             <p className="text-slate-500 max-w-xs">Create a draft and manually select questions from the repository using smart filters.</p>
+                         </div>
+                     </div>
+                 )}
 
-                 {/* SCHEDULED EXAMS LIST */}
-                 <div className={`lg:col-span-1 ${glassPanel} flex flex-col h-[700px]`}>
-                    <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/50 flex justify-between items-center"><h3 className="font-bold text-slate-800">Scheduled Exams</h3><span className="bg-amber-100 text-amber-800 text-xs font-bold px-2 py-1 rounded">{exams.length} Active</span></div>
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-                        {exams.map(exam => (
-                            <div key={exam.id} className="p-4 rounded-xl border border-slate-200 hover:border-amber-300 transition-all bg-white group shadow-sm hover:shadow-md cursor-pointer" onClick={() => setSelectedExamId(exam.id)}>
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <h4 className="font-bold text-slate-900 text-sm group-hover:text-amber-700 transition line-clamp-2">{exam.title}</h4>
-                                        <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
-                                            <span className="flex items-center gap-1"><Clock size={10}/> {exam.durationMin}m</span>
-                                            <span className="flex items-center gap-1"><CheckCircle size={10}/> {exam.totalMarks}</span>
-                                        </div>
-                                    </div>
-                                    <div className={`text-[9px] font-bold px-2 py-0.5 rounded border ${exam.status === 'PUBLISHED' ? 'bg-green-50 text-green-600 border-green-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>{exam.status}</div>
-                                </div>
-                                <div className="mt-2 pt-2 border-t border-slate-100 flex justify-between items-center">
-                                    <span className="text-[10px] text-slate-400 font-mono">{new Date(exam.scheduledAt).toLocaleDateString()}</span>
-                                    
-                                    <div className="flex items-center gap-2">
-                                        {/* Updated: PDF Download Button for ALL Exams */}
-                                        <button 
-                                            className="p-1.5 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded transition" 
-                                            onClick={(e) => handleDownloadPDF(e, exam)}
-                                            title="Download PDF"
-                                        >
-                                            <Printer size={12}/>
-                                        </button>
+                 {/* VIEW 2: AI FORM */}
+                 {examCreationMode === 'AI_FORM' && (
+                     <div className={`${glassPanel} p-8 max-w-4xl mx-auto w-full`}>
+                         <div className="flex items-center gap-4 mb-6 border-b border-slate-200 pb-4">
+                             <button onClick={() => setExamCreationMode('SELECT')} className="p-2 hover:bg-slate-100 rounded-full"><ArrowLeft size={20}/></button>
+                             <h3 className="text-xl font-bold text-slate-800">Generate with AI</h3>
+                         </div>
+                         <form onSubmit={handleGenerateAI} className="space-y-6">
+                             <div className="grid grid-cols-2 gap-4">
+                                <div><label className={labelStyle}>Title</label><input className={inputStyle} required value={newExam.title} onChange={e => setNewExam({...newExam, title: e.target.value})} placeholder="e.g. JEE Mock 1"/></div>
+                                <div><label className={labelStyle}>Batch</label><select className={inputStyle} required value={newExam.batchId} onChange={e => setNewExam({...newExam, batchId: e.target.value})}><option value="">Select Batch</option>{batches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
+                             </div>
+                             <div className="grid grid-cols-3 gap-4">
+                                <div><label className={labelStyle}>Date</label><input type="datetime-local" className={inputStyle} required value={newExam.scheduledAt} onChange={e => setNewExam({...newExam, scheduledAt: e.target.value})}/></div>
+                                <div><label className={labelStyle}>Duration (m)</label><input type="number" className={inputStyle} value={newExam.durationMin} onChange={e => setNewExam({...newExam, durationMin: +e.target.value})}/></div>
+                                <div><label className={labelStyle}>Total Marks</label><input type="number" className={inputStyle} value={newExam.totalMarks} onChange={e => setNewExam({...newExam, totalMarks: +e.target.value})}/></div>
+                             </div>
+                             
+                             <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
+                                 <h4 className="font-bold text-slate-700 mb-4 flex items-center gap-2"><Settings size={16}/> Question Distribution</h4>
+                                 <div className="grid grid-cols-2 gap-6">
+                                     <div><label className={labelStyle}>Physics (MCQ / Int)</label><div className="flex gap-2"><input type="number" className={inputStyle} placeholder="MCQ" onChange={e=>setAiConfig({...aiConfig, physics_mcq: +e.target.value})}/><input type="number" className={inputStyle} placeholder="Int" onChange={e=>setAiConfig({...aiConfig, physics_integer: +e.target.value})}/></div></div>
+                                     <div><label className={labelStyle}>Chemistry (MCQ / Int)</label><div className="flex gap-2"><input type="number" className={inputStyle} placeholder="MCQ" onChange={e=>setAiConfig({...aiConfig, chemistry_mcq: +e.target.value})}/><input type="number" className={inputStyle} placeholder="Int" onChange={e=>setAiConfig({...aiConfig, chemistry_integer: +e.target.value})}/></div></div>
+                                     <div><label className={labelStyle}>Maths (MCQ / Int)</label><div className="flex gap-2"><input type="number" className={inputStyle} placeholder="MCQ" onChange={e=>setAiConfig({...aiConfig, mathematics_mcq: +e.target.value})}/><input type="number" className={inputStyle} placeholder="Int" onChange={e=>setAiConfig({...aiConfig, mathematics_integer: +e.target.value})}/></div></div>
+                                     <div><label className={labelStyle}>Difficulty</label><select className={inputStyle} onChange={e=>setAiConfig({...aiConfig, difficulty: e.target.value})}><option value="medium">Medium</option><option value="easy">Easy</option><option value="hard">Hard</option></select></div>
+                                 </div>
+                             </div>
+                             <div className="flex justify-end pt-4"><button className="bg-amber-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-amber-700 shadow-lg flex gap-2"><BrainCircuit/> Generate Paper</button></div>
+                         </form>
+                     </div>
+                 )}
 
-                                        <span className="text-[10px] text-blue-600 font-bold flex items-center gap-1">Manage <ChevronRight size={10}/></span>
-                                        <button 
-                                            className="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded transition" 
-                                            onClick={(e) => handleDeleteExam(e, exam.id)}
-                                            title="Delete Exam"
-                                        >
-                                            <Trash2 size={12}/>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                 </div>
+                 {/* VIEW 3: MANUAL FORM */}
+                 {examCreationMode === 'MANUAL_FORM' && (
+                     <div className={`${glassPanel} p-8 max-w-4xl mx-auto w-full`}>
+                         <div className="flex items-center gap-4 mb-6 border-b border-slate-200 pb-4">
+                             <button onClick={() => setExamCreationMode('SELECT')} className="p-2 hover:bg-slate-100 rounded-full"><ArrowLeft size={20}/></button>
+                             <h3 className="text-xl font-bold text-slate-800">Create Draft & Select</h3>
+                         </div>
+                         <form onSubmit={handleCreateDraft} className="space-y-6">
+                             <div className="grid grid-cols-2 gap-4">
+                                <div><label className={labelStyle}>Title</label><input className={inputStyle} required value={newExam.title} onChange={e => setNewExam({...newExam, title: e.target.value})} placeholder="e.g. Unit Test 1"/></div>
+                                <div><label className={labelStyle}>Batch</label><select className={inputStyle} required value={newExam.batchId} onChange={e => setNewExam({...newExam, batchId: e.target.value})}><option value="">Select Batch</option>{batches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
+                             </div>
+                             <div className="grid grid-cols-3 gap-4">
+                                <div><label className={labelStyle}>Date</label><input type="datetime-local" className={inputStyle} required value={newExam.scheduledAt} onChange={e => setNewExam({...newExam, scheduledAt: e.target.value})}/></div>
+                                <div><label className={labelStyle}>Duration (m)</label><input type="number" className={inputStyle} value={newExam.durationMin} onChange={e => setNewExam({...newExam, durationMin: +e.target.value})}/></div>
+                                <div><label className={labelStyle}>Total Marks</label><input type="number" className={inputStyle} value={newExam.totalMarks} onChange={e => setNewExam({...newExam, totalMarks: +e.target.value})}/></div>
+                             </div>
+                             <div className="flex justify-end pt-4"><button className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 shadow-lg flex gap-2"><Edit3/> Start Selecting</button></div>
+                         </form>
+                     </div>
+                 )}
              </div>
          )}
          
-         {/* --- ATTENDANCE TAB --- */}
+         {/* ATTENDANCE TAB */}
           {activeTab === 'attendance' && (
              <div className="flex flex-col h-[85vh] gap-6">
                 <div className={`${glassPanel} p-6`}>
@@ -1591,8 +1446,6 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
                             <Users size={20} className="text-amber-600"/> Mark Attendance
                         </h3>
                     </div>
-                    
-                    {/* Attendance Controls */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                         <div>
                             <label className={labelStyle}>Batch</label>
@@ -1616,7 +1469,6 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
                     </div>
                 </div>
 
-                {/* Student List */}
                 <div className={`flex-1 ${glassPanel} flex flex-col overflow-hidden`}>
                      <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
                          <span className="text-xs font-bold text-slate-500 uppercase">Student Roll Call</span>
@@ -1631,29 +1483,12 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
                          ) : (
                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                  {attendanceList.map((record, idx) => (
-                                     <div key={record.studentId} 
-                                          onClick={() => toggleAttendanceStatus(idx)}
-                                          className={`p-3 rounded-xl border cursor-pointer transition flex items-center justify-between group ${
-                                              record.status === 'PRESENT' 
-                                              ? 'bg-green-50 border-green-200 shadow-sm' 
-                                              : 'bg-red-50 border-red-200 opacity-70'
-                                          }`}
-                                     >
+                                     <div key={record.studentId} onClick={() => toggleAttendanceStatus(idx)} className={`p-3 rounded-xl border cursor-pointer transition flex items-center justify-between group ${record.status === 'PRESENT' ? 'bg-green-50 border-green-200 shadow-sm' : 'bg-red-50 border-red-200 opacity-70'}`}>
                                          <div className="flex items-center gap-3">
-                                             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                                                 record.status === 'PRESENT' ? 'bg-green-200 text-green-700' : 'bg-red-200 text-red-700'
-                                             }`}>
-                                                 {idx + 1}
-                                             </div>
-                                             <span className={`font-medium text-sm ${
-                                                 record.status === 'PRESENT' ? 'text-slate-800' : 'text-slate-500'
-                                             }`}>{record.studentName}</span>
+                                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${record.status === 'PRESENT' ? 'bg-green-200 text-green-700' : 'bg-red-200 text-red-700'}`}>{idx + 1}</div>
+                                              <span className={`font-medium text-sm ${record.status === 'PRESENT' ? 'text-slate-800' : 'text-slate-500'}`}>{record.studentName}</span>
                                          </div>
-                                         <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
-                                             record.status === 'PRESENT' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'
-                                         }`}>
-                                             {record.status}
-                                         </div>
+                                         <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${record.status === 'PRESENT' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>{record.status}</div>
                                      </div>
                                  ))}
                              </div>
@@ -1671,7 +1506,6 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
           {/* --- RESULTS & ANALYTICS TAB --- */}
           {activeTab === 'results' && (
               <div className="flex flex-col h-[85vh] gap-6">
-                 {/* Header & Controls */}
                  <div className={`${glassPanel} p-6`}>
                      <div className="flex justify-between items-center mb-4">
                          <h3 className="font-bold text-slate-800 flex items-center gap-2">
@@ -1697,10 +1531,7 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
                      )}
                  </div>
 
-                 {/* MAIN CONTENT AREA */}
                  <div className={`flex-1 ${glassPanel} overflow-hidden flex flex-col`}>
-                     
-                     {/* VIEW 1: LEADERBOARD (Default) */}
                      {!selectedStudentId ? (
                          !analyticsData ? (
                              <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
@@ -1744,14 +1575,12 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
                              </div>
                          )
                      ) : (
-                         /* VIEW 2: DETAILED STUDENT REPORT */
                          loadingDetail ? (
                              <div className="flex-1 flex items-center justify-center"><Loader2 className="animate-spin text-amber-600"/></div>
                          ) : !studentDetail ? (
                              <div className="flex-1 flex items-center justify-center text-slate-400">Student absent or data unavailable.</div>
                          ) : (
                              <div className="flex-1 flex flex-col overflow-hidden">
-                                 {/* Report Header */}
                                  <div className="p-6 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-6">
                                      <div className="col-span-2">
                                          <h4 className="font-bold text-lg text-slate-800">Performance Insights</h4>
@@ -1776,7 +1605,6 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
                                      </div>
                                  </div>
 
-                                 {/* Question Timeline */}
                                  <div className="flex-1 overflow-y-auto p-6 bg-slate-100/50 custom-scrollbar">
                                      <h4 className="font-bold text-slate-700 mb-4 text-sm uppercase tracking-wider">Attempt Timeline</h4>
                                      <div className="space-y-4">
@@ -1797,7 +1625,6 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
                                                      </div>
                                                  </div>
                                                  
-                                                 {/* Question Content */}
                                                  <div className="mb-4 text-sm text-slate-800">
                                                      <LatexRenderer content={ans.question?.questionText || "Question text unavailable"} />
                                                  </div>
@@ -1807,7 +1634,6 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
                                                      </div>
                                                  )}
 
-                                                 {/* Analysis Block */}
                                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs mt-3 bg-slate-50 p-3 rounded-lg border border-slate-100">
                                                       <div>
                                                           <span className="block font-bold text-slate-500 mb-1">Student Selected:</span>
@@ -1823,7 +1649,6 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
                                                       </div>
                                                  </div>
                                                  
-                                                 {/* Solution Image - Logic: If it exists in the fetched data, show it. */}
                                                  {ans.question?.solutionImage && (
                                                      <div className="mt-3 pt-3 border-t border-slate-100">
                                                          <span className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Solution Reference</span>
@@ -1842,7 +1667,7 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
                  </div>
               </div>
           )}
-                   {activeTab === 'results' && <div className="p-12 text-center text-slate-400">Results Analysis Loaded.</div>}
+          {activeTab === 'results' && <div className="p-12 text-center text-slate-400">Results Analysis Loaded.</div>}
 
       </main>
 
@@ -1850,10 +1675,20 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
       {selectedExamId && exams.find(e => e.id === selectedExamId) && (
         <QuestionSelectorModal 
             exam={exams.find(e => e.id === selectedExamId)!} 
-            allQuestions={questions}
             onClose={() => setSelectedExamId(null)}
             onFinalize={handleFinalizePaper} 
         />
+      )}
+
+      {/* EXAM VIEW/EDIT MODAL */}
+      {viewingExamId && (
+          <ViewExamModal
+            token={token}
+            examId={viewingExamId}
+            onClose={() => setViewingExamId(null)}
+            onDelete={handleDeleteExam}
+            onPrint={handleDownloadPDF}
+          />
       )}
     </div>
   );
