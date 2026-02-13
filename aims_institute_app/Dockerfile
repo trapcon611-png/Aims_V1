@@ -10,7 +10,8 @@ COPY package*.json ./
 # 4. Install Dependencies
 # We explicitly install the animation libraries here to ensure they exist
 RUN npm install
-RUN npm install three postprocessing @types/three
+# CRITICAL FIX: Install Prisma 5.19.1 explicitly to prevent v7 breaking changes
+RUN npm install three postprocessing @types/three prisma@5.19.1 @prisma/client@5.19.1
 
 # 5. Copy Prisma Schema explicitly
 # This is CRITICAL for the next step
