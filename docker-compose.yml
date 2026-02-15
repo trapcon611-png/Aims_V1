@@ -19,12 +19,12 @@ services:
   backend:
     container_name: aims_backend_container
     build:
-      context: ../aims_backend
+      context: ./aims_backend  # <--- CHANGED from ../ to ./
       dockerfile: Dockerfile
     ports:
       - "3001:3001"
     environment:
-      # Pass DB URL to Backend
+      # Use 'postgres' as the host, not localhost
       DATABASE_URL: "postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public"
       PORT: 3001
     depends_on:
@@ -35,16 +35,17 @@ services:
   frontend:
     container_name: aims_frontend_container
     build:
-      context: ../aims_institute_app
+      context: ./aims_institute_app  # <--- CHANGED from ../ to ./
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: "http://localhost:3001"
+        NEXT_PUBLIC_API_URL: "http://srv1291013:3001" # Ensure this points to your VPS IP/Domain for browser access, or keep localhost if testing locally
     ports:
       - "3000:3000"
     environment:
-      # CRITICAL FIX: Pass DB URL to Frontend (Next.js Server Actions need this)
+      # Server-side calls (SSR) use internal docker network name 'backend' or 'postgres'
       DATABASE_URL: "postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public"
-      NEXT_PUBLIC_API_URL: "http://localhost:3001"
+      # Client-side calls use public URL (Change localhost to VPS IP if accessing remotely)
+      NEXT_PUBLIC_API_URL: "http://localhost:3001" 
     depends_on:
       - backend
       - postgres
