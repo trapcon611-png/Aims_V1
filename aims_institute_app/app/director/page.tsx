@@ -7,7 +7,7 @@ import {
   FileBarChart, CalendarCheck, Edit3, Save, Video, Bell, ExternalLink, Wallet, 
   PhoneCall, Printer, X, FileText, Clock, AlertTriangle, MapPin, BookOpen, 
   ShieldCheck, Cpu, Activity, Copy, ChevronLeft, ChevronRight, Wifi, WifiOff, 
-  RefreshCw, User, Percent, Cake, MessageSquare, LayoutGrid
+  RefreshCw, User, Percent, Cake, MessageSquare, LayoutGrid, TrendingUp, DollarSign
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -36,6 +36,23 @@ interface StudentRecord {
   feeRemaining: number;
   installments?: { amount: number, dueDate: string, status: string }[];
 }
+
+// Added for Fee logic
+interface FeeRecord {
+    id: string;
+    studentId: string;
+    displayId?: string;
+    studentName?: string;
+    parentId?: string;
+    amount: number;
+    date: string;
+    remarks: string;
+    paymentMode: string;
+    transactionId?: string;
+    batch?: string;
+    balanceAfter?: number;
+}
+
 interface Resource { id: string; title: string; url: string; batchId: string; batch?: { name: string }; createdAt: string; }
 interface Notice { id: string; title: string; content: string; batchId: string; batch?: { name: string }; createdAt: string; }
 interface Enquiry { 
@@ -63,6 +80,20 @@ interface InstallmentPlan { id: number; amount: number; dueDate: string; }
 
 // --- API UTILITIES ---
 const erpApi = {
+  getToken() {
+    if (typeof window === 'undefined') return '';
+    const session = localStorage.getItem('director_session');
+    if (session) {
+        try {
+            const parsed = JSON.parse(session);
+            return parsed.token || '';
+        } catch (e) {
+            return '';
+        }
+    }
+    return '';
+  },
+
   async login(username: string, password: string) {
     const response = await fetch(`${API_URL}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
     if (!response.ok) throw new Error('Invalid Credentials');
@@ -78,18 +109,42 @@ const erpApi = {
   async saveAttendance(data: any) { const response = await fetch(`${API_URL}/erp/attendance`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); if (!response.ok) throw new Error('Failed to save attendance'); return await response.json(); },
   async getBatches() { try { const res = await fetch(`${API_URL}/erp/batches`); if (!res.ok) return []; return await res.json(); } catch (e) { return []; } },
   async createBatch(batchData: any) { const res = await fetch(`${API_URL}/erp/batches`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(batchData) }); if (!res.ok) throw new Error('Failed to save batch'); return await res.json(); },
-  async getExpenses() { try { const res = await fetch(`${API_URL}/erp/expenses`); if (!res.ok) return []; const data = await res.json(); return data.map((d: any) => ({ ...d, date: new Date(d.date).toLocaleDateString() })); } catch (e) { return []; } },
-  async createExpense(expenseData: any) { const res = await fetch(`${API_URL}/erp/expenses`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(expenseData) }); if (!res.ok) throw new Error('Failed to save expense'); return await res.json(); },
+  async getExpenses() { try { const res = await fetch(`${API_URL}/finance/expenses`, { headers: { 'Authorization': `Bearer ${this.getToken()}` }}); if (!res.ok) return []; const data = await res.json(); return data.map((d: any) => ({ ...d, date: new Date(d.date).toLocaleDateString() })); } catch (e) { return []; } },
+  async createExpense(expenseData: any) { const res = await fetch(`${API_URL}/finance/expenses`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` }, body: JSON.stringify(expenseData) }); if (!res.ok) throw new Error('Failed to save expense'); return await res.json(); },
   async deleteExpense(id: string) { const res = await fetch(`${API_URL}/erp/expenses/${id}`, { method: 'DELETE' }); if (!res.ok) throw new Error('Failed to delete expense'); return await res.json(); },
-  async collectFee(data: { studentId: string; amount: number; remarks?: string; paymentMode: string; transactionId: string }) { const res = await fetch(`${API_URL}/erp/fees`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); if (!res.ok) throw new Error('Failed to record fee'); return await res.json(); },
-  async getFeeHistory() { 
+  
+  // Updated collectFee to use correct endpoint for Director AND PASS TOKEN
+  async collectFee(token: string, data: { studentId: string; amount: number; remarks?: string; paymentMode: string; transactionId: string }) { 
+      // Ensure token is valid, fallback to retrieving it again if the passed one is empty
+      const authToken = token || this.getToken();
+      
+      const res = await fetch(`${API_URL}/finance/collect`, { 
+          method: 'POST', 
+          headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${authToken}` 
+          }, 
+          body: JSON.stringify(data) 
+      }); 
+      if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.message || 'Failed to record fee'); 
+      }
+      return await res.json(); 
+  },
+  
+  async getFeeHistory(token: string) { 
       try { 
-          const res = await fetch(`${API_URL}/erp/fees`); 
+          const authToken = token || this.getToken();
+          // Use the dedicated endpoint
+          const res = await fetch(`${API_URL}/finance/transactions`, { 
+              headers: { 'Authorization': `Bearer ${authToken}` }
+          }); 
           if (!res.ok) return []; 
-          return await res.json(); 
+          return await res.json();
       } catch (e) { return []; } 
   },
-  async getSummary() { try { const res = await fetch(`${API_URL}/erp/summary`); if (!res.ok) return { revenue: 0, expenses: 0, profit: 0 }; return await res.json(); } catch (e) { return { revenue: 0, expenses: 0, profit: 0 }; } },
+  async getSummary() { try { const res = await fetch(`${API_URL}/finance/summary`, { headers: { 'Authorization': `Bearer ${this.getToken()}` }}); if (!res.ok) return { revenue: 0, expenses: 0, profit: 0 }; const data = await res.json(); return { revenue: data.totalCollected, expenses: data.totalSpent, profit: data.netProfit }; } catch (e) { return { revenue: 0, expenses: 0, profit: 0 }; } },
   
   // Content Management (Resources & Notices)
   async getResources() { try { const res = await fetch(`${API_URL}/erp/resources`); if (!res.ok) return []; return await res.json(); } catch (e) { return []; } },
@@ -188,27 +243,27 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
         {/* HEADER */}
         <div>
           <div className="flex justify-between items-start border-b-2 border-[#dc2626] pb-6 mb-6">
-             <div className="flex flex-col gap-2">
-               <div className="relative w-20 h-20">
-                  <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain" unoptimized />
-               </div>
-               <div>
-                 <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase font-serif">AIMS INSTITUTE</h1>
-                 <p className="text-xs font-bold text-[#dc2626] uppercase tracking-wide">Team of IITian's & Dr's</p>
-               </div>
-             </div>
-             <div className="text-right text-xs text-slate-600">
-               <h2 className="text-xl font-bold text-slate-800 mb-2">FEE RECEIPT</h2>
-               <p>Royal Tranquil, 3rd Floor,</p>
-               <p>Above Chitale Bandhu, Pimple Saudagar,</p>
-               <p>Pune, MH 411027</p>
-               <div className="mt-2 font-mono">
-                 <p>+91 87889 40143</p>
-                 <p>+91 87676 50590</p>
-                 <p className="text-blue-600">talentsupport@aimsinstitute.org.in</p>
-               </div>
-               {isGstEnabled && <p className="font-bold text-slate-800 mt-2">GSTIN: 27AABCU9603R1ZM</p>}
-             </div>
+              <div className="flex flex-col gap-2">
+                <div className="relative w-20 h-20">
+                   <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain" unoptimized />
+                </div>
+                <div>
+                   <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase font-serif">AIMS INSTITUTE</h1>
+                   <p className="text-xs font-bold text-[#dc2626] uppercase tracking-wide">Team of IITian's & Dr's</p>
+                </div>
+              </div>
+              <div className="text-right text-xs text-slate-600">
+                <h2 className="text-xl font-bold text-slate-800 mb-2">FEE RECEIPT</h2>
+                <p>Royal Tranquil, 3rd Floor,</p>
+                <p>Above Chitale Bandhu, Pimple Saudagar,</p>
+                <p>Pune, MH 411027</p>
+                <div className="mt-2 font-mono">
+                  <p>+91 87889 40143</p>
+                  <p>+91 87676 50590</p>
+                  <p className="text-blue-600">talentsupport@aimsinstitute.org.in</p>
+                </div>
+                {isGstEnabled && <p className="font-bold text-slate-800 mt-2">GSTIN: 27AABCU9603R1ZM</p>}
+              </div>
           </div>
 
           {/* BILL TO INFO */}
@@ -216,7 +271,7 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
             <div>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Student Details</p>
               <h3 className="text-lg font-bold text-slate-900">{data.studentName}</h3>
-              <p className="text-sm text-slate-600">ID: <span className="font-mono text-[#dc2626]">{data.studentId}</span></p>
+              <p className="text-sm text-slate-600">ID: <span className="font-mono text-[#dc2626]">{data.displayId || data.studentId}</span></p>
               <p className="text-sm text-slate-600">Batch: {data.batch}</p>
             </div>
             <div className="text-right">
@@ -383,11 +438,12 @@ export default function DirectorPage() {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
-  const [feeHistory, setFeeHistory] = useState<any[]>([]);
+  const [feeHistory, setFeeHistory] = useState<FeeRecord[]>([]); // Use correct type
 
   // Pagination & Invoice & Forms
   const [directoryPage, setDirectoryPage] = useState(1);
   const [enquiryPage, setEnquiryPage] = useState(1);
+  const [feePage, setFeePage] = useState(1); // Added for Fee Pagination
   const ITEMS_PER_PAGE = 10;
   const [showInvoice, setShowInvoice] = useState(false);
   const [currentInvoice, setCurrentInvoice] = useState<any>(null);
@@ -395,6 +451,7 @@ export default function DirectorPage() {
   
   // Search States
   const [feeSearch, setFeeSearch] = useState('');
+  const [feeDateFilter, setFeeDateFilter] = useState(''); // Added for Fee Date Filtering
   const [enquirySearch, setEnquirySearch] = useState('');
   const [enquiryDateFilter, setEnquiryDateFilter] = useState('');
 
@@ -417,30 +474,58 @@ export default function DirectorPage() {
   // --- PERSISTENCE & OFFLINE LOGIC ---
   useEffect(() => { if (typeof window !== 'undefined') { const session = localStorage.getItem('director_session'); if (session) setIsUnlocked(true); } setIsOnline(navigator.onLine); const goOnline = () => { setIsOnline(true); syncOfflineQueue(); }; const goOffline = () => setIsOnline(false); window.addEventListener('online', goOnline); window.addEventListener('offline', goOffline); return () => { window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline); }; }, []);
   useEffect(() => { if (isUnlocked && isOnline) refreshData(); }, [isUnlocked, activeTab, isOnline]);
-  useEffect(() => { setDirectoryPage(1); setEnquiryPage(1); }, [searchQuery, activeTab]);
+  useEffect(() => { setDirectoryPage(1); setEnquiryPage(1); setFeePage(1); }, [searchQuery, activeTab, feeSearch, feeDateFilter]);
 
   const syncOfflineQueue = async () => { if (typeof window === 'undefined') return; const queue = JSON.parse(localStorage.getItem('offline_queue') || '[]'); if (queue.length === 0) return; setStatus('Syncing...'); const remainingQueue = []; for (const item of queue) { try { if (item.type === 'ADMISSION') await erpApi.registerStudent(item.payload); if (item.type === 'ENQUIRY') await erpApi.createEnquiry(item.payload); } catch (e) { remainingQueue.push(item); } } localStorage.setItem('offline_queue', JSON.stringify(remainingQueue)); setStatus(remainingQueue.length === 0 ? 'Sync Complete!' : `Sync Partial.`); refreshData(); };
   const saveToOfflineQueue = (type: string, payload: any) => { const queue = JSON.parse(localStorage.getItem('offline_queue') || '[]'); queue.push({ type, payload, timestamp: Date.now() }); localStorage.setItem('offline_queue', JSON.stringify(queue)); setStatus('Saved Offline.'); };
   
   const refreshData = async () => { 
-      if (!isOnline) return; 
-      setIsLoading(true); 
-      if (['users', 'directory', 'academics', 'batches', 'content', 'enquiries', 'accounts'].includes(activeTab)) { erpApi.getBatches().then(setBatches); } 
-      if (['users', 'directory', 'academics', 'accounts'].includes(activeTab)) { erpApi.getStudents().then(setStudents); } 
-      if (activeTab === 'academics') { erpApi.getExams().then(setExams); } 
+      setIsLoading(true);
+      
+      // 1. Fetch Students FIRST (Crucial for name mapping)
+      const studentsData = await erpApi.getStudents();
+      setStudents(studentsData);
+
+      // 2. Fetch Batches
+      const batchesData = await erpApi.getBatches();
+      setBatches(batchesData);
+
+      if (['users', 'directory', 'academics', 'accounts'].includes(activeTab)) { 
+          // Students already fetched above
+      } 
+
+      if (activeTab === 'academics') { 
+          erpApi.getExams().then(setExams); 
+      } 
+      
       if (activeTab === 'accounts') { 
           erpApi.getExpenses().then(setExpenses); 
           erpApi.getSummary().then(setSummary); 
+          
+          // --- FIX: Fetch Fee History & Map Names ---
           try {
-             const res = await fetch(`${API_URL}/erp/fees`);
-             if(res.ok) setFeeHistory(await res.json());
-          } catch(e) {}
+              const token = localStorage.getItem('director_token') || JSON.parse(localStorage.getItem('director_session') || '{}').token;
+              if (token) {
+                  const history = await erpApi.getFeeHistory(token);
+                  // Since backend now sends clean data, we just set it
+                  setFeeHistory(history);
+              }
+          } catch(e) { console.error("Failed to load fee history"); }
+          // ------------------------------------------
       } 
-      if (activeTab === 'content') { erpApi.getResources().then(setResources); erpApi.getNotices().then(setNotices); } 
-      if (activeTab === 'enquiries') { erpApi.getEnquiries().then(setEnquiries); } 
+      
+      if (activeTab === 'content') { 
+          erpApi.getResources().then(setResources); 
+          erpApi.getNotices().then(setNotices); 
+      } 
+      
+      if (activeTab === 'enquiries') { 
+          erpApi.getEnquiries().then(setEnquiries); 
+      } 
+      
       setIsLoading(false); 
   };
-
+  
   const filteredStudents = students.filter(s => { const query = searchQuery.toLowerCase(); return s.name.toLowerCase().includes(query) || s.studentId.toLowerCase().includes(query) || s.parentId.toLowerCase().includes(query) || s.parentMobile.toLowerCase().includes(query); });
   const paginatedStudents = filteredStudents.slice((directoryPage - 1) * ITEMS_PER_PAGE, directoryPage * ITEMS_PER_PAGE);
   const totalDirectoryPages = Math.ceil(filteredStudents.length / ITEMS_PER_PAGE);
@@ -457,6 +542,22 @@ export default function DirectorPage() {
   const paginatedEnquiries = filteredEnquiries.slice((enquiryPage - 1) * ITEMS_PER_PAGE, enquiryPage * ITEMS_PER_PAGE);
   const totalEnquiryPages = Math.ceil(filteredEnquiries.length / ITEMS_PER_PAGE);
 
+  // --- FEE FILTERING & PAGINATION ---
+  const filteredFees = feeHistory.filter(item => {
+      const search = feeSearch.toLowerCase();
+      const matchesSearch = (item.studentName?.toLowerCase() || '').includes(search) || 
+                            (item.parentId?.toLowerCase() || '').includes(search) ||
+                            (item.displayId?.toLowerCase() || '').includes(search) ||
+                            (item.transactionId?.toLowerCase() || '').includes(search);
+      const matchesDate = feeDateFilter 
+          ? new Date(item.date).toISOString().split('T')[0] === feeDateFilter 
+          : true;
+      return matchesSearch && matchesDate;
+  });
+  
+  const paginatedFees = filteredFees.slice((feePage - 1) * ITEMS_PER_PAGE, feePage * ITEMS_PER_PAGE);
+  const totalFeePages = Math.ceil(filteredFees.length / ITEMS_PER_PAGE);
+
   useEffect(() => { if (admissionData.batchId) { const selectedBatch = batches.find(b => b.id === admissionData.batchId); if (selectedBatch && selectedBatch.fee) { setAdmissionData(prev => ({ ...prev, fees: selectedBatch.fee })); } } }, [admissionData.batchId, batches]);
   useEffect(() => { let basePayable = Math.max(0, admissionData.fees - admissionData.waiveOff); if (admissionData.withGst) { basePayable = Math.round(basePayable * 1.18); } const count = admissionData.installments || 1; const baseAmount = Math.floor(basePayable / count); const remainder = basePayable % count; const newSchedule: InstallmentPlan[] = []; const startDate = new Date(admissionData.agreedDate); for (let i = 0; i < count; i++) { const date = new Date(startDate); date.setMonth(startDate.getMonth() + i); newSchedule.push({ id: i + 1, amount: i === 0 ? baseAmount + remainder : baseAmount, dueDate: date.toISOString().split('T')[0] }); } setAdmissionData(prev => ({ ...prev, installmentSchedule: newSchedule })); }, [admissionData.fees, admissionData.waiveOff, admissionData.installments, admissionData.agreedDate, admissionData.withGst]);
 
@@ -467,45 +568,59 @@ export default function DirectorPage() {
   const handleAddBatch = async (e: React.FormEvent) => { e.preventDefault(); try { await erpApi.createBatch(newBatch); setNewBatch({ name: '', startYear: '', strength: 0, fee: 0 }); refreshData(); } catch (e) { alert("Failed"); } };
   const handleAddExpense = async (e: React.FormEvent) => { e.preventDefault(); try { await erpApi.createExpense(newExpense); setNewExpense({ title: '', amount: 0, category: 'General' }); refreshData(); } catch (e) { alert("Failed"); } };
   const handleDeleteExpense = async (id: string) => { if (!confirm("Delete?")) return; try { await erpApi.deleteExpense(id); refreshData(); } catch (e) { alert("Failed"); } };
-  const handleCollectFee = async (e: React.FormEvent) => { 
-      e.preventDefault(); 
-      if (!feeForm.studentId || feeForm.amount <= 0) return alert("Invalid Input"); 
-      const student = students.find(s => s.id === feeForm.studentId); 
-      if (!student) return; 
+  
+  // --- UPDATED FEE COLLECTION LOGIC ---
+  const handleCollectFee = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!feeForm.studentId || feeForm.amount <= 0) return alert("Invalid Input");
+      const student = students.find(s => s.id === feeForm.studentId);
+      if (!student) return;
       
-      try { 
-          // 1. Submit Fee
-          const res = await erpApi.collectFee(feeForm); 
+      try {
+          // Get token from local storage manually if needed since 'token' prop might not be updated yet
+          const token = localStorage.getItem('director_token') || JSON.parse(localStorage.getItem('director_session') || '{}').token;
+
+          // 1. Submit Fee to Backend
+          const res = await erpApi.collectFee(token, feeForm);
           
-          // 2. Prepare Invoice Data
-          setIsGstEnabled(feeForm.withGst); 
-          setCurrentInvoice({ 
-              id: res.id || 'INV-' + Date.now(), 
-              studentName: student.name, 
-              studentId: student.studentId, 
-              parentId: student.parentId, 
-              batch: student.batch, 
-              amount: feeForm.amount, 
-              date: new Date().toISOString(), 
-              remarks: feeForm.remarks || 'Fee Payment', 
-              paymentMode: feeForm.paymentMode, 
-              transactionId: res.transactionId || feeForm.transactionId, 
-              balanceAfter: (student.feeRemaining || 0) - feeForm.amount 
-          }); 
+          // 2. Create Local Record (For Immediate UI Update)
+          const newRecord: FeeRecord = {
+              id: res.id || `TEMP-${Date.now()}`,
+              studentId: student.id, // Internal UUID
+              displayId: student.studentId, // Display ID (STU-...)
+              studentName: student.name, // Ensure Name is captured
+              parentId: student.parentId,
+              amount: Number(feeForm.amount),
+              date: new Date().toISOString(),
+              remarks: feeForm.remarks || 'Fee Payment',
+              paymentMode: feeForm.paymentMode,
+              transactionId: res.transactionId || feeForm.transactionId
+          };
+
+          // 3. Update State Immediately (Prepend)
+          setFeeHistory(prev => [newRecord, ...prev]);
+
+          // 4. Prepare Invoice
+          setIsGstEnabled(feeForm.withGst);
+          setCurrentInvoice({
+              ...newRecord,
+              studentId: student.studentId, // Display ID
+              batch: student.batch,
+              balanceAfter: (student.feeRemaining || 0) - feeForm.amount
+          });
           
-          // 3. Show Invoice
-          setShowInvoice(true); 
+          // 5. Show Invoice
+          setShowInvoice(true);
           
-          // 4. Reset Form
-          setFeeForm({ studentId: '', amount: 0, remarks: '', paymentMode: 'CASH', transactionId: '', withGst: false }); 
+          // 6. Reset Form
+          setFeeForm({ studentId: '', amount: 0, remarks: '', paymentMode: 'CASH', transactionId: '', withGst: false });
           
-          // 5. CRITICAL FIX: Explicitly fetch new history and update state immediately
-          const updatedHistory = await erpApi.getFeeHistory(); // Make sure this API method exists in erpApi
-          setFeeHistory(updatedHistory);
+          // 7. Background Refresh (Optional, kept for consistency)
+          // refreshData(); 
           
-      } catch (e) { 
-          alert("Failed to record fee"); 
-      } 
+      } catch (e) {
+          alert("Failed to record fee");
+      }
   };
   
   // NEW HANDLERS FOR CONTENT TAB
@@ -716,12 +831,12 @@ export default function DirectorPage() {
               <div className={glassPanel + " p-6"}>
                 <h3 className="font-bold text-slate-800 mb-4 flex items-center text-lg"><IndianRupee size={20} className="mr-2 text-red-600"/> Log Expense</h3>
                 <form onSubmit={handleAddExpense} className="space-y-4">
-                   <div className="flex gap-4">
-                     <div className="flex-1"><label className={labelStyle}>Title</label><input className={inputStyle} placeholder="e.g. Electricity Bill" value={newExpense.title} onChange={e => setNewExpense({...newExpense, title: e.target.value})} required /></div>
-                     <div className="w-1/3"><label className={labelStyle}>Amount</label><input type="number" className={inputStyle} placeholder="₹" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: parseInt(e.target.value) || 0})} required /></div>
-                   </div>
-                   <div><label className={labelStyle}>Category</label><select className={inputStyle} value={newExpense.category} onChange={e => setNewExpense({...newExpense, category: e.target.value})}><option>General</option><option>Salary</option><option>Infra</option></select></div>
-                   <button className="w-full bg-[#c1121f] text-white py-3 rounded-xl font-bold hover:bg-red-800 transition shadow-lg shadow-red-500/20">Log Expense</button>
+                    <div className="flex gap-4">
+                      <div className="flex-1"><label className={labelStyle}>Title</label><input className={inputStyle} placeholder="e.g. Electricity Bill" value={newExpense.title} onChange={e => setNewExpense({...newExpense, title: e.target.value})} required /></div>
+                      <div className="w-1/3"><label className={labelStyle}>Amount</label><input type="number" className={inputStyle} placeholder="₹" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: parseInt(e.target.value) || 0})} required /></div>
+                    </div>
+                    <div><label className={labelStyle}>Category</label><select className={inputStyle} value={newExpense.category} onChange={e => setNewExpense({...newExpense, category: e.target.value})}><option>General</option><option>Salary</option><option>Infra</option></select></div>
+                    <button className="w-full bg-[#c1121f] text-white py-3 rounded-xl font-bold hover:bg-red-800 transition shadow-lg shadow-red-500/20">Log Expense</button>
                 </form>
                 <div className="mt-6 border-t border-slate-100 pt-4">
                     <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Recent Expenses</h4>
@@ -746,15 +861,35 @@ export default function DirectorPage() {
                     <h3 className="font-bold text-slate-800 flex items-center gap-2 text-lg">
                         <FileText size={20} className="text-blue-600"/> Fee Payment History
                     </h3>
-                    <div className="relative w-full md:w-80">
-                        <input 
-                            type="text" 
-                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition" 
-                            placeholder="Search Student, Parent ID or Txn ID..." 
-                            value={feeSearch} 
-                            onChange={(e) => setFeeSearch(e.target.value)} 
-                        />
-                        <Search size={16} className="absolute left-3 top-3 text-slate-400" />
+                    <div className="flex gap-2 w-full md:w-auto">
+                        <div className="relative flex-1 md:w-64">
+                            <input 
+                                type="text" 
+                                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition" 
+                                placeholder="Search Student or Txn ID..." 
+                                value={feeSearch} 
+                                onChange={(e) => setFeeSearch(e.target.value)} 
+                            />
+                            <Search size={16} className="absolute left-3 top-3 text-slate-400" />
+                        </div>
+                        <div className="relative">
+                            <input 
+                                type="date" 
+                                className="pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition" 
+                                value={feeDateFilter} 
+                                onChange={(e) => setFeeDateFilter(e.target.value)} 
+                            />
+                            <Calendar size={16} className="absolute left-3 top-3 text-slate-400 pointer-events-none" />
+                        </div>
+                        {(feeSearch || feeDateFilter) && (
+                            <button 
+                                onClick={() => {setFeeSearch(''); setFeeDateFilter('');}} 
+                                className="px-3 py-2.5 bg-slate-200 hover:bg-slate-300 rounded-xl text-slate-600 transition"
+                                title="Clear Filters"
+                            >
+                                <X size={16}/>
+                            </button>
+                        )}
                     </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -770,70 +905,62 @@ export default function DirectorPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 text-sm">
-                                {feeHistory
-                                    .map(fee => {
-                                        const student = students.find(s => s.id === fee.studentId);
-                                        return { ...fee, studentName: student?.name || 'Unknown', parentId: student?.parentId || 'N/A' };
-                                    })
-                                    .filter(item => 
-                                        item.studentName.toLowerCase().includes(feeSearch.toLowerCase()) || 
-                                        item.parentId.toLowerCase().includes(feeSearch.toLowerCase()) ||
-                                        (item.transactionId && item.transactionId.toLowerCase().includes(feeSearch.toLowerCase()))
-                                    )
-                                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                                    .map((record) => (
+                                {paginatedFees.length === 0 ? 
+                                    <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-400 italic">No fee records found.</td></tr>
+                                : paginatedFees.map((record) => (
                                     <tr key={record.id} className="hover:bg-slate-50 transition">
-                                        <td className="px-6 py-4 text-slate-500 text-xs font-mono">
-                                            {new Date(record.date).toLocaleDateString()} <br/>
-                                            {new Date(record.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="font-bold text-slate-900">{record.studentName}</div>
-                                            <div className="text-xs text-slate-400">PID: {record.parentId}</div>
-                                        </td>
-                                        <td className="px-6 py-4 font-bold text-emerald-600">
-                                            ₹ {record.amount.toLocaleString()}
-                                        </td>
-                                        <td className="px-6 py-4 text-xs">
-                                            <span className="font-bold text-slate-700">{record.paymentMode}</span>
-                                            {record.transactionId && <div className="text-slate-400 font-mono mt-0.5">{record.transactionId}</div>}
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <button 
-                                                onClick={() => {
-                                                    const s = students.find(std => std.id === record.studentId);
-                                                    if(s) {
+                                            <td className="px-6 py-4 text-slate-500 text-xs font-mono">
+                                                {new Date(record.date).toLocaleDateString()} <br/>
+                                                {new Date(record.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="font-bold text-slate-900">{record.studentName}</div>
+                                                <div className="text-xs text-slate-400">ID: {record.displayId || 'N/A'}</div>
+                                            </td>
+                                            <td className="px-6 py-4 font-bold text-emerald-600">
+                                                ₹ {record.amount.toLocaleString()}
+                                            </td>
+                                            <td className="px-6 py-4 text-xs">
+                                                <span className="font-bold text-slate-700">{record.paymentMode}</span>
+                                                {record.transactionId && <div className="text-slate-400 font-mono mt-0.5">{record.transactionId}</div>}
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <button 
+                                                    onClick={() => {
+                                                        const s = students.find(std => std.id === record.studentId);
+                                                        // Ensure we have current balance, otherwise 0
+                                                        const currentBalance = s ? s.feeRemaining : 0;
+                                                        
                                                         setCurrentInvoice({
-                                                            id: record.id,
-                                                            studentName: s.name,
-                                                            studentId: s.studentId,
-                                                            parentId: s.parentId,
-                                                            batch: s.batch,
-                                                            amount: record.amount,
-                                                            date: record.date,
-                                                            remarks: record.remarks,
-                                                            paymentMode: record.paymentMode,
-                                                            transactionId: record.transactionId,
-                                                            balanceAfter: (s.feeRemaining || 0)
+                                                            ...record,
+                                                            studentId: record.displayId, // Use display ID for receipt
+                                                            batch: record.batch,
+                                                            balanceAfter: currentBalance
                                                         });
                                                         setShowInvoice(true);
-                                                    }
-                                                }}
-                                                className="p-2 hover:bg-slate-200 rounded-full text-slate-500 transition" 
-                                                title="View Receipt"
-                                            >
-                                                <Printer size={16}/>
-                                            </button>
-                                        </td>
+                                                    }}
+                                                    className="p-2 hover:bg-slate-200 rounded-full text-slate-500 transition" 
+                                                    title="View Receipt"
+                                                >
+                                                    <Printer size={16}/>
+                                                </button>
+                                            </td>
                                     </tr>
                                 ))}
-                                {feeHistory.length === 0 && (
-                                    <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-400 italic">No fee records found.</td></tr>
-                                )}
                             </tbody>
                         </table>
                     </div>
                 </div>
+                {/* Fee Pagination Controls */}
+                {totalFeePages > 1 && (
+                    <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center text-xs mt-auto">
+                        <span className="text-slate-500">Page {feePage} of {totalFeePages}</span>
+                        <div className="flex gap-2">
+                            <button onClick={() => setFeePage(p => Math.max(1, p - 1))} disabled={feePage === 1} className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50"><ChevronLeft size={16}/></button>
+                            <button onClick={() => setFeePage(p => Math.min(totalFeePages, p + 1))} disabled={feePage === totalFeePages} className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50"><ChevronRight size={16}/></button>
+                        </div>
+                    </div>
+                )}
             </div>
           </div>
         )}
@@ -983,7 +1110,7 @@ export default function DirectorPage() {
             <div className="space-y-8">
               <div className={glassPanel + " p-6"}>
                 <h3 className="font-bold text-slate-800 mb-4 flex items-center text-lg border-b border-slate-200 pb-2">
-                   <Video size={20} className="mr-2 text-red-600"/> Upload Lecture / Resource
+                    <Video size={20} className="mr-2 text-red-600"/> Upload Lecture / Resource
                 </h3>
                 <form onSubmit={handlePublishVideo} className="space-y-4">
                   <div>
@@ -1009,7 +1136,7 @@ export default function DirectorPage() {
 
               <div className={glassPanel + " p-6"}>
                 <h3 className="font-bold text-slate-800 mb-4 flex items-center text-lg border-b border-slate-200 pb-2">
-                   <Bell size={20} className="mr-2 text-orange-500"/> Post Notice
+                    <Bell size={20} className="mr-2 text-orange-500"/> Post Notice
                 </h3>
                 <form onSubmit={handlePostNotice} className="space-y-4">
                   <div>
@@ -1042,7 +1169,7 @@ export default function DirectorPage() {
                   <div>
                       <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Notices</h4>
                       <div className="space-y-3">
-                         {notices.length === 0 ? <p className="text-slate-400 text-sm italic">No notices posted.</p> : notices.map(n => (
+                          {notices.length === 0 ? <p className="text-slate-400 text-sm italic">No notices posted.</p> : notices.map(n => (
                             <div key={n.id} className="bg-orange-50 border border-orange-100 p-4 rounded-xl relative group">
                                <h5 className="font-bold text-slate-800">{n.title}</h5>
                                <p className="text-sm text-slate-600 mt-1">{n.content}</p>
@@ -1052,13 +1179,13 @@ export default function DirectorPage() {
                                </div>
                                <button onClick={() => handleDeleteNotice(n.id)} className="absolute top-2 right-2 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition"><Trash2 size={16}/></button>
                             </div>
-                         ))}
+                          ))}
                       </div>
                   </div>
                   <div>
                       <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Study Resources</h4>
                       <div className="space-y-3">
-                         {resources.length === 0 ? <p className="text-slate-400 text-sm italic">No resources uploaded.</p> : resources.map(r => (
+                          {resources.length === 0 ? <p className="text-slate-400 text-sm italic">No resources uploaded.</p> : resources.map(r => (
                             <div key={r.id} className="bg-white border border-slate-200 p-4 rounded-xl relative group hover:border-blue-200 transition">
                                <div className="flex items-start gap-3">
                                   <div className="p-2 bg-red-50 text-red-500 rounded-lg shrink-0"><Video size={20}/></div>
@@ -1073,7 +1200,7 @@ export default function DirectorPage() {
                                </div>
                                <button onClick={() => handleDeleteResource(r.id)} className="absolute top-2 right-2 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition"><Trash2 size={16}/></button>
                             </div>
-                         ))}
+                          ))}
                       </div>
                   </div>
                </div>
@@ -1091,21 +1218,21 @@ export default function DirectorPage() {
                    </h3>
                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3">
                       {exams.length === 0 ? <p className="text-slate-400 text-sm italic text-center py-10">No exams scheduled.</p> : exams.map(exam => (
-                         <div key={exam.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50 hover:bg-white hover:shadow-md transition-all group">
-                            <div className="flex justify-between items-start">
-                               <div>
-                                  <h4 className="font-bold text-slate-800">{exam.title}</h4>
-                                  <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
-                                     <span className="flex items-center gap-1"><Clock size={12}/> {exam.durationMin || 0} mins</span>
-                                     <span className="flex items-center gap-1"><CheckCircle size={12}/> {exam.totalMarks || 0} Marks</span>
-                                  </div>
-                               </div>
-                            </div>
-                            <div className="mt-3 pt-3 border-t border-slate-200 flex justify-between items-center">
-                               <span className="text-[10px] text-slate-400 font-mono">ID: {exam.id.slice(0,8)}</span>
-                               <button className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1">View Stats <ChevronRight size={12}/></button>
-                            </div>
-                         </div>
+                          <div key={exam.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50 hover:bg-white hover:shadow-md transition-all group">
+                             <div className="flex justify-between items-start">
+                                <div>
+                                   <h4 className="font-bold text-slate-800">{exam.title}</h4>
+                                   <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
+                                      <span className="flex items-center gap-1"><Clock size={12}/> {exam.durationMin || 0} mins</span>
+                                      <span className="flex items-center gap-1"><CheckCircle size={12}/> {exam.totalMarks || 0} Marks</span>
+                                   </div>
+                                </div>
+                             </div>
+                             <div className="mt-3 pt-3 border-t border-slate-200 flex justify-between items-center">
+                                <span className="text-[10px] text-slate-400 font-mono">ID: {exam.id.slice(0,8)}</span>
+                                <button className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1">View Stats <ChevronRight size={12}/></button>
+                             </div>
+                          </div>
                       ))}
                    </div>
                 </div>

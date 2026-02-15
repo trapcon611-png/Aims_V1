@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsNumberString } from 'class-validator';
+import { IsString, IsNotEmpty, IsNumberString, IsOptional } from 'class-validator';
 
 export class CollectFeeDto {
   @ApiProperty({ example: 'student-profile-id-here', description: 'ID of the Student Profile' })
@@ -12,7 +12,18 @@ export class CollectFeeDto {
   @IsNotEmpty()
   amount: string;
 
-  @ApiProperty({ example: 'First Installment via UPI', description: 'Any notes' })
+  @ApiProperty({ example: 'First Installment via UPI', description: 'Any notes', required: false })
   @IsString()
-  remarks: string;
+  @IsOptional()
+  remarks?: string;
+
+  @ApiProperty({ example: 'CASH', description: 'Payment Mode (e.g. CASH, UPI)', required: false })
+  @IsString()
+  @IsOptional()
+  paymentMode?: string;
+
+  @ApiProperty({ example: 'TXN-12345', description: 'Transaction Reference ID', required: false })
+  @IsString()
+  @IsOptional()
+  transactionId?: string;
 }

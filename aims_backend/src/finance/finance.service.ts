@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { CollectFeeDto } from './dto/collect-fee.dto';
@@ -93,13 +93,51 @@ export class FinanceService {
   }
 
   async collectFee(data: CollectFeeDto) {
+    // Verify student exists first
+    const student = await this.prisma.studentProfile.findUnique({ where: { id: data.studentId } });
+    if (!student) throw new BadRequestException("Student not found");
+
     return this.prisma.feeRecord.create({
       data: {
         studentId: data.studentId,
         amount: Number(data.amount),
         remarks: data.remarks || "Office Payment",
+        paymentMode: data.paymentMode || "CASH",
+        transactionId: data.transactionId || `TXN-${Date.now()}`,
         date: new Date()
       }
     });
+  }
+
+  // --- NEW: GET ALL TRANSACTIONS FOR DIRECTOR ---
+  async getAllTransactions() {
+    const records = await this.prisma.feeRecord.findMany({
+      include: {
+        student: {
+          include: {
+            batch: true,
+            parent: {
+              include: { user: true }
+            },
+            user: true // To get student ID (username)
+          }
+        }
+      },
+      orderBy: { date: 'desc' }
+    });
+
+    return records.map(r => ({
+      id: r.id,
+      studentId: r.studentId, // Keep internal UUID for matching
+      displayId: r.student.user.username, // Show STU-001
+      studentName: r.student.fullName,
+      parentId: r.student.parent?.user.username || 'N/A',
+      batch: r.student.batch?.name || 'Unassigned',
+      amount: r.amount,
+      date: r.date,
+      remarks: r.remarks,
+      paymentMode: r.paymentMode,
+      transactionId: r.transactionId
+    }));
   }
 }

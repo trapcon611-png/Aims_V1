@@ -49,4 +49,11 @@ export class FinanceController {
   collectFee(@Body() body: CollectFeeDto) {
     return this.service.collectFee(body);
   }
+
+  // --- NEW: FEE HISTORY ENDPOINT ---
+  @Get('transactions')
+  @Roles('SUPER_ADMIN')
+  getTransactions() {
+    return this.service.getAllTransactions();
+  }
 }
