@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # 1. Database Service
+  # ... postgres and backend services remain unchanged ...
   postgres:
     image: postgres:15-alpine
     container_name: aims_db_container
@@ -14,14 +14,12 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: always
-    # HEALTH CHECK: Ensures DB is ready before others start
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U aims_manual -d aims_manual"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  # 2. Backend API Service
   backend:
     container_name: aims_backend_container
     build:
@@ -34,7 +32,7 @@ services:
       PORT: 3001
     depends_on:
       postgres:
-        condition: service_healthy # <--- WAITS FOR HEALTH CHECK
+        condition: service_healthy
     restart: always
 
   # 3. Frontend App Service
@@ -44,15 +42,17 @@ services:
       context: ./aims_institute_app
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: "http://147.93.110.78:3001/"
+        # FIXED: Removed trailing slash
+        NEXT_PUBLIC_API_URL: "http://147.93.110.78:3001"
     ports:
       - "3000:3000"
     environment:
       DATABASE_URL: "postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public"
-      NEXT_PUBLIC_API_URL: "http://147.93.110.78:3001/"
+      # FIXED: Removed trailing slash
+      NEXT_PUBLIC_API_URL: "http://147.93.110.78:3001"
     depends_on:
       postgres:
-        condition: service_healthy # <--- WAITS FOR HEALTH CHECK
+        condition: service_healthy
       backend:
         condition: service_started
     restart: always
