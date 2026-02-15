@@ -1,68 +1,54 @@
 version: '3.8'
 
 services:
-  # --- 1. Database (PostgreSQL) ---
+  # 1. Database Service
   postgres:
     image: postgres:15-alpine
-    container_name: aims_db
-    restart: always
+    container_name: aims_db_container
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: secure_aims_password
-      POSTGRES_DB: aims_institute
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+      POSTGRES_USER: aims_manual
+      POSTGRES_PASSWORD: Sameer
+      POSTGRES_DB: aims_manual
     ports:
       - "5432:5432"
-    networks:
-      - aims_network
-
-  # --- 2. Backend (NestJS) ---
-  backend:
-    build: 
-      context: ./aims_backend
-      dockerfile: Dockerfile
-    container_name: aims_backend
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     restart: always
+
+  # 2. Backend API Service
+  backend:
+    container_name: aims_backend_container
+    build:
+      context: ../aims_backend
+      dockerfile: Dockerfile
     ports:
       - "3001:3001"
     environment:
-      # Internal Docker URL for Database
-      DATABASE_URL: "postgresql://admin:secure_aims_password@postgres:5432/aims_institute?schema=public"
+      # Pass DB URL to Backend
+      DATABASE_URL: "postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public"
       PORT: 3001
-      # Update these keys for production!
-      JWT_SECRET: "aims-production-secret-key"
     depends_on:
       - postgres
-    networks:
-      - aims_network
-    # Wait for DB to be ready, then push schema, seed, and start
-    command: >
-      sh -c "npx prisma db push && npx prisma db seed && npm run start:prod"
+    restart: always
 
-  # --- 3. Frontend (Next.js) ---
+  # 3. Frontend App Service
   frontend:
-    build: 
-      context: ./aims_institute_app
+    container_name: aims_frontend_container
+    build:
+      context: ../aims_institute_app
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: "http://147.93.110.78:3001"
-    container_name: aims_frontend
-    restart: always
+        NEXT_PUBLIC_API_URL: "http://localhost:3001"
     ports:
       - "3000:3000"
     environment:
-      # PUBLIC IP ADDRESS OF YOUR VPS
-      # Change 'localhost' to your VPS IP or Domain (e.g. http://123.45.67.89:3001)
-      NEXT_PUBLIC_API_URL: "http://147.93.110.78:3001"
+      # CRITICAL FIX: Pass DB URL to Frontend (Next.js Server Actions need this)
+      DATABASE_URL: "postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public"
+      NEXT_PUBLIC_API_URL: "http://localhost:3001"
     depends_on:
       - backend
-    networks:
-      - aims_network
-
-networks:
-  aims_network:
-    driver: bridge
+      - postgres
+    restart: always
 
 volumes:
   postgres_data:
