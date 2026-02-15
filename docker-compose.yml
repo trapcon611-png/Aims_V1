@@ -14,41 +14,47 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: always
+    # HEALTH CHECK: Ensures DB is ready before others start
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aims_manual -d aims_manual"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   # 2. Backend API Service
   backend:
     container_name: aims_backend_container
     build:
-      context: ./aims_backend  # <--- CHANGED from ../ to ./
+      context: ./aims_backend
       dockerfile: Dockerfile
     ports:
       - "3001:3001"
     environment:
-      # Use 'postgres' as the host, not localhost
       DATABASE_URL: "postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public"
       PORT: 3001
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy # <--- WAITS FOR HEALTH CHECK
     restart: always
 
   # 3. Frontend App Service
   frontend:
     container_name: aims_frontend_container
     build:
-      context: ./aims_institute_app  # <--- CHANGED from ../ to ./
+      context: ./aims_institute_app
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: "http://srv1291013:3001" # Ensure this points to your VPS IP/Domain for browser access, or keep localhost if testing locally
+        NEXT_PUBLIC_API_URL: "http://localhost:3001"
     ports:
       - "3000:3000"
     environment:
-      # Server-side calls (SSR) use internal docker network name 'backend' or 'postgres'
       DATABASE_URL: "postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public"
-      # Client-side calls use public URL (Change localhost to VPS IP if accessing remotely)
-      NEXT_PUBLIC_API_URL: "http://localhost:3001" 
+      NEXT_PUBLIC_API_URL: "http://localhost:3001"
     depends_on:
-      - backend
-      - postgres
+      postgres:
+        condition: service_healthy # <--- WAITS FOR HEALTH CHECK
+      backend:
+        condition: service_started
     restart: always
 
 volumes:
