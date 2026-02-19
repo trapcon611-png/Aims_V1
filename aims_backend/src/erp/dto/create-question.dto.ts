@@ -1,17 +1,16 @@
-import { IsString, IsNotEmpty, IsNumber, IsOptional, IsArray, IsEnum } from 'class-validator';
+import { IsString, IsNotEmpty, IsNumber, IsOptional, IsArray } from 'class-validator';
 
 export class CreateQuestionDto {
   @IsString()
   @IsNotEmpty()
   questionText: string;
 
-  @IsArray()
-  @IsNotEmpty()
-  options: string[]; // ["Option A", "Option B", "Option C", "Option D"]
+  @IsOptional() // Changed from IsArray to IsOptional to allow JSON objects {a:..., b:...}
+  options: any;
 
   @IsString()
   @IsNotEmpty()
-  correctOption: string; // e.g. "0" for index 0 or "Option A"
+  correctOption: string;
 
   @IsString()
   @IsNotEmpty()
@@ -21,6 +20,10 @@ export class CreateQuestionDto {
   @IsString()
   topic?: string;
 
+  @IsOptional()
+  @IsArray()
+  tags?: string[];
+
   @IsString()
   @IsNotEmpty()
   difficulty: string; // Easy, Medium, Hard
@@ -28,6 +31,15 @@ export class CreateQuestionDto {
   @IsNumber()
   marks: number;
 
+  @IsOptional()
   @IsNumber()
-  negative: number;
+  negative?: number;
+
+  @IsOptional()
+  @IsString()
+  questionImage?: string;
+
+  @IsOptional()
+  @IsString()
+  solutionImage?: string;
 }

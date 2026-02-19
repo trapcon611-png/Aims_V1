@@ -21,7 +21,7 @@ model User {
   id              String          @id @default(uuid())
   username        String          @unique
   password        String
-  visiblePassword String?         // Stores plain password for Admin viewing (Per request)
+  visiblePassword String?         
   role            Role
   isActive        Boolean         @default(true)
   createdAt       DateTime        @default(now())
@@ -29,6 +29,7 @@ model User {
   parentProfile   ParentProfile?
   teacherProfile  TeacherProfile?
   attempts        TestAttempt[]
+  pushSubscriptions PushSubscription[]
 }
 
 model StudentProfile {
@@ -57,11 +58,11 @@ model StudentProfile {
 }
 
 model ParentProfile {
-  id              String           @id @default(uuid())
-  userId          String           @unique
-  user            User             @relation(fields: [userId], references: [id])
-  mobile          String           @unique
-  isMobileVisible Boolean          @default(false) // Toggle for Director View
+  id              String          @id @default(uuid())
+  userId          String          @unique
+  user            User            @relation(fields: [userId], references: [id])
+  mobile          String          @unique
+  isMobileVisible Boolean         @default(false)
   children        StudentProfile[]
 }
 
@@ -82,11 +83,11 @@ model TeacherProfile {
 // --- 2. ACADEMIC ---
 
 model Batch {
-  id        String         @id @default(uuid())
+  id        String      @id @default(uuid())
   name      String
-  startYear String         @default("2026")
-  strength  Int            @default(60)
-  fee       Float          @default(0)
+  startYear String      @default("2026")
+  strength  Int         @default(60)
+  fee       Float       @default(0)
   students  StudentProfile[]
   attendance Attendance[]
   notices   Notice[]
@@ -100,6 +101,11 @@ model Notice {
   content   String
   batchId   String?
   batch     Batch?   @relation(fields: [batchId], references: [id])
+  
+  // Specific Targeting Fields
+  studentId String?    
+  parentId  String?    
+
   createdAt DateTime @default(now())
 }
 
@@ -109,13 +115,13 @@ enum ResourceType {
 }
 
 model Resource {
-  id        String       @id @default(uuid())
+  id        String        @id @default(uuid())
   title     String
   type      ResourceType
   url       String
   batchId   String?
-  batch     Batch?       @relation(fields: [batchId], references: [id])
-  createdAt DateTime     @default(now())
+  batch     Batch?        @relation(fields: [batchId], references: [id])
+  createdAt DateTime      @default(now())
 }
 
 // --- 3. EXAM SYSTEM ---
@@ -138,12 +144,12 @@ model Exam {
 }
 
 model QuestionBank {
-  id              String         @id @default(uuid())
+  id              String          @id @default(uuid())
   createdById     String
   createdBy       TeacherProfile @relation(fields: [createdById], references: [id])
   questionText    String
-  questionImage   String?        // ADDED for Image-based Questions
-  solutionImage   String?        // ADDED for Solution Images
+  questionImage   String?       
+  solutionImage   String?       
   options         Json
   correctOption   String
   explanation     String?
@@ -151,11 +157,11 @@ model QuestionBank {
   topic           String?
   tags            String[]
   difficulty      String
-  marks           Int            @default(4)
-  negative        Int            @default(-1)
-  expectedTime    Int            @default(60) 
-  isActive        Boolean        @default(true)
-  createdAt       DateTime       @default(now())
+  marks           Int             @default(4)
+  negative        Int             @default(-1)
+  expectedTime    Int             @default(60) 
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
   usedInQuestions Question[]
 }
 
@@ -165,9 +171,14 @@ model Question {
   exam           Exam          @relation(fields: [examId], references: [id], onDelete: Cascade)
   questionBankId String?
   questionBank   QuestionBank? @relation(fields: [questionBankId], references: [id])
+  
   questionText   String
-  questionImage  String?       // ADDED to sync with QuestionBank
-  solutionImage  String?       // ADDED to sync with QuestionBank
+  questionImage  String?       
+  solutionImage  String?       
+  
+  topic          String?       
+  type           String?       
+
   options        Json
   correctOption  String
   subject        String
@@ -208,16 +219,16 @@ model TestAttempt {
 }
 
 model Answer {
-  id             String      @id @default(uuid())
+  id             String        @id @default(uuid())
   attemptId      String
-  attempt        TestAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  attempt        TestAttempt   @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   questionId     String
-  question       Question    @relation(fields: [questionId], references: [id])
+  question       Question      @relation(fields: [questionId], references: [id])
   selectedOption String?
-  isCorrect      Boolean     @default(false)
-  marksAwarded   Float       @default(0)
-  timeTaken      Int         @default(0) 
-  createdAt      DateTime    @default(now())
+  isCorrect      Boolean       @default(false)
+  marksAwarded   Float         @default(0)
+  timeTaken      Int           @default(0) 
+  createdAt      DateTime      @default(now())
 }
 
 // --- 4. ATTENDANCE ---
@@ -252,7 +263,7 @@ model FeeRecord {
 }
 
 model Expense {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   title       String
   category    String
   amount      Float
@@ -279,12 +290,24 @@ model Enquiry {
   id            String        @id @default(uuid())
   studentName   String
   mobile        String
-  course        String?       // Now linked to Batch Names visually
-  allotedTo     String?       // NEW: Name of the staff/admin handling this
+  course        String?       
+  allotedTo     String?       
   source        String?       
   status        EnquiryStatus @default(PENDING)
   followUpCount Int           @default(0)
   remarks       String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+}
+
+// --- 7. PUSH NOTIFICATIONS ---
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  endpoint  String   @unique // The browser endpoint URL
+  p256dh    String   // Encryption key
+  auth      String   // Auth key
+  createdAt DateTime @default(now())
 }

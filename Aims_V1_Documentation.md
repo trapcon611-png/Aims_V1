@@ -1,253 +1,274 @@
-AIMS Institute V1 - Technical Documentation
+AIMS Institute AMS - Technical Documentation (v1.2)
 
 1. Executive Summary
 
-AIMS V1 is a comprehensive Academic ERP (Enterprise Resource Planning) system designed for coaching institutes. It unifies academic management, examination systems, student performance tracking, and financial operations into a single platform.
+AIMS Institute ERP is a full-stack, enterprise-grade academic management system designed to streamline operations for coaching institutes. It acts as a central nervous system connecting Directors, Faculty, Students, and Parents.
 
-The system is built with a modern, scalable tech stack, utilizing Next.js for the frontend interfaces (Student, Parent, Admin, Director) and NestJS for a robust backend API, all orchestrated via Docker. It features a unique AI-powered Exam Generator that integrates with an external AI service to automate question paper creation.
+The system has evolved into a Micro-Component Architecture on the frontend to ensure scalability and maintainability, while the backend utilizes a modular NestJS structure with strict Role-Based Access Control (RBAC).
+
+Key Differentiators:
+
+AI-Powered Exam Generation: Generates balanced question papers instantly via external AI integration.
+
+Resilient Exam Engine: Offline support, anti-cheat mechanisms, and LaTeX rendering.
+
+Web Push Notifications: System-level alerts for Students/Parents (Service Worker + VAPID).
+
+Financial Intelligence: Daily collection tracking, installment management, and GST-compliant invoicing.
 
 2. System Architecture
 
-The application follows a Monolithic Service Architecture deployed via containers, with plans to transition specific modules (Exam Generation) into Microservices.
+2.1 Tech Stack
 
-2.1 Core Components
+Frontend: Next.js 14 (App Router), Tailwind CSS (Design System), Lucide React (Icons), Recharts (Analytics).
 
-Frontend (Next.js 14+):
+Backend: NestJS (Node.js framework), Passport.js (Auth), Web-Push (Notifications).
 
-Portals:
+Database: PostgreSQL 16 managed via Prisma ORM.
 
-Student Portal: Exam taking, Result analysis, Resource access.
+Infrastructure: Dockerized containers orchestrated via Docker Compose.
 
-Parent Portal: Fee tracking, Performance monitoring, Attendance view.
+AI Service: Hosted Inference API (Python/FastAPI) for semantic search and paper generation.
 
-Academic Admin: Question bank management, Exam scheduling, Result publishing.
+2.2 Security Architecture
 
-Director Console: Financial overview, Staff management, Global settings.
+Authentication: JWT (JSON Web Tokens) with stateless validation.
 
-Rendering: Server-Side Rendering (SSR) for SEO and performance, Client-Side Rendering (CSR) for interactive dashboards.
+Authorization: Custom @Roles() decorator guarding endpoints.
 
-Styling: Tailwind CSS with a custom "Glassmorphism" and "Neural" aesthetic.
+Data Integrity: Transaction-safe operations (prisma.$transaction) for admissions and exam submissions.
 
-Backend (NestJS):
+Input Sanitization: Recursive sanitization middleware to prevent Postgres 0x00 (Null Byte) injection attacks from AI data.
 
-API Layer: RESTful API endpoints secured with JWT Guards.
+3. Project Structure (Updated)
 
-Business Logic: Modular services for Auth, Exams, Finance, ERP.
-
-ORM: Prisma ORM for type-safe database interactions.
-
-Database (PostgreSQL 15):
-
-Relational data model handling Users, Roles, Exams, Questions, Attempts, and Finances.
-
-AI Service (External):
-
-Endpoint: https://prishaa-question-paper.hf.space
-
-Function: Generates question papers based on difficulty/topic configuration and provides semantic search capabilities.
-
-2.2 Docker Orchestration
-
-The system is containerized using docker-compose.
-
-aims_frontend_container: Runs on Port 3000. Connects to Backend via internal Docker network.
-
-aims_backend_container: Runs on Port 3001. Connects to Postgres via internal Docker network.
-
-aims_db_container: Runs Postgres on Port 5432.
-
-3. Project Structure
+The project follows a Domain-Driven Design.
 
 3.1 Frontend (aims_institute_app/)
 
-aims_institute_app/
-├── app/
-│   ├── admin/                  # Academic Admin Portal
-│   │   └── page.tsx            # Dashboard, Question Bank, Exam Creation
-│   ├── components/             # Shared UI Components
-│   │   └── HyperSpeed/         # WebGL Animation for Landing Page
-│   ├── director/               # Director Console
-│   │   └── page.tsx            # Financials, Staff, ERP Settings
-│   ├── parent/                 # Parent Portal
-│   │   └── page.tsx            # Child Performance, Fees, Attendance
-│   ├── security/               # Security Admin Portal
-│   │   └── page.tsx            # Gate Entry, ID Card Checks
-│   ├── student/                # Student Portal
-│   │   ├── exam/
-│   │   │   └── [examId]/       # Exam Taking Interface
-│   │   │       ├── page.tsx
-│   │   │       └── import-questions/
-│   │   │           └── route.ts # API Route: Imports Questions to DB
-│   │   └── page.tsx            # Dashboard, My Exams, Results
-│   ├── globals.css             # Tailwind & Global Styles
-│   ├── layout.tsx              # Root Layout
-│   └── page.tsx                # Landing Page (Login Selection)
-├── lib/
-│   └── prisma.ts               # Prisma Client Singleton
-├── prisma/
-│   └── schema.prisma           # Database Schema (Synced with Backend)
-├── public/                     # Static Assets (Images, SVGs)
-├── .dockerignore
-├── .env                        # Environment Variables
-├── Dockerfile                  # Frontend Container Build
-├── next.config.ts
-├── package.json
-└── tsconfig.json
+The frontend is split into four distinct portals, each with its own local service layer and component library.
+
+app/
+├── admin/                  # [Portal] Academic Admin
+│   ├── components/         # Micro-components (QuestionChecker, ExamManager)
+│   ├── services/           # adminApi.ts (Direct backend calls)
+│   └── page.tsx            # Main Controller
+├── director/               # [Portal] Director Console
+│   ├── components/         # AdmissionsPanel, AccountsPanel, ContentPanel
+│   ├── services/           # directorApi.ts
+│   └── page.tsx            # Dashboard Orchestrator
+├── student/                # [Portal] Student Learning Hub
+│   ├── components/         # ExamView, ResultAnalysis, DashboardHome
+│   ├── services/           # studentApi.ts
+│   ├── exam/[id]/          # Secure Exam Room (No Layout, Fullscreen)
+│   └── page.tsx            # Student Dashboard
+├── parent/                 # [Portal] Parent Monitoring
+│   ├── components/         # StudentCard, InvoiceModal
+│   ├── services/           # parentApi.ts
+│   └── page.tsx            # Main View
+├── public/
+│   └── sw.js               # Service Worker for Push Notifications
+└── ...
 
 
 3.2 Backend (aims_backend/)
 
-aims_backend/
-├── prisma/
-│   ├── migrations/             # Database Migration History
-│   ├── schema.prisma           # Master Database Schema
-│   ├── seed.ts                 # Database Seeder (Default Users)
-│   └── seed-questions.ts       # Question Bank Seeder
-├── src/
-│   ├── admissions/             # Admission Logic
-│   ├── auth/                   # Authentication (JWT, Guards)
-│   ├── batches/                # Batch Management
-│   ├── erp/                    # Core ERP Logic (Students, Staff)
-│   ├── exams/                  # Exam Management Logic
-│   ├── finance/                # Fee Collection & Expenses
-│   ├── notices/                # Notice Board Logic
-│   ├── resources/              # Study Material Logic
-│   ├── users/                  # User Management
-│   ├── app.module.ts           # Root Module
-│   └── main.ts                 # Entry Point (Bootstrap)
-├── test/                       # E2E Tests
-├── .dockerignore
-├── .env                        # Environment Variables
-├── Dockerfile                  # Backend Container Build
-├── nest-cli.json
-├── package.json
-└── tsconfig.json
+The backend is modularized to prevent logic coupling.
 
+src/
+├── auth/                   # Login & JWT Strategy
+├── erp/                    # Core Admin/Director Logic (Fees, Batches, Questions)
+├── student/                # Student-Specific Logic (Exam Taking, Results)
+├── parent/                 # Parent-Specific Logic (Child Tracking)
+├── prisma/                 # Database Schema & Seeds
+└── app.module.ts           # Root Module
 
-4. Database Schema
 
-The core data structure is defined in prisma/schema.prisma.
+4. Module Capabilities
 
-Key Models
+4.1 Director Console
 
-User: Central identity with Role-Based Access Control (STUDENT, PARENT, TEACHER, SUPER_ADMIN).
+Dashboard: Live SVG Trend Charts (7-day view) for Enquiries, Admissions, and Fee Collection.
 
-StudentProfile: Links User to Batch, Parent, and Fee/Attendance records.
+Admissions Engine:
 
-Exam: Represents a scheduled test. Contains metadata like duration, totalMarks, and examType (JEE/NEET).
+Creates Student, Parent, and Profile records in a single transaction.
 
-Question: The fundamental unit. Stores text, images, options (JSON), and the correct answer. Linked to specific Exams.
+Installment Calculator: Auto-generates due dates based on plan.
 
-TestAttempt: A student's session for an exam. Tracks status (IN_PROGRESS, SUBMITTED), score, and individual Answer records.
+Fee Management: Generates GST receipts, tracks pending dues.
 
-FeeRecord: Tracks individual payments linked to a Student.
+Content & Notifications:
 
-Attendance: Daily records linked to Batches and Students.
+Targeting: Send notices to "Batch", "Individual Student", or "Specific Parent".
 
-5. API Endpoints
+Push: Triggers system-level notifications via VAPID keys.
 
-5.1 Authentication (/auth)
+4.2 Student Portal
 
-POST /auth/login: Authenticates user, returns JWT access token.
+Exam Room:
 
-GET /auth/profile: Returns current user details based on token.
+Anti-Cheat: Detects tab switching/blur events. Auto-submits after 3 warnings.
 
-5.2 Exams Module (/exams, /erp/exams)
+Offline Mode: Local timer logic handles network drops gracefully.
 
-POST /erp/exams: Create a new Exam draft (Admin).
+Renderer: Full LaTeX support for Math/Physics equations and image support for Biology.
 
-GET /erp/exams: List all exams (Admin/Staff).
+Analytics:
 
-POST /student/exam/:id/import-questions: (Critical) Imports questions from the AI/External source into the local DB.
+Subject-wise breakdown.
 
-POST /exams/:id/attempt: Starts an exam session for a student. Checks for existing attempts.
+Time-spent analysis per question.
 
-POST /exams/:id/submit: Submits answers, calculates score immediately, and closes the attempt.
+Comparison against top rankers.
 
-GET /exams/my-attempts: Returns result history for the logged-in student.
+4.3 Academic Admin
 
-GET /exams/student-attempts?studentId=...: Returns results for a specific student (Parent/Admin view).
+Question Repository:
 
-5.3 Finance Module (/finance)
+AI Generator: Fetches questions based on Topic/Difficulty.
 
-GET /finance/my-summary: Returns fee status, paid history, and pending installments for a Parent's children.
+Approval Workflow: Teachers review AI output before saving to the internal bank.
 
-6. Deployment Guide (VPS)
+Exam Scheduler: Set start times, duration, and publishing status.
 
-Prerequisites
+4.4 Parent Portal
 
-Ubuntu VPS (2GB+ RAM recommended).
+Financial Transparency: View full fee history, download receipts, check upcoming installments.
 
-Docker & Docker Compose installed.
+Performance: Real-time access to child's exam results and attendance.
 
-Git installed.
+5. Database Schema (Key Updates)
 
-Step-by-Step Deployment
+5.1 Push Notifications
 
-Clone Repository:
+To support "Closed Browser" notifications.
 
-git clone [https://github.com/your-repo/Aims_V1.git](https://github.com/your-repo/Aims_V1.git)
-cd Aims_V1
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+}
 
 
-Configure Environment:
+5.2 Exam & Questions
 
-Edit docker-compose.yml to set your VPS IP Address in NEXT_PUBLIC_API_URL.
+Supports rich text and complex options.
 
-Ensure DATABASE_URL is consistent across services.
+model Question {
+  id            String  @id @default(uuid())
+  questionText  String  // Supports LaTeX
+  options       Json    // Stores {a: "...", b: "..."}
+  correctOption String
+  questionImage String?
+  // ...
+}
 
-Build & Run:
+model TestAttempt {
+  id           String @id @default(uuid())
+  scoreDetails Json?  // Stores granular question-wise stats
+  // ...
+}
 
-docker compose up --build -d
 
+5.3 Notification Targeting
 
-Initialize Database:
-Wait for containers to start, then run the schema push:
+model Notice {
+  // ...
+  studentId String? // Nullable: For specific targeting
+  parentId  String? // Nullable: For specific targeting
+  batchId   String? // Nullable: For batch broadcast
+}
 
-docker exec -it aims_backend_container npx prisma db push
 
+6. API Endpoints Reference
 
-Seed Data (Optional):
-To create default Admin/Student accounts:
+6.1 Student Module (/student)
 
-docker exec -it aims_backend_container npx ts-node prisma/seed.ts
+Method
 
+Endpoint
 
-7. Future Roadmap & Required Updates
+Description
 
-Based on the current analysis, the following updates are scheduled for Aims V1.1:
+POST
 
-7.1 Admin Panel: Question Checker Microservice
+/student/exam/:id/attempt
 
-Goal: Decouple question verification from the main admin flow.
+Starts an exam session. Returns Qs without answers.
 
-Feature: A dedicated tab where teachers review AI-generated/database (fetched from external API) questions before they are available for exams. They can rate difficulty (Easy/Med/Hard) and edit text/images.
+POST
 
-Tech: Separate NestJS module or standalone service.
+/student/exam/:id/submit
 
-7.2 MCQ Option & Answer Fix
+Accepts answers, calculates score, closes session.
 
-Issue: External API sometimes returns numerical indices (1, 2, 3, 4) for correct answers, while the UI expects letters (a, b, c, d).
+GET
 
-Fix: Implement a robust mapper in the Import API (route.ts) to normalize 1 -> a, 2 -> b, etc., and ensure options are always stored as a consistent JSON object { "a": "...", "b": "..." }.
+/student/results
 
-7.3 Director Panel: Fee Record Lock Fix
+Returns detailed attempt history with analytics.
 
-Issue: The Fee Record/Invoice view is currently showing empty or locked data.
+POST
 
-Fix: The FinanceService needs to be audited to ensure it correctly aggregates FeeRecord data and that the ParentProfile relation correctly links to StudentProfile for fetching these records. The installmentSchedule JSON structure in Prisma needs strict typing.
+/student/subscribe
 
-7.4 Microservice Transition
+Registers browser Service Worker for Push.
 
-Goal: Split the Academic Admin Panel.
+6.2 Parent Module (/parent)
 
-Plan:
+Method
 
-Service A (Exam Engine): Handles Exam Creation, Question Bank, and Paper Generation.
+Endpoint
 
-Service B (Result Engine): Dedicated to heavy analytics, rank generation, and report card creation.
+Description
 
-Service C (Core ERP): User management, Batches, Attendance.
+GET
 
-Document Generated: February 15, 2026
-Version: 1.0.0
+/parent/my-summary
+
+Returns linked children and their financial status.
+
+GET
+
+/parent/student-attempts
+
+Returns exam results for a specific child.
+
+6.3 ERP Core (/erp)
+
+Method
+
+Endpoint
+
+Description
+
+POST
+
+/erp/exams/:id/import
+
+Bulk imports questions from AI/JSON to DB (Transaction).
+
+GET
+
+/erp/fees
+
+Returns global fee ledger for Director.
+
+PATCH
+
+/erp/batches/:id
+
+Updates batch details (Fee structures).
+
+7. Deployment & Configuration
+
+7.1 Environment Variables (.env)
+
+DATABASE_URL="postgresql://user:pass@localhost:5432/aims_db"
+NEXT_PUBLIC_API_URL="[https://api.aimsinstitute.com](https://api.aimsinstitute.com)"
+# VAPID Keys for Push Notifications
+VAPID_PUBLIC_KEY="<Generated Key>"
+VAPID_PRIVATE_KEY="<Generated Key>"

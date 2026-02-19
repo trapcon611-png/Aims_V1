@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # ... postgres and backend services remain unchanged ...
+  # 1. Database Service (Postgres)
   postgres:
     image: postgres:15-alpine
     container_name: aims_db_container
@@ -20,6 +20,7 @@ services:
       timeout: 5s
       retries: 5
 
+  # 2. Backend Service (NestJS)
   backend:
     container_name: aims_backend_container
     build:
@@ -30,25 +31,29 @@ services:
     environment:
       DATABASE_URL: "postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public"
       PORT: 3001
+      # VAPID Keys for Push Notifications
+      VAPID_PUBLIC_KEY: "BPIOFqW5EdW7LL-eYMHMdZ_1g0hdcgM093hpYAiqDL9jFyFoOI4gLT4Wu3zwgaVJBpZ9EufGagusvdL52CGL2lA"
+      VAPID_PRIVATE_KEY: "yqOdQrSnKGOmQLRwtJvNEm0zi1AlYByvYDUBxIslr3U"
+      VAPID_SUBJECT: "mailto:aimsinstituteno1@gmail.com"
     depends_on:
       postgres:
         condition: service_healthy
     restart: always
 
-  # 3. Frontend App Service
+  # 3. Frontend App Service (Next.js)
   frontend:
     container_name: aims_frontend_container
     build:
       context: ./aims_institute_app
       dockerfile: Dockerfile
       args:
-        # FIXED: Removed trailing slash
+        # ENSURE THIS IP MATCHES YOUR VPS IP
         NEXT_PUBLIC_API_URL: "http://147.93.110.78:3001"
     ports:
       - "3000:3000"
     environment:
+      # Prisma on frontend needs DB URL for build step generation
       DATABASE_URL: "postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public"
-      # FIXED: Removed trailing slash
       NEXT_PUBLIC_API_URL: "http://147.93.110.78:3001"
     depends_on:
       postgres:

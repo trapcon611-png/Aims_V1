@@ -11,6 +11,8 @@ import { NoticesModule } from './notices/notices.module';
 import { FinanceModule } from './finance/finance.module';
 import { AdmissionsModule } from './admissions/admissions.module';
 import { ErpModule } from './erp/erp.module';
+import { StudentModule } from './student/student.module';
+import { ParentModule } from './parent/parent.module'; // NEW IMPORT
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { ErpModule } from './erp/erp.module';
     FinanceModule,
     AdmissionsModule,
     ErpModule,
+    StudentModule,
+    ParentModule, // REGISTERED
   ],
   controllers: [AppController],
   providers: [AppService],

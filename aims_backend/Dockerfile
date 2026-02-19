@@ -12,8 +12,10 @@ COPY package*.json ./
 
 # 5. Install dependencies
 RUN npm install
-# Explicitly install stable Prisma to prevent version conflicts
+# Explicitly install stable Prisma to prevent version conflicts (Preserved)
 RUN npm install prisma@5.19.1 @prisma/client@5.19.1
+# NEW: Install web-push for Notifications (Critical for new features)
+RUN npm install web-push @types/web-push
 
 # 6. Copy source code
 COPY . .

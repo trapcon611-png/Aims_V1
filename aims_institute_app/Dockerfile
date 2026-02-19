@@ -13,17 +13,19 @@ COPY package*.json ./
 
 # 5. Install Dependencies
 RUN npm install
-# Explicitly install stable Prisma version
+
+# 6. Install Landing Page Visual Dependencies & Specific Prisma Version
+# Preserving this as requested for the Neural/3D components
 RUN npm install three postprocessing @types/three prisma@5.19.1 @prisma/client@5.19.1
 
-# 6. Copy Prisma Schema
+# 7. Copy Prisma Schema
 COPY prisma ./prisma/
 
-# 7. Generate Prisma Client INSIDE the container
-# This will now generate the 'linux-glibc' engine which is more stable than 'musl'
-RUN ./node_modules/.bin/prisma generate
+# 8. Generate Prisma Client INSIDE the container
+# This ensures the 'linux-glibc-openssl-3.0.x' engine is generated for this container
+RUN npx prisma generate
 
-# 8. Copy Source Code
+# 9. Copy Source Code
 COPY . .
 
 # --- BUILD ARGUMENTS ---
@@ -31,12 +33,12 @@ ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 # -----------------------
 
-# 9. Build the Next.js App
+# 10. Build the Next.js App
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-# 10. Expose Port
+# 11. Expose Port
 EXPOSE 3000
 
-# 11. Start Command
+# 12. Start Command
 CMD ["npm", "start"]
