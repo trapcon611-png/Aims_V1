@@ -29,6 +29,7 @@ services:
     ports:
       - "3001:3001"
     environment:
+      TZ: "Asia/Kolkata"
       DATABASE_URL: "postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public"
       PORT: 3001
       # VAPID Keys for Push Notifications
