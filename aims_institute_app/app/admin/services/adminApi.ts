@@ -33,9 +33,8 @@ export const adminApi = {
   async searchQuestionsExternal(query: string, subject: string, difficulty: string) {
     const payload = {
         query: query || "",
-        limit: 20,
-        subject: subject || undefined,
-        difficulty: difficulty || undefined
+        limit: 50,
+        use_llm_transform: false
     };
     try {
         const res = await fetch(`${AI_API_URL}/search`, {

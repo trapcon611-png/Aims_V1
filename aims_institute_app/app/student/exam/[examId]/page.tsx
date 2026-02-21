@@ -81,10 +81,6 @@ export default function ExamPage() {
     const currentAnswers = answersRef.current;
     const currentTimeSpent = timeSpentRef.current;
     
-    // Update final time for current question
-    // Note: We can't easily access currentQIndex inside this callback without adding it to deps
-    // For simplicity/stability in this fix, we will rely on what's in timeSpentRef
-    
     const payload = Object.entries(currentAnswers).map(([qid, opt]) => ({
         questionId: qid,
         selectedOption: opt,
@@ -96,8 +92,6 @@ export default function ExamPage() {
         setSubmissionStatus('COMPLETED');
         
         // Clear Storage
-        // Assuming attemptId is available in local scope or passed differently. 
-        // Since we can't access examData state here easily without causing loops, we clear by pattern
         const keys = Object.keys(localStorage);
         keys.forEach(key => {
             if(key.startsWith('exam_') && key.includes(examIdRef.current)) localStorage.removeItem(key);
@@ -107,7 +101,7 @@ export default function ExamPage() {
         alert("Submission Failed. Please try again.");
         setSubmissionStatus('IDLE');
     }
-  }, []); // Empty deps = Stable function reference
+  }, []); 
 
   // --- LOAD EXAM ---
   useEffect(() => {
@@ -122,6 +116,77 @@ export default function ExamPage() {
           try {
               const data = await studentApi.startAttempt(examId, token);
               
+              // --- DATA NORMALIZATION: Fix JSON Stringified Options & Broken Images ---
+              if (data && data.questions) {
+                  data.questions = data.questions.map((q: any) => {
+                      // 1. Fix Question Image
+                      let qImageUrl = q.questionImage || q.question_images?.[0];
+                      q.questionImage = typeof qImageUrl === 'string' && qImageUrl.length > 5 && qImageUrl !== 'null' ? qImageUrl : null;
+
+                      // 2. Fix Options
+                      if (q.options) {
+                          let rawOpts: any[] = [];
+                          const sourceOpts = q.options || q.options_dict || [];
+                          
+                          if (Array.isArray(sourceOpts)) rawOpts = sourceOpts;
+                          else if (typeof sourceOpts === 'object') {
+                              rawOpts = [sourceOpts.a, sourceOpts.b, sourceOpts.c, sourceOpts.d].filter(x => x !== undefined);
+                              if (rawOpts.length === 0) rawOpts = Object.values(sourceOpts);
+                          } else if (typeof sourceOpts === 'string') {
+                              try {
+                                  const parsed = JSON.parse(sourceOpts);
+                                  rawOpts = Array.isArray(parsed) ? parsed : Object.values(parsed);
+                              } catch(e) { rawOpts = []; }
+                          }
+
+                          const cleanOptions: Record<string, string> = {};
+                          const keys = ['a', 'b', 'c', 'd'];
+                          
+                          rawOpts.forEach((opt, idx) => {
+                              if (idx > 3) return;
+                              const key = keys[idx];
+                              
+                              let parsedOpt = opt;
+                              if (typeof opt === 'string') {
+                                  const trimmed = opt.trim();
+                                  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                                      try { parsedOpt = JSON.parse(trimmed); } catch(e) {}
+                                  }
+                              }
+                              
+                              let text = "";
+                              let img = null;
+
+                              if (typeof parsedOpt === 'object' && parsedOpt !== null) {
+                                  text = parsedOpt.latex || parsedOpt.text || "";
+                                  if (parsedOpt.image && parsedOpt.image !== 'null') {
+                                      img = parsedOpt.image;
+                                      if (!img.startsWith('http') && Array.isArray(q.option_images) && q.option_images.length > idx) {
+                                          img = q.option_images[idx];
+                                      }
+                                  }
+                              } else {
+                                  text = String(parsedOpt || "");
+                              }
+
+                              // Extract image URL or text so QuestionView renders it natively
+                              if (img && !text) {
+                                  cleanOptions[key] = img;
+                              } else if (text && !img) {
+                                  cleanOptions[key] = text;
+                              } else if (text && img) {
+                                  cleanOptions[key] = `${text} \n\n ![Image](${img})`;
+                              } else {
+                                  cleanOptions[key] = "";
+                              }
+                          });
+                          q.options = cleanOptions;
+                      }
+                      return q;
+                  });
+              }
+              // --- END NORMALIZATION ---
+
               // 1. Check Start Time
               const startTimeDate = new Date(data.exam.scheduledAt);
               const now = new Date();
@@ -174,7 +239,7 @@ export default function ExamPage() {
       };
 
       initExam();
-  }, [examId, handleSubmit]); // handleSubmit is stable now
+  }, [examId, handleSubmit]); 
 
   // --- TIMER ---
   useEffect(() => {

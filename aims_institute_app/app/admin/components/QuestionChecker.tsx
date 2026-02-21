@@ -46,118 +46,154 @@ const SYLLABUS = {
 
 // --- SINGLE QUESTION CARD COMPONENT ---
 const QuestionCard = ({ q, defaultTopic, availableTopics, onApprove, isApproving }: any) => {
-    // Initialize with defaultTopic if available, otherwise q.topic or empty
     const [selectedTopic, setSelectedTopic] = useState(defaultTopic || q.topic || '');
 
-    // Force update local state if the parent filter changes
     useEffect(() => {
-        if (defaultTopic) {
-            setSelectedTopic(defaultTopic);
-        }
+        if (defaultTopic) setSelectedTopic(defaultTopic);
     }, [defaultTopic]);
 
-    // Parse options safely
+    // Parse options safely and intercept Stringified JSON objects
     const options = useMemo(() => {
         if (!q.options) return [];
-        // Handle array format ['A', 'B', 'C', 'D']
-        if (Array.isArray(q.options)) return q.options;
-        // Handle object format {a: 'A', b: 'B'} - Convert to array values
-        if (typeof q.options === 'object') return Object.values(q.options);
-        return [];
+        let rawOpts: any[] = [];
+        
+        if (Array.isArray(q.options)) rawOpts = q.options;
+        else if (typeof q.options === 'object') rawOpts = Object.values(q.options);
+        
+        return rawOpts.map(opt => {
+            if (typeof opt === 'string') {
+                const trimmed = opt.trim();
+                if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                    try { return JSON.parse(trimmed); } catch(e) { return opt; }
+                }
+            }
+            return opt;
+        });
     }, [q.options]);
 
-    // Detect if it is an MCQ
     const isMCQ = (q.question_type?.toLowerCase().includes('mcq') || options.length > 0) && q.question_type !== 'INTEGER';
-
     const getOptionLabel = (idx: number) => String.fromCharCode(97 + idx); // a, b, c, d
 
+    // SAFELY CHECK IF QUESTION IMAGE EXISTS AND IS VALID URL
+    const imageUrl = q.question_images?.[0];
+    const isValidImage = typeof imageUrl === 'string' && imageUrl.length > 5 && imageUrl !== 'null';
+
     return (
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-amber-300 transition group">
-            <div className="flex justify-between items-start mb-4">
+        // COMPACT UI: Reduced padding from p-6 to p-4
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-amber-300 transition group w-full">
+            <div className="flex justify-between items-start mb-3">
                 <div className="flex items-center gap-2">
-                    <span className="px-2 py-1 bg-slate-100 border border-slate-200 rounded text-[10px] font-bold uppercase text-slate-600">{q.subject}</span>
-                    <span className="px-2 py-1 bg-slate-100 border border-slate-200 rounded text-[10px] font-bold uppercase text-slate-600">{q.question_type}</span>
+                    <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-bold uppercase text-slate-600">{q.subject}</span>
+                    <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-bold uppercase text-slate-600">{q.question_type}</span>
                 </div>
             </div>
             
-            <div className="text-slate-800 font-medium mb-4 text-sm leading-relaxed">
+            <div className="text-slate-800 font-medium mb-3 text-sm leading-relaxed overflow-x-auto">
                 <LatexRenderer content={q.question_text} />
             </div>
             
-            {q.question_images && q.question_images.length > 0 && (
-                <div className="mb-4 h-32 border border-slate-200 rounded bg-slate-50 overflow-hidden w-fit">
-                    <img src={q.question_images[0]} className="h-full object-contain" alt="Question"/>
+            {/* COMPACT UI: Max height restricted to 250px so it doesn't take the whole screen */}
+            {isValidImage && (
+                <div className="mb-3 max-h-[250px] w-full border border-slate-200 rounded-lg bg-slate-50 overflow-auto custom-scrollbar flex justify-center p-2">
+                    <img src={imageUrl} className="max-w-full h-auto object-contain" alt="Question Graphic"/>
                 </div>
             )}
 
-            {/* --- OPTIONS DISPLAY (NEW) --- */}
+            {/* --- OPTIONS DISPLAY (COMPACT PARSED LOGIC) --- */}
             {isMCQ && options.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
                     {options.map((opt: any, idx: number) => {
                         const label = getOptionLabel(idx);
-                        // Check logic: Correct answer 'a' == label 'a', OR Correct '1' == idx+1 '1'
                         const isCorrect = String(q.correct_answer).toLowerCase() === label || String(q.correct_answer) === String(idx + 1);
-                        const optText = typeof opt === 'string' ? opt : (opt.text || JSON.stringify(opt));
+                        
+                        let optText = "";
+                        let optImg = null;
+
+                        if (typeof opt === 'object' && opt !== null) {
+                            optText = opt.latex || opt.text || "";
+                            
+                            // FIX: If option image is just a filename, grab full URL from option_images array
+                            if (opt.image && opt.image !== 'null') {
+                                if (opt.image.startsWith('http')) {
+                                    optImg = opt.image;
+                                } else if (Array.isArray(q.option_images) && q.option_images.length > idx) {
+                                    optImg = q.option_images[idx];
+                                }
+                            }
+                        } else {
+                            optText = String(opt);
+                        }
 
                         return (
+                            // COMPACT UI: Reduced padding to p-2
                             <div 
                                 key={idx} 
-                                className={`p-3 rounded-lg border text-xs flex items-start gap-2 transition-colors ${
+                                className={`p-2 rounded-lg border text-sm flex items-start gap-2 transition-colors ${
                                     isCorrect ? 'bg-green-50 border-green-200 ring-1 ring-green-200' : 'bg-slate-50 border-slate-100'
                                 }`}
                             >
                                 <span className={`font-bold uppercase w-5 shrink-0 pt-0.5 ${isCorrect ? 'text-green-700' : 'text-slate-500'}`}>
                                     {label}.
                                 </span>
-                                <div className={`text-slate-700 leading-snug w-full ${isCorrect ? 'text-green-900 font-medium' : ''}`}>
-                                    <LatexRenderer content={optText} />
+                                <div className={`text-slate-700 leading-snug w-full overflow-x-auto ${isCorrect ? 'text-green-900 font-medium' : ''}`}>
+                                    {optText && <LatexRenderer content={optText} />}
+                                    
+                                    {/* COMPACT UI: Option images limited to 120px height */}
+                                    {optImg && (
+                                        <div className="mt-1 max-h-[120px] overflow-auto custom-scrollbar border border-slate-200 rounded p-1 bg-white inline-block">
+                                            <img src={optImg} alt={`Option ${label}`} className="max-h-[100px] w-auto object-contain" />
+                                        </div>
+                                    )}
+                                    
+                                    {!optText && !optImg && typeof opt === 'object' && (
+                                        <span className="text-xs text-slate-400 italic">Data missing</span>
+                                    )}
                                 </div>
-                                {isCorrect && <CheckCircle size={14} className="text-green-600 shrink-0 ml-1" />}
+                                {isCorrect && <CheckCircle size={16} className="text-green-600 shrink-0 ml-1 mt-0.5" />}
                             </div>
                         );
                     })}
                 </div>
             )}
 
-            {/* Correct Answer Badge (Fallback for Integer or non-displayed options) */}
             {(!isMCQ || options.length === 0) && (
-                <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-800 font-bold font-mono mb-4 flex items-center gap-2">
-                    <CheckCircle size={14} className="text-blue-500"/> Correct Answer: {q.correct_answer}
+                <div className="p-2 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-800 font-bold font-mono mb-3 flex items-center gap-2">
+                    <CheckCircle size={16} className="text-blue-500"/> Correct Answer: {q.correct_answer}
                 </div>
             )}
 
-            <div className="mb-4">
+            <div className="mb-3">
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Topic Tag:</label>
                 <select 
-                    className={`w-full p-2 text-xs border rounded-lg font-medium outline-none transition ${!selectedTopic ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-200 bg-slate-50 text-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500'}`}
+                    className={`w-full p-2 text-sm border rounded-lg font-medium outline-none transition ${!selectedTopic ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-200 bg-slate-50 text-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500'}`}
                     value={selectedTopic}
                     onChange={(e) => setSelectedTopic(e.target.value)}
                 >
                     <option value="">-- Select Topic (Required to Save) --</option>
                     {availableTopics.map((t: string) => <option key={t} value={t}>{t}</option>)}
                 </select>
-                {!selectedTopic && <p className="text-[9px] text-red-500 mt-1 font-bold">Topic required for filtering in Manual Builder.</p>}
+                {!selectedTopic && <p className="text-[10px] text-red-500 mt-1 font-bold">Topic required for filtering in Manual Builder.</p>}
             </div>
 
-            <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
                 <button 
                     onClick={() => onApprove(q, 'EASY', selectedTopic)}
                     disabled={isApproving || !selectedTopic}
-                    className="px-3 py-1.5 rounded-lg border border-green-200 bg-green-50 text-green-700 text-xs font-bold hover:bg-green-600 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-1.5 rounded-lg border border-green-200 bg-green-50 text-green-700 text-sm font-bold hover:bg-green-600 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     Easy
                 </button>
                 <button 
                     onClick={() => onApprove(q, 'MEDIUM', selectedTopic)}
                     disabled={isApproving || !selectedTopic}
-                    className="px-3 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-xs font-bold hover:bg-amber-500 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-sm font-bold hover:bg-amber-500 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     Medium
                 </button>
                 <button 
                     onClick={() => onApprove(q, 'HARD', selectedTopic)}
                     disabled={isApproving || !selectedTopic}
-                    className="px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold hover:bg-red-600 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm font-bold hover:bg-red-600 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     Hard
                 </button>
@@ -175,11 +211,13 @@ export default function QuestionChecker() {
     const [approvingId, setApprovingId] = useState<string | null>(null);
     const [existingQuestions, setExistingQuestions] = useState<any[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
+    
+    // RESTORED TO 5: Show exactly 5 questions per page with pagination
     const ITEMS_PER_PAGE = 5;
 
-    // Standard Soft Styles (Matching other panels)
+    // COMPACT UI: Reduced padding on inputs to save vertical space
     const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl transition-all duration-300";
-    const inputStyle = "w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500 outline-none transition";
+    const inputStyle = "w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500 outline-none transition text-sm";
     const labelStyle = "block text-[10px] font-bold text-slate-500 uppercase mb-1";
 
     useEffect(() => {
@@ -206,11 +244,10 @@ export default function QuestionChecker() {
         if (!searchTerm) return;
 
         setLoading(true);
-        setCurrentPage(1); // Reset pagination on new search
+        setCurrentPage(1); 
         try {
             const data = await adminApi.searchQuestionsExternal(searchTerm, subject, '');
             
-            // Filter duplicates
             const filtered = data.filter((aiQ: any) => {
                 const aiText = aiQ.question_text?.trim();
                 const alreadyExists = existingQuestions.some((dbQ: any) => 
@@ -227,7 +264,6 @@ export default function QuestionChecker() {
         }
     };
 
-    // Auto-search when topic changes
     useEffect(() => {
         if (topic) {
             setQuery(topic); 
@@ -238,21 +274,49 @@ export default function QuestionChecker() {
     const handleApprove = async (question: any, difficulty: 'EASY' | 'MEDIUM' | 'HARD', finalTopic: string) => {
         setApprovingId(question.question_id || 'temp');
         try {
+            // Clean options and resolve images BEFORE saving to database
+            let rawOpts: any[] = [];
+            if (Array.isArray(question.options)) rawOpts = question.options;
+            else if (typeof question.options === 'object' && question.options !== null) rawOpts = Object.values(question.options);
+            
+            const cleanOptions = rawOpts.map((opt, idx) => {
+                let parsedOpt = opt;
+                if (typeof opt === 'string') {
+                    const trimmed = opt.trim();
+                    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                        try { parsedOpt = JSON.parse(trimmed); } catch(e) {}
+                    }
+                }
+                
+                // If it's an object with a filename image, swap it with the full URL from option_images
+                if (typeof parsedOpt === 'object' && parsedOpt !== null && parsedOpt.image && parsedOpt.image !== 'null') {
+                    if (!parsedOpt.image.startsWith('http') && Array.isArray(question.option_images) && question.option_images.length > idx) {
+                        parsedOpt.image = question.option_images[idx];
+                    }
+                }
+                return parsedOpt;
+            });
+
+            const formattedOptions = {
+                a: cleanOptions[0] || "",
+                b: cleanOptions[1] || "",
+                c: cleanOptions[2] || "",
+                d: cleanOptions[3] || ""
+            };
+
+            const qImageUrl = question.question_images?.[0];
+            const safeImageUrl = typeof qImageUrl === 'string' && qImageUrl.length > 5 && qImageUrl !== 'null' ? qImageUrl : null;
+
             const formatted = {
                 questionText: question.question_text,
-                options: Array.isArray(question.options) 
-                    ? { a: question.options[0], b: question.options[1], c: question.options[2], d: question.options[3] }
-                    : question.options,
+                options: formattedOptions, 
                 correctOption: String(question.correct_answer),
                 subject: question.subject || subject || 'General',
-                
-                // SEND TOPIC AND TAGS
                 topic: finalTopic, 
-                tags: [finalTopic], // Also save as a tag for robust filtering
-                
+                tags: [finalTopic], 
                 difficulty: difficulty,
                 marks: 4, 
-                questionImage: question.question_images?.[0] || null,
+                questionImage: safeImageUrl,
                 solutionImage: null
             };
 
@@ -268,7 +332,6 @@ export default function QuestionChecker() {
         }
     };
 
-    // PAGINATION LOGIC
     const totalPages = Math.ceil(results.length / ITEMS_PER_PAGE);
     const paginatedResults = results.slice(
         (currentPage - 1) * ITEMS_PER_PAGE, 
@@ -276,16 +339,15 @@ export default function QuestionChecker() {
     );
 
     return (
-        <div className="flex flex-col h-full gap-6">
-            {/* SEARCH PANEL */}
-            <div className={`${glassPanel} p-6`}>
-                <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
-                    <Filter size={20} className="text-amber-600"/> 
-                    <h3 className="font-bold text-slate-800">Question Repository Search</h3>
+        <div className="flex flex-col h-full gap-4">
+            {/* SEARCH PANEL (COMPACT) */}
+            <div className={`${glassPanel} p-4 shrink-0`}>
+                <div className="flex items-center gap-2 mb-3 border-b border-slate-100 pb-2">
+                    <Filter size={18} className="text-amber-600"/> 
+                    <h3 className="font-bold text-slate-800 text-sm">Question Repository Search</h3>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                    {/* Subject Select */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
                     <div className="md:col-span-2">
                         <label className={labelStyle}>Subject</label>
                         <select 
@@ -300,7 +362,6 @@ export default function QuestionChecker() {
                         </select>
                     </div>
 
-                    {/* Topic Select */}
                     <div className="md:col-span-4">
                         <label className={labelStyle}>Topic (Syllabus Filter)</label>
                         <select 
@@ -313,13 +374,12 @@ export default function QuestionChecker() {
                         </select>
                     </div>
 
-                    {/* Manual Query Input */}
                     <div className="md:col-span-5 relative">
                         <label className={labelStyle}>Manual Search</label>
                         <div className="relative">
-                            <Search className="absolute left-3 top-3.5 text-slate-400" size={16}/>
+                            <Search className="absolute left-3 top-2.5 text-slate-400" size={16}/>
                             <input 
-                                className={inputStyle + " pl-10"}
+                                className={inputStyle + " pl-9"}
                                 placeholder={topic ? topic : "Type custom query..."}
                                 value={query}
                                 onChange={e => setQuery(e.target.value)}
@@ -328,26 +388,25 @@ export default function QuestionChecker() {
                         </div>
                     </div>
 
-                    {/* Search Button */}
                     <div className="md:col-span-1 flex items-end">
                         <button 
                             onClick={() => handleSearch()}
-                            className="w-full h-[46px] bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg transition shadow-md flex items-center justify-center"
+                            className="w-full h-[38px] bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg transition shadow-md flex items-center justify-center"
                         >
-                            <Search size={20}/>
+                            <Search size={18}/>
                         </button>
                     </div>
                 </div>
             </div>
 
-            {/* RESULTS GRID */}
+            {/* RESULTS GRID (MAXIMIZED HEIGHT) */}
             <div className={`flex-1 overflow-hidden ${glassPanel} flex flex-col`}>
-                <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
                     <span className="text-xs font-bold text-slate-500 uppercase">Search Results</span>
                     <span className="text-xs font-bold bg-amber-50 text-amber-700 px-2 py-1 rounded">Found: {results.length}</span>
                 </div>
                 
-                <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-slate-50/30">
+                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-slate-50/30">
                     {loading ? (
                         <div className="h-full flex items-center justify-center">
                             <div className="flex flex-col items-center gap-2">
@@ -360,16 +419,15 @@ export default function QuestionChecker() {
                             <Search size={48} className="mb-4 opacity-20"/>
                             <p className="font-bold text-slate-600">No questions found.</p>
                             <p className="text-xs mt-1">Select a topic or type a query to begin.</p>
-                            {existingQuestions.length > 0 && <p className="text-[10px] mt-4 px-3 py-1 bg-slate-100 rounded-full font-bold text-slate-400 border border-slate-200">{existingQuestions.length} duplicates hidden</p>}
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 gap-6 max-w-5xl mx-auto">
+                        <div className="grid grid-cols-1 gap-4 max-w-7xl mx-auto w-full">
                             {paginatedResults.map((q, idx) => (
                                 <QuestionCard 
                                     key={q.question_id || idx}
                                     q={q}
                                     subject={subject}
-                                    defaultTopic={topic} // Pass main topic to default the dropdown
+                                    defaultTopic={topic}
                                     availableTopics={availableTopics}
                                     onApprove={handleApprove}
                                     isApproving={approvingId !== null}
@@ -381,7 +439,7 @@ export default function QuestionChecker() {
 
                 {/* PAGINATION CONTROLS */}
                 {results.length > 0 && totalPages > 1 && (
-                    <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
+                    <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center shrink-0">
                         <span className="text-xs text-slate-500 font-bold">
                             Page {currentPage} of {totalPages}
                         </span>
@@ -389,14 +447,14 @@ export default function QuestionChecker() {
                             <button 
                                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                                 disabled={currentPage === 1}
-                                className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 disabled:opacity-50 text-slate-600 transition"
+                                className="p-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 disabled:opacity-50 text-slate-600 transition"
                             >
                                 <ChevronLeft size={16}/>
                             </button>
                             <button 
                                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                                 disabled={currentPage === totalPages}
-                                className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 disabled:opacity-50 text-slate-600 transition"
+                                className="p-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 disabled:opacity-50 text-slate-600 transition"
                             >
                                 <ChevronRight size={16}/>
                             </button>

@@ -37,6 +37,8 @@ export const LatexRenderer = ({ content }: { content: string }) => {
 
     const KATEX_CSS = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css";
     const KATEX_JS = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js";
+    // ADDED: MHCHEM extension for chemistry equations (\ce{...})
+    const MHCHEM_JS = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/mhchem.min.js";
 
     if (!window.scriptLoadingPromises) window.scriptLoadingPromises = {};
 
@@ -51,7 +53,7 @@ export const LatexRenderer = ({ content }: { content: string }) => {
 
     const loadScript = (src: string, id: string): Promise<void> => {
         if (window.scriptLoadingPromises && window.scriptLoadingPromises[src]) return window.scriptLoadingPromises[src]!;
-        if (document.getElementById(id) && window.katex) return Promise.resolve();
+        if (document.getElementById(id)) return Promise.resolve();
 
         const promise = new Promise<void>((resolve, reject) => {
             const script = document.createElement("script");
@@ -72,9 +74,19 @@ export const LatexRenderer = ({ content }: { content: string }) => {
 
     const processLaTeX = (text: string) => {
         if (!window.katex) return text;
-        // Regex to find math delimiters
+        
+        let safeText = text;
+
+        // Regex to find math delimiters ($$, \[, \(, $)
         const regex = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|(?<!\\)\$[\s\S]+?(?<!\\)\$)/g;
-        return text.replace(regex, (match) => {
+        
+        // SMART FIX: If options are 100% math/chemistry but have NO delimiters (e.g., "\ce{H2O}" or "\sqrt{gR}")
+        // We will automatically wrap the entire string in inline math delimiters so it renders.
+        if (!regex.test(safeText) && (safeText.includes('\\ce{') || safeText.includes('\\sqrt') || safeText.includes('^') || safeText.includes('\\frac'))) {
+            safeText = `\\(${safeText}\\)`;
+        }
+
+        return safeText.replace(regex, (match) => {
             let math = match;
             let displayMode = false;
             if (match.startsWith('$$')) { math = match.slice(2, -2); displayMode = true; }
@@ -90,8 +102,10 @@ export const LatexRenderer = ({ content }: { content: string }) => {
 
     const init = async () => {
         try {
+            // 1. Load Core KaTeX
             await loadScript(KATEX_JS, 'katex-js');
-            // Poll for global
+            
+            // 2. Poll until window.katex is fully available
             await new Promise<void>(resolve => {
                 const check = setInterval(() => {
                     if (window.katex && window.katex.renderToString) { clearInterval(check); resolve(); }
@@ -99,11 +113,19 @@ export const LatexRenderer = ({ content }: { content: string }) => {
                 setTimeout(() => clearInterval(check), 5000);
             });
 
-            if (isMounted.current && window.katex) {
-                setRenderedContent(processLaTeX(content));
-            }
-        } catch (e) { console.error("KaTeX init failed", e); }
+            // 3. Load Chemistry Extension (mhchem) NOW that katex is ready
+            await loadScript(MHCHEM_JS, 'katex-mhchem-js');
+
+            // 4. Give mhchem a tiny fraction of a second to register itself, then render
+            setTimeout(() => {
+                if (isMounted.current && window.katex) {
+                    setRenderedContent(processLaTeX(content));
+                }
+            }, 50);
+
+        } catch (e) { console.error("KaTeX/mhchem init failed", e); }
     };
+    
     init();
   }, [content]);
 

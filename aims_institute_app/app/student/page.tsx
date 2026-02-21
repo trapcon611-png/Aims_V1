@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   LayoutDashboard, FileText, Award, BookOpen, LogOut, 
   ChevronRight, ChevronLeft, Bell, Loader2, Menu, PlayCircle
@@ -140,12 +140,22 @@ export default function StudentPage() {
   if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-blue-600" size={32}/></div>;
   if (!user) return <StudentLogin onLogin={handleLogin} />;
 
+  // --- SAFE TIMEZONE WRAPPER ---
+  // Fixes the issue where Linux Postgres drops the 'Z' causing local-time misinterpretation
+  const safeExams = exams.map(e => {
+    let safeDateStr = e.scheduledAt;
+    if (typeof safeDateStr === 'string' && !safeDateStr.endsWith('Z') && !safeDateStr.includes('+') && safeDateStr.includes('T')) {
+        safeDateStr += 'Z'; // Force JS to treat it as absolute UTC
+    }
+    return { ...e, scheduledAt: safeDateStr };
+  });
+
   // Computed Stats for Dashboard Home
   const avgScore = results.length > 0 
     ? Math.round(results.reduce((acc, r) => acc + (r.totalScore / (r.totalMarks || 100)) * 100, 0) / results.length) 
     : 0;
   
-  const upcomingExams = exams
+  const upcomingExams = safeExams
     .filter(e => new Date(e.scheduledAt).getTime() > Date.now())
     .sort((a,b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
   
@@ -251,7 +261,7 @@ export default function StudentPage() {
                {activeTab === 'dashboard' && (
                  <DashboardHome 
                     profile={profile} 
-                    exams={exams} 
+                    exams={safeExams} 
                     averageScore={avgScore} 
                     latestRank={latestRank} 
                     nextExam={nextExam} 
@@ -261,7 +271,7 @@ export default function StudentPage() {
                  />
                )}
                {/* Passed attemptedExamIds to handle button locking logic */}
-               {activeTab === 'exams' && <ExamListPanel exams={exams} attemptedExamIds={attemptedExamIds} />} 
+               {activeTab === 'exams' && <ExamListPanel exams={safeExams} attemptedExamIds={attemptedExamIds} />} 
                {activeTab === 'results' && <ResultsPanel results={results} />}
                {activeTab === 'resources' && <ResourcesPanel resources={resources} notices={notices} />}
            </div>

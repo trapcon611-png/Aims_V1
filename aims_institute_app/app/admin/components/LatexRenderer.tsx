@@ -28,6 +28,8 @@ export const LatexRenderer = ({ content }: { content: string }) => {
 
     const KATEX_CSS = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css";
     const KATEX_JS = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js";
+    // ADDED: MHCHEM extension for chemistry equations (\ce{...})
+    const MHCHEM_JS = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/mhchem.min.js";
 
     // 1. Inject CSS
     if (!document.getElementById('katex-css')) {
@@ -44,7 +46,7 @@ export const LatexRenderer = ({ content }: { content: string }) => {
         return window.scriptLoadingPromises[src]!;
       }
 
-      if (document.getElementById(id) && window.katex) {
+      if (document.getElementById(id) && window.katex && id === 'katex-js') {
          return Promise.resolve();
       }
 
@@ -75,11 +77,19 @@ export const LatexRenderer = ({ content }: { content: string }) => {
     const processLaTeX = (text: string) => {
         if (!window.katex) return text;
 
+        let safeText = text;
+
         // Regex to match delimiters: $$...$$, \[...\], \(...\), $...$
         // We handle escape sequences by looking for delimiters
         const regex = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|(?<!\\)\$[\s\S]+?(?<!\\)\$)/g;
 
-        return text.replace(regex, (match) => {
+        // SMART FIX: If options are 100% math/chemistry but have NO delimiters (e.g., "\ce{H2O}" or "\sqrt{gR}")
+        // We will automatically wrap the entire string in inline math delimiters so it renders.
+        if (!regex.test(safeText) && (safeText.includes('\\ce{') || safeText.includes('\\sqrt') || safeText.includes('^') || safeText.includes('\\frac'))) {
+            safeText = `\\(${safeText}\\)`;
+        }
+
+        return safeText.replace(regex, (match) => {
             let math = match;
             let displayMode = false;
 
@@ -113,9 +123,10 @@ export const LatexRenderer = ({ content }: { content: string }) => {
 
     const init = async () => {
         try {
+            // Load Core KaTeX
             await loadScript(KATEX_JS, 'katex-js');
             
-            // Poll for global
+            // Poll for global katex object
             await new Promise<void>(resolve => {
                 const check = setInterval(() => {
                     if (window.katex && window.katex.renderToString) {
@@ -126,11 +137,18 @@ export const LatexRenderer = ({ content }: { content: string }) => {
                 setTimeout(() => clearInterval(check), 5000);
             });
 
-            if (isMounted.current && window.katex) {
-                setRenderedContent(processLaTeX(content));
-            }
+            // Load Chemistry Extension (mhchem) NOW that katex is ready
+            await loadScript(MHCHEM_JS, 'katex-mhchem-js');
+
+            // Give mhchem a tiny fraction of a second to register itself, then render
+            setTimeout(() => {
+                if (isMounted.current && window.katex) {
+                    setRenderedContent(processLaTeX(content));
+                }
+            }, 50);
+
         } catch (e) {
-            console.error("KaTeX init failed", e);
+            console.error("KaTeX/mhchem init failed", e);
         }
     };
 

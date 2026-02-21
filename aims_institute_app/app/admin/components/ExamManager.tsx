@@ -92,8 +92,12 @@ export default function ExamManager({ batches, onRefresh, onSelectForManual, onR
   const handleCreateDraft = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // FIX: Convert local HTML datetime string to Absolute UTC ISO String based on browser's local timezone
+      const isoScheduledAt = new Date(newExam.scheduledAt).toISOString();
+
       const createdExam = await adminApi.createExam({ 
           ...newExam, 
+          scheduledAt: isoScheduledAt,
           subject: 'Combined', 
           examType: 'MANUAL',
           tags: [examLevel] 
@@ -108,8 +112,12 @@ export default function ExamManager({ batches, onRefresh, onSelectForManual, onR
   const handleGenerateAI = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // FIX: Convert local HTML datetime string to Absolute UTC ISO String based on browser's local timezone
+      const isoScheduledAt = new Date(newExam.scheduledAt).toISOString();
+
       const createdExam = await adminApi.createExam({ 
           ...newExam, 
+          scheduledAt: isoScheduledAt,
           subject: 'Combined', 
           examType: 'AI_GENERATED',
           tags: [examLevel] 
@@ -117,7 +125,7 @@ export default function ExamManager({ batches, onRefresh, onSelectForManual, onR
       
       let topicsString = "";
 
-      // 3) FIX: Explicitly listing all chapters if none selected
+      // Explicitly listing all chapters if none selected
       if (selectedTopics.length > 0) {
           topicsString = selectedTopics.join(', ');
       } else {
@@ -184,7 +192,6 @@ export default function ExamManager({ batches, onRefresh, onSelectForManual, onR
        {examCreationMode === 'AI_FORM' && (
          <div className={`${glassPanel} p-8 max-w-5xl mx-auto w-full`}>
            <div className="flex items-center gap-4 mb-6 border-b border-slate-200 pb-4">
-             {/* 1) FIX: Darker, more visible Back Button */}
              <button onClick={() => setExamCreationMode('SELECT')} className="p-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-full transition shadow-sm border border-slate-300">
                 <ArrowLeft size={20}/>
              </button>
@@ -196,7 +203,7 @@ export default function ExamManager({ batches, onRefresh, onSelectForManual, onR
                <div><label className={labelStyle}>Batch</label><select className={inputStyle} required value={newExam.batchId} onChange={e => setNewExam({...newExam, batchId: e.target.value})}><option value="">Select Batch</option>{batches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
              </div>
              <div className="grid grid-cols-3 gap-4">
-               <div><label className={labelStyle}>Date</label><input type="datetime-local" className={inputStyle} required value={newExam.scheduledAt} onChange={e => setNewExam({...newExam, scheduledAt: e.target.value})}/></div>
+               <div><label className={labelStyle}>Date & Time</label><input type="datetime-local" className={inputStyle} required value={newExam.scheduledAt} onChange={e => setNewExam({...newExam, scheduledAt: e.target.value})}/></div>
                <div><label className={labelStyle}>Duration (m)</label><input type="number" className={inputStyle} value={newExam.durationMin} onChange={e => setNewExam({...newExam, durationMin: +e.target.value})}/></div>
                <div><label className={labelStyle}>Total Marks</label><input type="number" className={inputStyle} value={newExam.totalMarks} onChange={e => setNewExam({...newExam, totalMarks: +e.target.value})}/></div>
              </div>
@@ -222,7 +229,6 @@ export default function ExamManager({ batches, onRefresh, onSelectForManual, onR
                      </div>
                  </div>
 
-                 {/* 2) FIX: Added Maths Configuration Column */}
                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                      <div>
                         <label className={labelStyle}>Difficulty</label>
@@ -279,7 +285,6 @@ export default function ExamManager({ batches, onRefresh, onSelectForManual, onR
        {examCreationMode === 'MANUAL_FORM' && (
          <div className={`${glassPanel} p-8 max-w-4xl mx-auto w-full`}>
            <div className="flex items-center gap-4 mb-6 border-b border-slate-200 pb-4">
-             {/* 1) FIX: Darker Back Button */}
              <button onClick={() => setExamCreationMode('SELECT')} className="p-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-full transition shadow-sm border border-slate-300">
                 <ArrowLeft size={20}/>
              </button>
@@ -311,7 +316,7 @@ export default function ExamManager({ batches, onRefresh, onSelectForManual, onR
              </div>
 
              <div className="grid grid-cols-3 gap-4">
-               <div><label className={labelStyle}>Date</label><input type="datetime-local" className={inputStyle} required value={newExam.scheduledAt} onChange={e => setNewExam({...newExam, scheduledAt: e.target.value})}/></div>
+               <div><label className={labelStyle}>Date & Time</label><input type="datetime-local" className={inputStyle} required value={newExam.scheduledAt} onChange={e => setNewExam({...newExam, scheduledAt: e.target.value})}/></div>
                <div><label className={labelStyle}>Duration (m)</label><input type="number" className={inputStyle} value={newExam.durationMin} onChange={e => setNewExam({...newExam, durationMin: +e.target.value})}/></div>
                <div><label className={labelStyle}>Total Marks</label><input type="number" className={inputStyle} value={newExam.totalMarks} onChange={e => setNewExam({...newExam, totalMarks: +e.target.value})}/></div>
              </div>

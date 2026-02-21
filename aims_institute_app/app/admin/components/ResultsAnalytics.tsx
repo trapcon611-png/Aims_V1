@@ -46,6 +46,107 @@ const initialStatBucket = (): SectionStats => ({
     totalScore: 0, totalTime: 0, accuracy: 0
 });
 
+// --- HELPER FUNCTIONS FOR OPTIONS ---
+const getQuestionType = (q: any) => { 
+    const qType = q.type || q.question_type || ''; 
+    if (qType.toUpperCase() === 'INTEGER' || qType.toUpperCase() === 'NUMERICAL') return 'INTEGER'; 
+    const ans = String(q.correctOption || q.correct_answer || '').replace(/[\[\]'"]/g, '').trim().toLowerCase(); 
+    const isNumber = !isNaN(Number(ans)) && !['a','b','c','d'].includes(ans); 
+    const hasOptions = q.options && Object.keys(q.options).length > 0; 
+    if (isNumber && !hasOptions) return 'INTEGER'; 
+    return 'MCQ'; 
+};
+
+const normalizeOptions = (q: any) => {
+    let rawOpts: any[] = [];
+    const sourceOptions = q.options || q.options_dict || [];
+
+    if (Array.isArray(sourceOptions)) {
+        rawOpts = sourceOptions;
+    } else if (typeof sourceOptions === 'object' && sourceOptions !== null) {
+        rawOpts = [sourceOptions.a, sourceOptions.b, sourceOptions.c, sourceOptions.d].filter(x => x !== undefined);
+        if (rawOpts.length === 0) rawOpts = Object.values(sourceOptions);
+    } else if (typeof sourceOptions === 'string') {
+        try {
+            const parsed = JSON.parse(sourceOptions);
+            if (Array.isArray(parsed)) rawOpts = parsed;
+            else rawOpts = [parsed.a, parsed.b, parsed.c, parsed.d].filter(x => x !== undefined);
+        } catch(e) {
+            return [];
+        }
+    }
+
+    return rawOpts.map((opt, idx) => {
+        let parsedOpt = opt;
+        if (typeof opt === 'string') {
+            const trimmed = opt.trim();
+            if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                try { parsedOpt = JSON.parse(trimmed); } catch(e) {}
+            }
+        }
+        
+        let text = "";
+        let img = null;
+
+        if (typeof parsedOpt === 'object' && parsedOpt !== null) {
+            text = parsedOpt.latex || parsedOpt.text || "";
+            if (parsedOpt.image && parsedOpt.image !== 'null') {
+                img = parsedOpt.image;
+                if (!img.startsWith('http') && Array.isArray(q.option_images) && q.option_images.length > idx) {
+                    img = q.option_images[idx];
+                }
+            }
+        } else {
+            text = String(parsedOpt || "");
+        }
+
+        return { text, image: img };
+    });
+};
+
+// --- VISUAL OPTIONS COMPONENT ---
+const OptionsDisplay = ({ q, selectedOption }: { q: any, selectedOption?: string }) => {
+    const isMCQ = getQuestionType(q) === 'MCQ';
+    const normOptions = normalizeOptions(q);
+
+    if (!isMCQ || normOptions.length === 0) return null;
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+            {normOptions.map((opt, idx) => {
+                const label = String.fromCharCode(97 + idx); // a, b, c, d
+                const correctVal = String(q.correctOption || q.correct_answer || '').toLowerCase();
+                const selectedVal = String(selectedOption || '').toLowerCase();
+                
+                const isCorrect = correctVal === label || correctVal === String(idx + 1);
+                const isSelected = selectedVal === label || selectedVal === String(idx + 1);
+
+                let borderClass = 'border-slate-200 bg-slate-50';
+                if (isCorrect) borderClass = 'border-green-400 bg-green-50 ring-1 ring-green-300';
+                else if (isSelected && !isCorrect) borderClass = 'border-red-400 bg-red-50 ring-1 ring-red-300';
+
+                return (
+                    <div key={idx} className={`p-3 rounded-lg border ${borderClass} text-sm flex items-start gap-2`}>
+                        <span className="font-bold uppercase pt-0.5 text-slate-500">{label}.</span>
+                        <div className="flex-1 overflow-x-auto custom-scrollbar text-slate-700">
+                            {opt.text && <LatexRenderer content={opt.text} />}
+                            {opt.image && (
+                                <div className="mt-1 max-h-[100px] overflow-auto custom-scrollbar border border-slate-200 rounded p-1 bg-white inline-block">
+                                    <img src={opt.image} className="max-h-[80px] w-auto object-contain" alt={`Option ${label}`} />
+                                </div>
+                            )}
+                            {!opt.text && !opt.image && <span className="italic text-slate-300">Empty</span>}
+                        </div>
+                        {isCorrect && <CheckCircle size={18} className="text-green-600 shrink-0 mt-0.5"/>}
+                        {isSelected && !isCorrect && <XCircle size={18} className="text-red-600 shrink-0 mt-0.5"/>}
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+
 export default function ResultsAnalytics({ exams }: ResultsAnalyticsProps) {
   const [analyticsData, setAnalyticsData] = useState<any[] | null>(null);
   const [analyticsExamId, setAnalyticsExamId] = useState('');
@@ -53,6 +154,7 @@ export default function ResultsAnalytics({ exams }: ResultsAnalyticsProps) {
   const [studentDetail, setStudentDetail] = useState<any | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [filterDate, setFilterDate] = useState('');
+  const [expandedRow, setExpandedRow] = useState<number | null>(null); // NEW: For expandable rows
   
   // Tab State
   const [activeSubjectTab, setActiveSubjectTab] = useState<'Physics' | 'Chemistry' | 'Mathematics' | 'General'>('Physics');
@@ -165,6 +267,7 @@ export default function ResultsAnalytics({ exams }: ResultsAnalyticsProps) {
   const handleViewStudentDetail = async (studentId: string) => {
       setSelectedStudentId(studentId);
       setLoadingDetail(true);
+      setExpandedRow(null); // Reset expanded row on new student
       try {
           const allAttempts = await adminApi.getStudentAttempts(studentId);
           console.log("Raw Attempts Data:", allAttempts); // DEBUGGING LOG
@@ -249,7 +352,7 @@ export default function ResultsAnalytics({ exams }: ResultsAnalyticsProps) {
                      {selectedStudentId ? "Deep Performance Analysis" : "Class Results Board"}
                  </h3>
                  {selectedStudentId && (
-                     <button onClick={() => { setSelectedStudentId(null); setStudentDetail(null); }} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition flex items-center gap-2">
+                     <button onClick={() => { setSelectedStudentId(null); setStudentDetail(null); setExpandedRow(null); }} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition flex items-center gap-2">
                          <ArrowLeft size={16}/> Back to List
                      </button>
                  )}
@@ -349,7 +452,7 @@ export default function ResultsAnalytics({ exams }: ResultsAnalyticsProps) {
                                   {visibleTabs.map((subj) => (
                                       <button 
                                           key={subj}
-                                          onClick={() => setActiveSubjectTab(subj as any)}
+                                          onClick={() => { setActiveSubjectTab(subj as any); setExpandedRow(null); }}
                                           className={`px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 ${activeSubjectTab === subj ? 'bg-amber-600 text-white shadow-lg' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'}`}
                                       >
                                           {subj}
@@ -382,31 +485,83 @@ export default function ResultsAnalytics({ exams }: ResultsAnalyticsProps) {
                                               if (tab === 'general') return !sub.includes('phys') && !sub.includes('chem') && !sub.includes('math');
                                               return sub.includes(tab.substring(0, 4));
                                           })
-                                          .map((ans: any, idx: number) => (
-                                              <div key={idx} className="p-4 hover:bg-slate-50 transition flex justify-between items-start gap-4">
-                                                  <div className="flex-1">
-                                                      <div className="flex items-center gap-2 mb-2">
-                                                          <span className="text-xs font-bold text-slate-400">Q{idx+1}</span>
-                                                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${ans.isCorrect ? 'bg-green-100 text-green-700' : ans.selectedOption ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-500'}`}>
-                                                              {ans.isCorrect ? 'Correct' : ans.selectedOption ? 'Incorrect' : 'Skipped'}
-                                                          </span>
-                                                          <span className="text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-600 flex items-center gap-1">
-                                                              <Clock size={10}/> {ans.timeTaken}s
-                                                          </span>
-                                                          <span className="text-[10px] font-bold bg-amber-50 text-amber-700 px-2 py-0.5 rounded uppercase">{ans.question?.type || 'MCQ'}</span>
+                                          .map((ans: any, idx: number) => {
+                                              const q = ans.question || {};
+                                              const qImageUrl = q.questionImage || q.question_images?.[0];
+                                              const validQImage = typeof qImageUrl === 'string' && qImageUrl.length > 5 && qImageUrl !== 'null' ? qImageUrl : null;
+
+                                              return (
+                                              <div key={idx} className="border-b border-slate-100 last:border-0">
+                                                  <div 
+                                                      onClick={() => setExpandedRow(expandedRow === idx ? null : idx)}
+                                                      className={`p-4 hover:bg-slate-50 transition flex justify-between items-start gap-4 cursor-pointer ${expandedRow === idx ? 'bg-slate-50' : ''}`}
+                                                  >
+                                                      <div className="flex-1">
+                                                          <div className="flex items-center gap-2 mb-2">
+                                                              <span className="text-xs font-bold text-slate-400">Q{idx+1}</span>
+                                                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${ans.isCorrect ? 'bg-green-100 text-green-700' : ans.selectedOption ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-500'}`}>
+                                                                  {ans.isCorrect ? 'Correct' : ans.selectedOption ? 'Incorrect' : 'Skipped'}
+                                                              </span>
+                                                              <span className="text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-600 flex items-center gap-1">
+                                                                  <Clock size={10}/> {ans.timeTaken}s
+                                                              </span>
+                                                              <span className="text-[10px] font-bold bg-amber-50 text-amber-700 px-2 py-0.5 rounded uppercase">{q.type || q.question_type || 'MCQ'}</span>
+                                                          </div>
+                                                          <div className="text-sm text-slate-800 line-clamp-2">
+                                                              <LatexRenderer content={q.questionText || q.question_text || ""} />
+                                                          </div>
                                                       </div>
-                                                      <div className="text-sm text-slate-800 line-clamp-2">
-                                                          <LatexRenderer content={ans.question?.questionText || ""} />
+                                                      <div className="text-right text-xs shrink-0">
+                                                          <div className="font-bold text-slate-500">Marks</div>
+                                                          <div className={`font-black text-lg ${ans.isCorrect ? 'text-green-600' : 'text-red-600'}`}>
+                                                              {ans.marksAwarded}
+                                                          </div>
                                                       </div>
                                                   </div>
-                                                  <div className="text-right text-xs">
-                                                      <div className="font-bold text-slate-500">Marks</div>
-                                                      <div className={`font-black text-lg ${ans.isCorrect ? 'text-green-600' : 'text-red-600'}`}>
-                                                          {ans.marksAwarded}
+
+                                                  {/* EXPANDED DETAILS */}
+                                                  {expandedRow === idx && (
+                                                      <div className="p-6 bg-slate-50/50 border-t border-slate-100">
+                                                          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                                                              {/* Question */}
+                                                              <div className="mb-6">
+                                                                  <h4 className="text-xs font-black text-slate-400 uppercase mb-2">Question</h4>
+                                                                  <div className="text-sm text-slate-800 font-medium leading-relaxed">
+                                                                      <LatexRenderer content={q.questionText || q.question_text || ""}/>
+                                                                  </div>
+                                                                  
+                                                                  {validQImage && (
+                                                                      <div className="mt-4 mb-2 max-h-[300px] border border-slate-200 rounded-lg bg-slate-50 overflow-auto custom-scrollbar flex justify-center p-2">
+                                                                          <img src={validQImage} className="max-w-full h-auto object-contain" alt="Question Image"/>
+                                                                      </div>
+                                                                  )}
+                                                              </div>
+
+                                                              {/* Answer Comparison Boxes */}
+                                                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                  <div className={`p-4 rounded-lg border ${ans.isCorrect ? 'bg-green-50 border-green-200' : ans.selectedOption ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
+                                                                      <p className="text-xs font-bold text-slate-500 uppercase mb-1">Student's Answer</p>
+                                                                      <p className="text-lg font-black text-slate-800">{ans.selectedOption || 'Skipped'}</p>
+                                                                  </div>
+                                                                  <div className="p-4 rounded-lg border bg-blue-50 border-blue-200">
+                                                                      <p className="text-xs font-bold text-blue-500 uppercase mb-1">Correct Answer</p>
+                                                                      <p className="text-lg font-black text-blue-900">{q.correctOption || q.correct_answer}</p>
+                                                                  </div>
+                                                              </div>
+
+                                                              {/* FULL OPTIONS DISPLAY */}
+                                                              {(q.options || q.options_dict) && (
+                                                                  <div className="mt-6 border-t border-slate-100 pt-4">
+                                                                      <h4 className="text-xs font-black text-slate-400 uppercase mb-2">Detailed Options</h4>
+                                                                      <OptionsDisplay q={q} selectedOption={ans.selectedOption} />
+                                                                  </div>
+                                                              )}
+                                                          </div>
                                                       </div>
-                                                  </div>
+                                                  )}
                                               </div>
-                                      ))}
+                                              )
+                                          })}
                                   </div>
                               </div>
                          </div>

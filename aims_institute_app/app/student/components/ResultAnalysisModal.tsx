@@ -4,7 +4,7 @@ import {
     X, Clock, CheckCircle, XCircle, MinusCircle, 
     BarChart2, Timer, Zap, AlertTriangle 
 } from 'lucide-react';
-import { LatexRenderer, ContentRenderer } from './LatexRenderer';
+import { LatexRenderer } from './LatexRenderer';
 
 interface QuestionMetric {
     id: number;
@@ -16,7 +16,111 @@ interface QuestionMetric {
     selectedOption?: string;
     correctOption?: string;
     marks: number;
+    options?: any;
+    option_images?: any;
+    type?: string;
+    question_type?: string;
 }
+
+// --- HELPER FUNCTIONS FOR OPTIONS ---
+const getQuestionType = (q: any) => { 
+    const qType = q.type || q.question_type || ''; 
+    if (qType.toUpperCase() === 'INTEGER' || qType.toUpperCase() === 'NUMERICAL') return 'INTEGER'; 
+    const ans = String(q.correctOption || q.correct_answer || '').replace(/[\[\]'"]/g, '').trim().toLowerCase(); 
+    const isNumber = !isNaN(Number(ans)) && !['a','b','c','d'].includes(ans); 
+    const hasOptions = q.options && Object.keys(q.options).length > 0; 
+    if (isNumber && !hasOptions) return 'INTEGER'; 
+    return 'MCQ'; 
+};
+
+const normalizeOptions = (q: any) => {
+    let rawOpts: any[] = [];
+    const sourceOptions = q.options || q.options_dict || [];
+
+    if (Array.isArray(sourceOptions)) {
+        rawOpts = sourceOptions;
+    } else if (typeof sourceOptions === 'object' && sourceOptions !== null) {
+        rawOpts = [sourceOptions.a, sourceOptions.b, sourceOptions.c, sourceOptions.d].filter(x => x !== undefined);
+        if (rawOpts.length === 0) rawOpts = Object.values(sourceOptions);
+    } else if (typeof sourceOptions === 'string') {
+        try {
+            const parsed = JSON.parse(sourceOptions);
+            if (Array.isArray(parsed)) rawOpts = parsed;
+            else rawOpts = [parsed.a, parsed.b, parsed.c, parsed.d].filter(x => x !== undefined);
+        } catch(e) {
+            return [];
+        }
+    }
+
+    return rawOpts.map((opt, idx) => {
+        let parsedOpt = opt;
+        if (typeof opt === 'string') {
+            const trimmed = opt.trim();
+            if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                try { parsedOpt = JSON.parse(trimmed); } catch(e) {}
+            }
+        }
+        
+        let text = "";
+        let img = null;
+
+        if (typeof parsedOpt === 'object' && parsedOpt !== null) {
+            text = parsedOpt.latex || parsedOpt.text || "";
+            if (parsedOpt.image && parsedOpt.image !== 'null') {
+                img = parsedOpt.image;
+                if (!img.startsWith('http') && Array.isArray(q.option_images) && q.option_images.length > idx) {
+                    img = q.option_images[idx];
+                }
+            }
+        } else {
+            text = String(parsedOpt || "");
+        }
+
+        return { text, image: img };
+    });
+};
+
+// --- VISUAL OPTIONS COMPONENT ---
+const OptionsDisplay = ({ q, selectedOption }: { q: any, selectedOption?: string }) => {
+    const isMCQ = getQuestionType(q) === 'MCQ';
+    const normOptions = normalizeOptions(q);
+
+    if (!isMCQ || normOptions.length === 0) return null;
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+            {normOptions.map((opt, idx) => {
+                const label = String.fromCharCode(97 + idx); // a, b, c, d
+                const correctVal = String(q.correctOption || q.correct_answer || '').toLowerCase();
+                const selectedVal = String(selectedOption || '').toLowerCase();
+                
+                const isCorrect = correctVal === label || correctVal === String(idx + 1);
+                const isSelected = selectedVal === label || selectedVal === String(idx + 1);
+
+                let borderClass = 'border-slate-200 bg-slate-50';
+                if (isCorrect) borderClass = 'border-green-400 bg-green-50 ring-1 ring-green-300';
+                else if (isSelected && !isCorrect) borderClass = 'border-red-400 bg-red-50 ring-1 ring-red-300';
+
+                return (
+                    <div key={idx} className={`p-3 rounded-lg border ${borderClass} text-sm flex items-start gap-2`}>
+                        <span className="font-bold uppercase pt-0.5 text-slate-500">{label}.</span>
+                        <div className="flex-1 overflow-x-auto custom-scrollbar text-slate-700">
+                            {opt.text && <LatexRenderer content={opt.text} />}
+                            {opt.image && (
+                                <div className="mt-1 max-h-[100px] overflow-auto custom-scrollbar border border-slate-200 rounded p-1 bg-white inline-block">
+                                    <img src={opt.image} className="max-h-[80px] w-auto object-contain" alt={`Option ${label}`} />
+                                </div>
+                            )}
+                            {!opt.text && !opt.image && <span className="italic text-slate-300">Empty</span>}
+                        </div>
+                        {isCorrect && <CheckCircle size={18} className="text-green-600 shrink-0 mt-0.5"/>}
+                        {isSelected && !isCorrect && <XCircle size={18} className="text-red-600 shrink-0 mt-0.5"/>}
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
 
 export default function ResultAnalysisModal({ result, onClose }: { result: any, onClose: () => void }) {
   const [activeSubject, setActiveSubject] = useState<string>('ALL');
@@ -172,7 +276,10 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                        {filteredQuestions.map((q) => (
+                        {filteredQuestions.map((q) => {
+                            const validQImage = typeof q.questionImage === 'string' && q.questionImage.length > 5 && q.questionImage !== 'null' ? q.questionImage : null;
+
+                            return (
                             <React.Fragment key={q.id}>
                                 <tr 
                                     className={`hover:bg-slate-50 cursor-pointer transition ${expandedRow === q.id ? 'bg-slate-50' : ''}`}
@@ -210,10 +317,15 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
                                                     <div className="text-sm text-slate-800 font-medium leading-relaxed">
                                                         <LatexRenderer content={q.questionText}/>
                                                     </div>
-                                                    <ContentRenderer content={q.questionImage || ''} />
+                                                    
+                                                    {validQImage && (
+                                                        <div className="mt-4 mb-2 max-h-[300px] border border-slate-200 rounded-lg bg-slate-50 overflow-auto custom-scrollbar flex justify-center p-2">
+                                                            <img src={validQImage} className="max-w-full h-auto object-contain" alt="Question Image"/>
+                                                        </div>
+                                                    )}
                                                 </div>
 
-                                                {/* Answer Comparison */}
+                                                {/* Answer Comparison Boxes */}
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     <div className={`p-4 rounded-lg border ${q.status === 'CORRECT' ? 'bg-green-50 border-green-200' : q.status === 'WRONG' ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
                                                         <p className="text-xs font-bold text-slate-500 uppercase mb-1">Your Answer</p>
@@ -225,12 +337,20 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
                                                     </div>
                                                 </div>
 
+                                                {/* FULL OPTIONS DISPLAY */}
+                                                {q.options && (
+                                                    <div className="mt-6 border-t border-slate-100 pt-4">
+                                                        <h4 className="text-xs font-black text-slate-400 uppercase mb-2">Detailed Options</h4>
+                                                        <OptionsDisplay q={q} selectedOption={q.selectedOption} />
+                                                    </div>
+                                                )}
+
                                             </div>
                                         </td>
                                     </tr>
                                 )}
                             </React.Fragment>
-                        ))}
+                        )})}
                     </tbody>
                 </table>
             </div>
