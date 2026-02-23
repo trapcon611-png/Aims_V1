@@ -1,10 +1,18 @@
 version: '3.8'
 
+# Professional logging configuration to prevent disk bloat
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
-  # 1. PostgreSQL Database
+  # 1. PostgreSQL Database Service
   postgres:
     image: postgres:15-alpine
     container_name: aims_postgres
+    logging: *default-logging
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -15,16 +23,17 @@ services:
       - aims_pgdata:/var/lib/postgresql/data
     restart: unless-stopped
 
-  # 2. NestJS Backend
+  # 2. NestJS Backend Service
   aims_backend:
     build:
       context: ./aims_backend
       dockerfile: Dockerfile
     container_name: aims_backend
+    logging: *default-logging
     ports:
       - "3001:3001"
     environment:
-      # Connects to the postgres container internally
+      # Connects to the postgres container internally via Docker network
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/aims_db?schema=public
       - JWT_SECRET=super_secret_jwt_key_aims_2025
       - VAPID_PUBLIC_KEY=BPIOFqW5EdW7LL-eYMHMdZ_1g0hdcgM093hpYAiqDL9jFyFoOI4gLT4Wu3zwgaVJBpZ9EufGagusvdL52CGL2lA
@@ -34,19 +43,20 @@ services:
       - postgres
     restart: unless-stopped
 
-  # 3. Next.js Frontend
+  # 3. Next.js Frontend Service
   aims_frontend:
     build:
       context: ./aims_institute_app
       dockerfile: Dockerfile
       args:
-        # VERY IMPORTANT: Bakes the new VPS IP into the React static files during build
+        # Bakes the VPS IP into the React static files during build time
         - NEXT_PUBLIC_API_URL=http://76.13.247.225:3001
     container_name: aims_frontend
+    logging: *default-logging
     ports:
       - "3000:3000"
     environment:
-      # Ensures the server-side Next.js processes also know the new IP
+      # Environment variable for server-side operations
       - NEXT_PUBLIC_API_URL=http://76.13.247.225:3001
     depends_on:
       - aims_backend
