@@ -16,8 +16,8 @@ export const metadata: Metadata = {
   title: "AIMS Institute Portal",
   description: "Academic ERP and Examination Platform",
   icons: {
-    icon: '/logo(3).jpg', // Sets your logo in the browser tab
-    apple: '/logo(3).jpg', // Sets your logo if a student saves the site to their iPhone home screen
+    icon: '/logo-v2.jpg', // Sets your logo in the browser tab
+    apple: '/logo-v2.jpg', // Sets your logo if a student saves the site to their iPhone home screen
   },
 };
 
