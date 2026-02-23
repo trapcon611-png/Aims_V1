@@ -1,67 +1,56 @@
 version: '3.8'
 
 services:
-  # 1. Database Service (Postgres)
+  # 1. PostgreSQL Database
   postgres:
     image: postgres:15-alpine
-    container_name: aims_db_container
+    container_name: aims_postgres
     environment:
-      POSTGRES_USER: aims_manual
-      POSTGRES_PASSWORD: Sameer
-      POSTGRES_DB: aims_manual
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: aims_db
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: always
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U aims_manual -d aims_manual"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      - aims_pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
 
-  # 2. Backend Service (NestJS)
-  backend:
-    container_name: aims_backend_container
+  # 2. NestJS Backend
+  aims_backend:
     build:
       context: ./aims_backend
       dockerfile: Dockerfile
+    container_name: aims_backend
     ports:
       - "3001:3001"
     environment:
-      TZ: "Asia/Kolkata"
-      DATABASE_URL: "postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public"
-      PORT: 3001
-      # VAPID Keys for Push Notifications
-      VAPID_PUBLIC_KEY: "BPIOFqW5EdW7LL-eYMHMdZ_1g0hdcgM093hpYAiqDL9jFyFoOI4gLT4Wu3zwgaVJBpZ9EufGagusvdL52CGL2lA"
-      VAPID_PRIVATE_KEY: "yqOdQrSnKGOmQLRwtJvNEm0zi1AlYByvYDUBxIslr3U"
-      VAPID_SUBJECT: "mailto:aimsinstituteno1@gmail.com"
+      # Connects to the postgres container internally
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/aims_db?schema=public
+      - JWT_SECRET=super_secret_jwt_key_aims_2025
+      - VAPID_PUBLIC_KEY=BPIOFqW5EdW7LL-eYMHMdZ_1g0hdcgM093hpYAiqDL9jFyFoOI4gLT4Wu3zwgaVJBpZ9EufGagusvdL52CGL2lA
+      - VAPID_PRIVATE_KEY=yqOdQrSnKGOmQLRwtJvNEm0zi1AlYByvYDUBxIslr3U
+      - AI_API_URL=https://prishaa-question-paper.hf.space
     depends_on:
-      postgres:
-        condition: service_healthy
-    restart: always
+      - postgres
+    restart: unless-stopped
 
-  # 3. Frontend App Service (Next.js)
-  frontend:
-    container_name: aims_frontend_container
+  # 3. Next.js Frontend
+  aims_frontend:
     build:
       context: ./aims_institute_app
       dockerfile: Dockerfile
       args:
-        # ENSURE THIS IP MATCHES YOUR VPS IP
-        NEXT_PUBLIC_API_URL: "http://147.93.110.78:3001"
+        # VERY IMPORTANT: Bakes the new VPS IP into the React static files during build
+        - NEXT_PUBLIC_API_URL=http://76.13.247.225:3001
+    container_name: aims_frontend
     ports:
       - "3000:3000"
     environment:
-      # Prisma on frontend needs DB URL for build step generation
-      DATABASE_URL: "postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public"
-      NEXT_PUBLIC_API_URL: "http://147.93.110.78:3001"
+      # Ensures the server-side Next.js processes also know the new IP
+      - NEXT_PUBLIC_API_URL=http://76.13.247.225:3001
     depends_on:
-      postgres:
-        condition: service_healthy
-      backend:
-        condition: service_started
-    restart: always
+      - aims_backend
+    restart: unless-stopped
 
 volumes:
-  postgres_data:
+  aims_pgdata:

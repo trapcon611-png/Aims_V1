@@ -10,7 +10,10 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
 
   // 2. Enable CORS (So your Frontend can talk to Backend)
-  app.enableCors();
+  app.enableCors({
+  origin: ['http://76.13.247.225:3000'],
+  credentials: true,
+});
 
   // 3. Setup Swagger (The API Documentation)
   const config = new DocumentBuilder()

@@ -109,7 +109,7 @@ export default function StudentPage() {
         .then(subscription => {
           if (subscription) {
             // Send subscription to backend to link with User
-            fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/student/subscribe`, {
+            fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://76.13.247.225:3001'}/student/subscribe`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
               body: JSON.stringify(subscription)
