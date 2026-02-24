@@ -42,6 +42,8 @@ services:
     depends_on:
       - postgres
     restart: unless-stopped
+    volumes:
+      - ./backups:/app/backups
 
   # 3. Next.js Frontend Service
   aims_frontend:
@@ -64,3 +66,4 @@ services:
 
 volumes:
   aims_pgdata:
+  
