@@ -15,6 +15,8 @@ RUN npm install
 RUN npm install prisma@5.19.1 @prisma/client@5.19.1
 # NEW: Install web-push for Notifications (Critical for new features)
 RUN npm install web-push @types/web-push
+# NEW: Explicitly install Razorpay as a safety net
+RUN npm install razorpay
 
 # 6. Copy source code
 COPY . .
