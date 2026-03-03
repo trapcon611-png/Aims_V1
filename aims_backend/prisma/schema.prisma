@@ -252,14 +252,18 @@ model Attendance {
 // --- 5. FINANCE ---
 
 model FeeRecord {
-  id            String         @id @default(uuid())
-  studentId     String
-  student       StudentProfile @relation(fields: [studentId], references: [id])
-  amount        Float
-  date          DateTime       @default(now())
-  remarks       String?
-  transactionId String?        
-  paymentMode   String?        @default("CASH")
+  id              String         @id @default(uuid())
+  studentId       String
+  student         StudentProfile @relation(fields: [studentId], references: [id])
+  amount          Float
+  date            DateTime       @default(now())
+  remarks         String?
+  transactionId   String?        // We will store razorpayPaymentId here!
+  paymentMode     String?        @default("CASH")
+  
+  // --- NEW COLUMNS FOR RAZORPAY & INVOICES ---
+  receiptNumber   String?        @unique
+  razorpayOrderId String?
 }
 
 model Expense {

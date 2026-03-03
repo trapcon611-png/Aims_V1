@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://76.13.247.225:3001';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export const parentApi = {
   getToken() {
@@ -41,7 +41,6 @@ export const parentApi = {
       } catch(e) { return []; }
   },
 
-  // --- ADDED THIS MISSING METHOD ---
   async getNotices(token: string) {
       try {
         const res = await fetch(`${API_URL}/parent/notices`, {
@@ -50,5 +49,41 @@ export const parentApi = {
         if(!res.ok) return [];
         return await res.json();
       } catch(e) { return []; }
+  },
+
+  // --- NEW: RAZORPAY PAYMENT METHODS ---
+
+  async createPaymentOrder(token: string, amount: number, receiptId: string) {
+    const res = await fetch(`${API_URL}/payment/create-order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ amount, receiptId }),
+    });
+    if (!res.ok) throw new Error('Failed to create order');
+    return await res.json();
+  },
+
+  async verifyPayment(token: string, paymentData: any) {
+    const res = await fetch(`${API_URL}/payment/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify(paymentData),
+    });
+    if (!res.ok) throw new Error('Payment verification failed');
+    return await res.json();
+  },
+
+  async recordFeePayment(token: string, data: any) {
+    const res = await fetch(`${API_URL}/finance/collect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({
+        ...data,
+        paymentMode: 'RAZORPAY',
+        remarks: 'Paid via Parent Portal (Razorpay)',
+      }),
+    });
+    if (!res.ok) throw new Error('Failed to record fee');
+    return await res.json();
   }
 };

@@ -31,7 +31,7 @@ export class FinanceService {
 
       return {
         studentId: child.id,     // Used for Fees
-        userId: child.userId,    // <--- NEW: Used for Exam Results
+        userId: child.userId,    // Used for Exam Results
         name: child.fullName,
         batch: child.batch?.name || "Unassigned",
         totalFees: child.feeAgreed,
@@ -104,12 +104,15 @@ export class FinanceService {
         remarks: data.remarks || "Office Payment",
         paymentMode: data.paymentMode || "CASH",
         transactionId: data.transactionId || `TXN-${Date.now()}`,
+        // --- NEW RAZORPAY & RECEIPT LOGIC ---
+        receiptNumber: `REC-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        razorpayOrderId: data.razorpayOrderId,
         date: new Date()
       }
     });
   }
 
-  // --- NEW: GET ALL TRANSACTIONS FOR DIRECTOR ---
+  // --- GET ALL TRANSACTIONS FOR DIRECTOR ---
   async getAllTransactions() {
     const records = await this.prisma.feeRecord.findMany({
       include: {
@@ -137,7 +140,9 @@ export class FinanceService {
       date: r.date,
       remarks: r.remarks,
       paymentMode: r.paymentMode,
-      transactionId: r.transactionId
+      transactionId: r.transactionId,
+      receiptNumber: r.receiptNumber, // Added so invoice works!
+      razorpayOrderId: r.razorpayOrderId
     }));
   }
 }

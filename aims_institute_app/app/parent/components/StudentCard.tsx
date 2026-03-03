@@ -26,6 +26,9 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
   const [activeTab, setActiveTab] = useState<'fees' | 'invoices' | 'academics' | 'notices'>('fees');
   const [results, setResults] = useState<ExamResult[]>([]);
   const [loadingResults, setLoadingResults] = useState(false);
+  
+  // Loading State for Payments
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
       if (activeTab === 'academics') {
@@ -56,7 +59,89 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
   };
   
   const currentPayable = calculateCurrentPayable();
-  const handlePayment = (amount: number, studentId: string) => { alert(`[MOCK PAYMENT GATEWAY]\n\nInitiating Razorpay for Amount: ₹${amount.toLocaleString()}\nStudent ID: ${studentId}`); };
+
+  // --- ACTUAL RAZORPAY LOGIC ---
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  const handlePayment = async (amount: number, studentId: string) => {
+    try {
+      setIsProcessing(true);
+
+      // 1. Load Script
+      const isLoaded = await loadRazorpayScript();
+      if (!isLoaded) {
+        alert("Razorpay failed to load. Please check your internet connection.");
+        setIsProcessing(false);
+        return;
+      }
+
+      // 2. Create Order
+      const order = await parentApi.createPaymentOrder(token, amount, `rcpt_${studentId}`);
+
+      // 3. Configure Razorpay Window
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL 
+        ? process.env.NEXT_PUBLIC_API_URL.replace(':3001', ':3000') // Switch backend port to frontend port
+        : 'http://localhost:3000';
+
+      // 3. Configure Razorpay Window
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        amount: order.amount,
+        currency: "INR",
+        name: "AIMS Institute",
+        description: `Fee Payment for ${child.name}`,
+        image: `${baseUrl}/logo.png`, // Absolutely resolved URL
+        order_id: order.id,
+        handler: async function (response: any) {
+          try {
+            // Verify and Save to DB
+            await parentApi.verifyPayment(token, {
+              razorpayOrderId: response.razorpay_order_id,
+              razorpayPaymentId: response.razorpay_payment_id,
+              signature: response.razorpay_signature
+            });
+
+            await parentApi.recordFeePayment(token, {
+              studentId: studentId,
+              amount: amount,
+              transactionId: response.razorpay_payment_id,
+              razorpayOrderId: response.razorpay_order_id
+            });
+
+            alert("Payment Successful! Receipt generated.");
+            window.location.reload(); // Refresh the dashboard to show updated dues
+          } catch (err) {
+            alert("Payment verification failed. Please contact admin.");
+          }
+        },
+        prefill: {
+          name: child.name,
+        },
+        theme: {
+          color: "#9333ea", // Matches your purple theme!
+        },
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.on('payment.failed', function (response: any) {
+        alert(`Payment Failed: ${response.error.description}`);
+      });
+      rzp.open();
+    } catch (error) {
+      console.error(error);
+      alert("Something went wrong initiating payment.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
   
   const getInstallmentStatus = (dueDateStr: string, index: number, instAmount: number) => { 
     const paid = child.paidFees; let cumulativeBefore = 0; 
@@ -96,7 +181,19 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                 <div className="p-8 rounded-3xl text-white shadow-2xl relative overflow-hidden bg-linear-to-br from-purple-600 to-indigo-700">
                    <div className="flex justify-between items-start mb-8"><div><p className="text-purple-200 text-xs font-bold uppercase tracking-widest mb-1">Active Installment</p><p className="text-4xl font-black tracking-tight">₹{currentPayable.toLocaleString()}</p></div><div className="p-3 bg-white/10 rounded-xl backdrop-blur-md"><CreditCard className="text-white" size={24}/></div></div>
-                   {currentPayable > 0 ? (<button onClick={() => handlePayment(currentPayable, child.studentId)} className="w-full bg-white text-slate-900 py-4 rounded-xl font-bold text-sm hover:scale-[1.02] transition-transform flex items-center justify-center gap-2 shadow-xl"><Zap size={16} className="fill-slate-900"/> Pay Now</button>) : (<div className="w-full bg-emerald-500/20 text-emerald-100 py-3 rounded-xl font-bold text-sm text-center border border-emerald-500/30">Fees Fully Paid</div>)}
+                   
+                   {currentPayable > 0 ? (
+                     <button 
+                       onClick={() => handlePayment(currentPayable, child.studentId)} 
+                       disabled={isProcessing}
+                       className="w-full bg-white text-slate-900 py-4 rounded-xl font-bold text-sm hover:scale-[1.02] transition-transform flex items-center justify-center gap-2 shadow-xl disabled:opacity-70 disabled:cursor-not-allowed"
+                     >
+                       {isProcessing ? <Loader2 size={16} className="animate-spin text-slate-900" /> : <Zap size={16} className="fill-slate-900"/>}
+                       <span>{isProcessing ? 'Processing...' : 'Pay Now'}</span>
+                     </button>
+                    ) : (
+                      <div className="w-full bg-emerald-500/20 text-emerald-100 py-3 rounded-xl font-bold text-sm text-center border border-emerald-500/30">Fees Fully Paid</div>
+                    )}
                 </div>
                 <div className="space-y-4"><div className={`p-5 rounded-2xl border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}><p className={`text-xs font-bold ${labelColor} uppercase tracking-widest mb-1`}>Total Agreed Fee</p><p className="text-2xl font-black">₹{child.totalFees.toLocaleString()}</p></div><div className={`p-5 rounded-2xl border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}><p className="text-xs font-bold text-emerald-500 uppercase tracking-widest mb-1">Paid So Far</p><p className="text-2xl font-black text-emerald-500">₹{child.paidFees.toLocaleString()}</p></div></div>
               </div>

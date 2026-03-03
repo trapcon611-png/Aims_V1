@@ -13,6 +13,7 @@ import { AdmissionsModule } from './admissions/admissions.module';
 import { ErpModule } from './erp/erp.module';
 import { StudentModule } from './student/student.module';
 import { ParentModule } from './parent/parent.module'; // NEW IMPORT
+import { PaymentModule } from './payment/payment.module'; // <--- ADD THIS
 
 @Module({
   imports: [
@@ -27,7 +28,8 @@ import { ParentModule } from './parent/parent.module'; // NEW IMPORT
     AdmissionsModule,
     ErpModule,
     StudentModule,
-    ParentModule, // REGISTERED
+    ParentModule,
+    PaymentModule, // REGISTERED
   ],
   controllers: [AppController],
   providers: [AppService],

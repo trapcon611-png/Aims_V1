@@ -17,13 +17,19 @@ export class CollectFeeDto {
   @IsOptional()
   remarks?: string;
 
-  @ApiProperty({ example: 'CASH', description: 'Payment Mode (e.g. CASH, UPI)', required: false })
+  @ApiProperty({ example: 'CASH', description: 'Payment Mode (e.g. CASH, UPI, RAZORPAY)', required: false })
   @IsString()
   @IsOptional()
   paymentMode?: string;
 
-  @ApiProperty({ example: 'TXN-12345', description: 'Transaction Reference ID', required: false })
+  @ApiProperty({ example: 'TXN-12345', description: 'Transaction Reference ID (or Razorpay Payment ID)', required: false })
   @IsString()
   @IsOptional()
   transactionId?: string;
+
+  // --- NEW FIELD FOR RAZORPAY ---
+  @ApiProperty({ example: 'order_abc123', description: 'Razorpay Order ID', required: false })
+  @IsString()
+  @IsOptional()
+  razorpayOrderId?: string;
 }
