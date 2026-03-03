@@ -31,6 +31,10 @@ COPY . .
 # --- BUILD ARGUMENTS ---
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+
+# NEW: Allow the Razorpay Key to be baked into the Next.js static build
+ARG NEXT_PUBLIC_RAZORPAY_KEY_ID
+ENV NEXT_PUBLIC_RAZORPAY_KEY_ID=${NEXT_PUBLIC_RAZORPAY_KEY_ID}
 # -----------------------
 
 # 10. Build the Next.js App

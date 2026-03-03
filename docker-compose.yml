@@ -39,6 +39,9 @@ services:
       - VAPID_PUBLIC_KEY=BPIOFqW5EdW7LL-eYMHMdZ_1g0hdcgM093hpYAiqDL9jFyFoOI4gLT4Wu3zwgaVJBpZ9EufGagusvdL52CGL2lA
       - VAPID_PRIVATE_KEY=yqOdQrSnKGOmQLRwtJvNEm0zi1AlYByvYDUBxIslr3U
       - AI_API_URL=https://prishaa-question-paper.hf.space
+      # --- NEW RAZORPAY KEYS FOR BACKEND ---
+      - RAZORPAY_KEY_ID=rzp_test_your_key_id_here
+      - RAZORPAY_KEY_SECRET=your_secret_key_here
     depends_on:
       - postgres
     restart: unless-stopped
@@ -53,6 +56,8 @@ services:
       args:
         # Bakes the VPS IP into the React static files during build time
         - NEXT_PUBLIC_API_URL=http://76.13.247.225:3001
+        # --- NEW RAZORPAY KEY FOR FRONTEND BUILD ---
+        - NEXT_PUBLIC_RAZORPAY_KEY_ID=rzp_test_your_key_id_here
     container_name: aims_frontend
     logging: *default-logging
     ports:
@@ -66,4 +71,3 @@ services:
 
 volumes:
   aims_pgdata:
-  
