@@ -1,6 +1,6 @@
 'use client';
-import React, { useMemo } from 'react';
-import { Zap, GraduationCap, Award, Clock, ChevronUp, ArrowRight, BellRing, Quote, CheckCircle, Lock } from 'lucide-react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { Zap, Award, Clock, ChevronUp, ArrowRight, BellRing, Quote, CheckCircle, Lock, Megaphone, GraduationCap } from 'lucide-react';
 import Link from 'next/link';
 
 // --- MOTIVATIONAL QUOTES ---
@@ -27,6 +27,14 @@ export default function DashboardHome({
   
   const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden transition-all duration-300 hover:shadow-md";
 
+  // Auto-refresh the current time every minute to update exam availability dynamically
+  const [currentTime, setCurrentTime] = useState<number>(Date.now());
+
+  useEffect(() => {
+      const timer = setInterval(() => setCurrentTime(Date.now()), 60000);
+      return () => clearInterval(timer);
+  }, []);
+
   const todayQuote = useMemo(() => {
       const dayIndex = new Date().getDay();
       return QUOTES[dayIndex];
@@ -36,6 +44,12 @@ export default function DashboardHome({
       if (!notices || notices.length === 0) return null;
       const todayStr = new Date().toISOString().split('T')[0];
       return notices.find((n: any) => n.createdAt && n.createdAt.startsWith(todayStr));
+  }, [notices]);
+
+  // Extract the most recent message for the right column
+  const latestMessage = useMemo(() => {
+      if (!notices || notices.length === 0) return null;
+      return [...notices].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
   }, [notices]);
 
   // Safe Name Access
@@ -49,12 +63,13 @@ export default function DashboardHome({
           <div className="absolute top-0 right-0 p-8 opacity-10">
              <GraduationCap size={150}/>
           </div>
+          
           <div className="relative z-10">
              <div className="flex items-center gap-2 mb-3">
                  <Zap size={20} className="text-yellow-400 fill-yellow-400"/>
                  <p className="text-blue-100 font-bold text-xs uppercase tracking-wider">Daily Motivation</p>
              </div>
-             <h2 className="text-2xl md:text-3xl font-black mb-3 italic leading-tight">
+             <h2 className="text-2xl md:text-3xl font-black mb-3 italic leading-tight max-w-[80%] drop-shadow-md">
                  "{todayQuote}"
              </h2>
              <p className="text-blue-200 text-xs font-medium flex items-center gap-2">
@@ -123,24 +138,40 @@ export default function DashboardHome({
                    ) : (
                       exams.slice(0, 3).map((exam: any) => {
                           const isAttempted = attemptedExamIds.includes(exam.id);
-                          const isFuture = new Date(exam.scheduledAt).getTime() > Date.now();
-                          const isLocked = isAttempted || isFuture;
+                          
+                          // TIMELINE LOGIC
+                          const startTime = new Date(exam.scheduledAt).getTime();
+                          const endTime = startTime + (exam.durationMin * 60 * 1000); // Start + Duration in ms
+                          
+                          const isFuture = currentTime < startTime;
+                          const isPast = currentTime > endTime;
+                          const isLive = currentTime >= startTime && currentTime <= endTime;
+                          
+                          const isLocked = isAttempted || isFuture || isPast;
 
                           return (
-                              <div key={exam.id} className={`p-4 flex items-center justify-between transition ${isAttempted ? 'bg-slate-50 opacity-60' : 'hover:bg-slate-50'}`}>
+                              <div key={exam.id} className={`p-4 flex items-center justify-between transition ${isAttempted || isPast ? 'bg-slate-50 opacity-60' : 'hover:bg-slate-50'}`}>
                                   <div className="flex items-center gap-4">
-                                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold ${isAttempted ? 'bg-slate-200 text-slate-500' : 'bg-blue-50 text-blue-600'}`}>
+                                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold ${isAttempted || isPast ? 'bg-slate-200 text-slate-500' : 'bg-blue-50 text-blue-600'}`}>
                                           {isAttempted ? <CheckCircle size={20}/> : (exam.subject?.charAt(0) || 'E')}
                                       </div>
                                       <div>
-                                          <h4 className="font-bold text-slate-800 text-sm">{exam.title}</h4>
+                                          <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                              {exam.title}
+                                              {isLive && !isAttempted && (
+                                                  <span className="flex items-center gap-1 text-[10px] text-red-500 font-bold bg-red-50 px-1.5 py-0.5 rounded uppercase animate-pulse">
+                                                      <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span> Live
+                                                  </span>
+                                              )}
+                                          </h4>
                                           <p className="text-xs text-slate-500">{exam.subject || 'General'} • {exam.durationMin} mins</p>
                                       </div>
                                   </div>
                                   
                                   {isLocked ? (
                                       <button disabled className="px-4 py-2 bg-slate-100 text-slate-400 text-xs font-bold rounded-lg cursor-not-allowed flex items-center gap-2">
-                                          {isAttempted ? 'Attempted' : 'Upcoming'} {isAttempted ? <CheckCircle size={14}/> : <Lock size={14}/>}
+                                          {isAttempted ? 'Attempted' : isPast ? 'Ended' : 'Upcoming'} 
+                                          {isAttempted ? <CheckCircle size={14}/> : <Lock size={14}/>}
                                       </button>
                                   ) : (
                                       <Link href={`/student/exam/${exam.id}`}>
@@ -157,15 +188,39 @@ export default function DashboardHome({
              </div>
           </div>
           
-          {/* RIGHT COL: PERFORMANCE MINI */}
+          {/* RIGHT COL: LATEST MESSAGE */}
           <div className="hidden lg:block space-y-6">
-               <div className={glassPanel + " h-full flex flex-col p-6 items-center justify-center text-center space-y-4"}>
-                   <div className="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center">
-                       <Clock size={32} className="text-slate-300"/>
+               <div className={glassPanel + " h-full flex flex-col"}>
+                   <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                       <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                           <Megaphone size={18} className="text-orange-500" />
+                           Institution Message
+                       </h3>
                    </div>
-                   <div>
-                       <h4 className="font-bold text-slate-800">Study Time</h4>
-                       <p className="text-xs text-slate-400 mt-1">Coming Soon</p>
+                   <div className="p-6 flex-1 flex flex-col justify-center">
+                       {latestMessage ? (
+                           <div className="flex flex-col h-full">
+                               <div className="mb-4 flex items-center justify-between">
+                                   <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-1 rounded uppercase font-bold tracking-wider">Latest</span>
+                                   <span className="text-[10px] text-slate-400 font-bold">{new Date(latestMessage.createdAt).toLocaleDateString()}</span>
+                               </div>
+                               <h4 className="font-bold text-slate-800 text-base mb-2">{latestMessage.title}</h4>
+                               <p className="text-sm text-slate-600 line-clamp-6 leading-relaxed mb-4">{latestMessage.content}</p>
+                               <div className="mt-auto pt-4 border-t border-slate-100">
+                                   <button 
+                                       onClick={() => setActiveTab('resources')} 
+                                       className="w-full py-2 bg-white border border-slate-200 hover:border-orange-300 hover:text-orange-600 text-slate-600 text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm active:scale-95"
+                                   >
+                                       View Notice Board <ArrowRight size={14}/>
+                                   </button>
+                               </div>
+                           </div>
+                       ) : (
+                           <div className="flex flex-col items-center justify-center h-full text-slate-400 opacity-60">
+                               <Megaphone size={40} className="mb-3"/>
+                               <p className="text-sm font-medium">No recent messages.</p>
+                           </div>
+                       )}
                    </div>
                </div>
           </div>

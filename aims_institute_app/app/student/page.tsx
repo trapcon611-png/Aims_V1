@@ -27,6 +27,7 @@ export default function StudentPage() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [showGreeting, setShowGreeting] = useState(false);
 
   // Data States
   const [profile, setProfile] = useState<any>(null);
@@ -49,6 +50,15 @@ export default function StudentPage() {
     }
     setLoading(false);
   }, []);
+
+  // Show Greeting once when user is loaded
+  useEffect(() => {
+    if (user) {
+        setShowGreeting(true);
+        const timer = setTimeout(() => setShowGreeting(false), 5000);
+        return () => clearTimeout(timer);
+    }
+  }, [user]);
 
   // 2. Data Fetching Logic
   const refreshData = useCallback(async () => {
@@ -109,7 +119,7 @@ export default function StudentPage() {
         .then(subscription => {
           if (subscription) {
             // Send subscription to backend to link with User
-            fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://76.13.247.225:3001'}/student/subscribe`, {
+            fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/student/subscribe`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
               body: JSON.stringify(subscription)
@@ -141,7 +151,6 @@ export default function StudentPage() {
   if (!user) return <StudentLogin onLogin={handleLogin} />;
 
   // --- SAFE TIMEZONE WRAPPER ---
-  // Fixes the issue where Linux Postgres drops the 'Z' causing local-time misinterpretation
   const safeExams = exams.map(e => {
     let safeDateStr = e.scheduledAt;
     if (typeof safeDateStr === 'string' && !safeDateStr.endsWith('Z') && !safeDateStr.includes('+') && safeDateStr.includes('T')) {
@@ -180,48 +189,52 @@ export default function StudentPage() {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
 
-      {/* SIDEBAR */}
-      <aside className={`fixed inset-y-0 left-0 z-50 bg-slate-900 border-r border-slate-800 transform transition-all duration-300 ease-in-out lg:static lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} ${isSidebarCollapsed ? 'w-20' : 'w-64'}`}>
-        <div className="h-full flex flex-col p-4">
+      {/* SIDEBAR - Calmer, Modern Deep Slate styling */}
+      <aside className={`fixed inset-y-0 left-0 z-50 bg-[#0B1121] border-r border-slate-800/80 transform transition-all duration-300 ease-in-out lg:static lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} ${isSidebarCollapsed ? 'w-24' : 'w-64'}`}>
+        <div className="h-full flex flex-col p-4 relative">
           
-          <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} mb-8`}>
-             {!isSidebarCollapsed && (
-                <div className="flex items-center gap-3">
-                   <div className="relative w-9 h-9 bg-white rounded-full flex items-center justify-center p-2 shadow-lg shadow-blue-900/50 ring-2 ring-blue-500/30">
-                        <Image src={LOGO_PATH} alt="Logo" fill className="object-contain" unoptimized />
+          <div className="flex items-center justify-between mb-8">
+            <div className={`flex items-center gap-3 ${isSidebarCollapsed ? 'mx-auto' : ''}`}>
+               <div className="relative w-10 h-10 bg-white rounded-full flex items-center justify-center p-2 shadow-lg shadow-blue-900/20 shrink-0">
+                    <Image src={LOGO_PATH} alt="Logo" fill className="object-contain" unoptimized />
+               </div>
+               {!isSidebarCollapsed && (
+                   <div className="min-w-0">
+                       <h1 className="text-lg font-black text-white tracking-tight leading-none truncate">AIMS</h1>
+                       <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mt-0.5 truncate">Student</p>
                    </div>
-                   <div>
-                       <h1 className="text-lg font-black text-white tracking-tight leading-none">AIMS</h1>
-                       <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mt-0.5">Student</p>
-                   </div>
-                </div>
-             )}
-             {isSidebarCollapsed && (
-                 <div className="relative w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg shadow-white/5 mb-4">
-                     <Image src={LOGO_PATH} alt="Logo" width={28} height={28} className="object-contain" unoptimized />
-                 </div>
-             )}
-             <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className={`hidden lg:flex p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 transition-colors ${isSidebarCollapsed ? 'mx-auto' : ''}`}>
-                {isSidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-             </button>
+               )}
+            </div>
           </div>
 
-          <nav className="flex-1 space-y-2">
+          {/* Collapse Toggle Button - Always Visible at bottom right of sidebar area on Desktop */}
+           <button 
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
+              className={`hidden lg:flex absolute top-5 -right-3 p-1.5 bg-slate-800 rounded-full border border-slate-700 text-slate-400 hover:text-white transition-colors z-10 shadow-md`}
+           >
+              {isSidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+           </button>
+
+          <nav className="flex-1 space-y-2 mt-4">
             {sidebarItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => { setActiveTab(item.id); setIsSidebarOpen(false); }}
-                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl font-medium text-sm transition-all duration-200 group relative ${activeTab === item.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30' : 'text-slate-400 hover:bg-slate-800 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`}
+                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 group relative 
+                  ${activeTab === item.id 
+                    ? 'bg-blue-500/10 text-blue-400 font-bold border border-blue-500/20' 
+                    : 'text-slate-400 font-medium hover:bg-white/5 hover:text-slate-200'} 
+                  ${isSidebarCollapsed ? 'justify-center' : ''}`}
                 title={isSidebarCollapsed ? item.label : undefined}
               >
-                <item.icon size={20} className={activeTab === item.id ? 'text-white' : 'text-slate-400 group-hover:text-white transition-colors'} />
+                <item.icon size={20} className={activeTab === item.id ? 'text-blue-400' : 'text-slate-400 group-hover:text-slate-200 transition-colors'} />
                 {!isSidebarCollapsed && <span>{item.label}</span>}
               </button>
             ))}
           </nav>
 
-          <div className={`pt-6 border-t border-slate-800 ${isSidebarCollapsed ? 'flex justify-center' : ''}`}>
-             <button onClick={handleLogout} className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm text-red-400 hover:bg-red-950/30 transition-colors ${isSidebarCollapsed ? 'justify-center w-auto' : 'w-full'}`}>
+          <div className={`pt-6 border-t border-slate-800/80 ${isSidebarCollapsed ? 'flex justify-center' : ''}`}>
+             <button onClick={handleLogout} className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors ${isSidebarCollapsed ? 'justify-center w-auto' : 'w-full'}`}>
                 <LogOut size={20}/> 
                 {!isSidebarCollapsed && "Logout"}
              </button>
@@ -231,27 +244,48 @@ export default function StudentPage() {
 
       {/* MAIN VIEW */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50 relative">
-        <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-30 sticky top-0">
+        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-30 sticky top-0">
           <div className="flex items-center gap-4">
              <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"><Menu size={20}/></button>
-             <h2 className="font-black text-slate-800 text-lg uppercase tracking-tight hidden sm:block">
+             <h2 className="font-black text-slate-800 text-xl uppercase tracking-tight hidden sm:block">
                 {sidebarItems.find(i => i.id === activeTab)?.label}
              </h2>
           </div>
-          <div className="flex items-center gap-6">
-             <button className="p-2 text-slate-400 hover:text-blue-600 transition-colors relative group">
-                <Bell size={20}/>
-                {notices.length > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white"></span>}
+          
+          {/* UPDATED: Interactive Right Actions */}
+          <div className="flex items-center gap-4 md:gap-6">
+             
+             {/* 3D Notification Bell routing to resources */}
+             <button 
+                 onClick={() => setActiveTab('resources')}
+                 className="relative p-2.5 bg-white text-slate-500 border border-b-[3px] border-slate-200 rounded-xl hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 active:border-b active:translate-y-[2px] transition-all group"
+                 title="View Notices"
+             >
+                <Bell size={20} className="group-hover:animate-[wiggle_1s_ease-in-out_infinite]"/>
+                {notices.length > 0 && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 border-2 border-white rounded-full animate-pulse"></span>}
              </button>
-             <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
-             <div className="flex items-center gap-3">
-                 <div className="hidden md:flex flex-col items-end">
-                    <span className="text-sm font-bold text-slate-800 leading-none">{profile?.name || user?.username}</span>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{profile?.batch || 'Student'}</span>
-                 </div>
-                 <div className="w-9 h-9 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center text-blue-700 font-black shadow-sm text-sm">
-                    {user?.username?.charAt(0).toUpperCase() || 'S'}
-                 </div>
+
+             <div className="h-8 w-px bg-slate-200 hidden sm:block"></div>
+             
+             {/* 3D Profile Button with Greeting Tooltip */}
+             <div className="relative">
+                 <button className="flex items-center gap-3 bg-white px-2 py-1.5 rounded-2xl border border-b-[3px] border-slate-200 hover:bg-slate-50 hover:border-slate-300 active:border-b active:translate-y-[2px] transition-all group select-none text-left">
+                     <div className="hidden md:flex flex-col items-end px-2">
+                        <span className="text-sm font-bold text-slate-800 leading-none group-hover:text-blue-600 transition-colors">{profile?.name || user?.username}</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{profile?.batch || 'Student'}</span>
+                     </div>
+                     <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 border border-blue-400/50 flex items-center justify-center text-white font-black shadow-sm text-sm transform group-hover:scale-105 transition-transform">
+                        {user?.username?.charAt(0).toUpperCase() || 'S'}
+                     </div>
+                 </button>
+
+                 {/* Greeting Popup */}
+                 {showGreeting && (
+                     <div className="absolute top-full right-0 mt-3 bg-slate-800 text-white text-sm font-bold px-4 py-2.5 rounded-2xl shadow-xl animate-bounce whitespace-nowrap z-50 pointer-events-none">
+                         Hi, {(profile?.name || user?.username || 'Student').split(' ')[0]}! 👋
+                         <div className="absolute -top-1.5 right-6 w-3.5 h-3.5 bg-slate-800 rotate-45 rounded-sm"></div>
+                     </div>
+                 )}
              </div>
           </div>
         </header>

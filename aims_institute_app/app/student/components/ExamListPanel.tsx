@@ -1,6 +1,6 @@
 'use client';
-import React from 'react';
-import { FileText, Clock, CheckCircle, LayoutDashboard, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { FileText, Clock, CheckCircle, LayoutDashboard, ChevronRight, Lock } from 'lucide-react';
 import Link from 'next/link';
 
 interface ExamListPanelProps {
@@ -11,6 +11,13 @@ interface ExamListPanelProps {
 export default function ExamListPanel({ exams, attemptedExamIds = [] }: ExamListPanelProps) {
     const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl transition-all duration-300";
 
+    // Auto-refresh the current time every minute to update exam availability dynamically
+    const [currentTime, setCurrentTime] = useState<number>(Date.now());
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(Date.now()), 60000);
+        return () => clearInterval(timer);
+    }, []);
+
     return (
        <div className="space-y-6 max-w-5xl">
          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2"><FileText size={24} className="text-blue-600"/> Examination Hall</h2>
@@ -20,16 +27,31 @@ export default function ExamListPanel({ exams, attemptedExamIds = [] }: ExamList
              ) : (
                 exams.map((exam) => {
                     const isAttempted = attemptedExamIds.includes(exam.id);
-                    const isFuture = new Date(exam.scheduledAt).getTime() > Date.now();
-                    const isLocked = isAttempted || isFuture;
+                    
+                    // TIMELINE LOGIC
+                    const startTime = new Date(exam.scheduledAt).getTime();
+                    const endTime = startTime + (exam.durationMin * 60 * 1000); // Start + Duration in ms
+                    
+                    const isFuture = currentTime < startTime;
+                    const isPast = currentTime > endTime;
+                    const isLive = currentTime >= startTime && currentTime <= endTime;
+                    
+                    const isLocked = isAttempted || isFuture || isPast;
 
                     return (
-                        <div key={exam.id} className={`${glassPanel} p-6 flex flex-col justify-between group ${isAttempted ? 'opacity-60 bg-slate-50' : 'hover:bg-white hover:shadow-md'}`}>
+                        <div key={exam.id} className={`${glassPanel} p-6 flex flex-col justify-between group ${isAttempted || isPast ? 'opacity-60 bg-slate-50' : 'hover:bg-white hover:shadow-md'}`}>
                             <div>
                                 <div className="flex justify-between items-start mb-4">
-                                    <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider ${isAttempted ? 'bg-slate-200 text-slate-500' : 'bg-blue-50 text-blue-700'}`}>
-                                        {exam.subject || 'General'}
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider ${isAttempted || isPast ? 'bg-slate-200 text-slate-500' : 'bg-blue-50 text-blue-700'}`}>
+                                            {exam.subject || 'General'}
+                                        </span>
+                                        {isLive && !isAttempted && (
+                                            <span className="flex items-center gap-1 text-[10px] text-red-500 font-bold bg-red-50 px-2 py-1 rounded uppercase tracking-wider animate-pulse">
+                                                <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span> Live
+                                            </span>
+                                        )}
+                                    </div>
                                     <span className="text-slate-400 text-xs font-mono">{exam.durationMin} mins</span>
                                 </div>
                                 <h3 className="text-lg font-bold text-slate-900 mb-2">{exam.title}</h3>
@@ -43,6 +65,8 @@ export default function ExamListPanel({ exams, attemptedExamIds = [] }: ExamList
                                     <button disabled className="w-full py-2.5 bg-slate-200 text-slate-500 rounded-lg font-bold flex items-center justify-center gap-2 text-sm cursor-not-allowed">
                                         {isAttempted ? (
                                             <>Attempted <CheckCircle size={14}/></>
+                                        ) : isPast ? (
+                                            <>Ended <Lock size={14}/></>
                                         ) : (
                                             <>Upcoming <Clock size={14}/></>
                                         )}
