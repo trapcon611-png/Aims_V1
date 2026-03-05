@@ -8,59 +8,73 @@ export class ParentService {
   constructor(private prisma: PrismaService) {}
 
   async getParentSummary(userId: string) {
-    const parent = await this.prisma.parentProfile.findUnique({
-      where: { userId },
-      include: { 
-        children: {
-           include: {
-              user: true, 
-              batch: true,
-              feesPaid: { orderBy: { date: 'desc' } }
-           }
-        }
-      }
-    });
-
-    if (!parent) {
-        this.logger.warn(`Parent profile not found for UserID: ${userId}`);
-        return [];
-    }
-
-    return parent.children.map(child => {
-        if (!child.user) return null;
-
-        const paid = child.feesPaid ? child.feesPaid.reduce((sum, f) => sum + f.amount, 0) : 0;
-        const effectiveTotal = Math.max(0, (child.feeAgreed || 0) - (child.waiveOff || 0));
-        
-        let installments: any[] = [];
-        try {
-            if(child.installmentSchedule) {
-                installments = typeof child.installmentSchedule === 'string' 
-                    ? JSON.parse(child.installmentSchedule) 
-                    : child.installmentSchedule;
-                if (!Array.isArray(installments)) installments = [];
+    this.logger.log(`Fetching Parent Summary for user: ${userId}`);
+    
+    try {
+        const parent = await this.prisma.parentProfile.findUnique({
+          where: { userId },
+          include: { 
+            children: {
+               include: {
+                  user: true, 
+                  batch: true,
+                  feesPaid: { orderBy: { date: 'desc' } }
+               }
             }
-        } catch(e) { }
+          }
+        });
 
-        return {
-            studentId: child.user.username || 'Unknown', 
-            userId: child.user.id,
-            name: child.fullName || 'Unknown Student',
-            batch: child.batch?.name || 'Unassigned',
-            totalFees: effectiveTotal,
-            paidFees: paid,
-            pendingFees: Math.max(0, effectiveTotal - paid),
-            history: (child.feesPaid || []).map(f => ({
-                id: f.id,
-                amount: f.amount,
-                date: f.date,
-                remarks: f.remarks,
-                paymentMode: f.paymentMode,
-                transactionId: f.transactionId
-            })),
-            installments: installments
-        };
-    }).filter(Boolean);
+        if (!parent) {
+            this.logger.warn(`Parent profile not found for UserID: ${userId}`);
+            return [];
+        }
+
+        return parent.children.map(child => {
+            if (!child.user) return null;
+
+            // Safe fallbacks in case SQL dummy data bypassed Prisma's default values
+            const paid = child.feesPaid ? child.feesPaid.reduce((sum, f) => sum + (f.amount || 0), 0) : 0;
+            const feeAgreed = child.feeAgreed || 0;
+            const waiveOff = child.waiveOff || 0;
+            const effectiveTotal = Math.max(0, feeAgreed - waiveOff);
+            
+            let installments: any[] = [];
+            try {
+                if(child.installmentSchedule) {
+                    installments = typeof child.installmentSchedule === 'string' 
+                        ? JSON.parse(child.installmentSchedule) 
+                        : child.installmentSchedule;
+                    if (!Array.isArray(installments)) installments = [];
+                }
+            } catch(e) { 
+                this.logger.error(`Failed to parse installments for student ${child.id}`);
+            }
+
+            return {
+                studentId: child.user.username || 'Unknown', 
+                userId: child.user.id,
+                name: child.fullName || 'Unknown Student',
+                batch: child.batch?.name || 'Unassigned',
+                totalFees: effectiveTotal,
+                paidFees: paid,
+                pendingFees: Math.max(0, effectiveTotal - paid),
+                history: (child.feesPaid || []).map(f => ({
+                    id: f.id,
+                    amount: f.amount || 0,
+                    date: f.date || new Date(),
+                    remarks: f.remarks,
+                    paymentMode: f.paymentMode,
+                    transactionId: f.transactionId
+                })),
+                installments: installments
+            };
+        }).filter(Boolean);
+
+    } catch (error: any) {
+        // This will print the EXACT reason for the crash in your VPS console
+        this.logger.error(`CRITICAL PRISMA ERROR in getParentSummary: ${error.message}`, error.stack);
+        throw error; 
+    }
   }
 
   async getStudentAttempts(parentUserId: string, studentUserId: string) {
@@ -108,7 +122,6 @@ export class ParentService {
     });
   }
 
-  // --- NEW: PARENT PUSH SUBSCRIPTION ---
   async subscribeToPush(userId: string, subscription: any) {
       if (!subscription || !subscription.endpoint || !subscription.keys) {
           throw new BadRequestException("Invalid subscription object");
