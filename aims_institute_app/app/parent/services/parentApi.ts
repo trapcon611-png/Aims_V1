@@ -1,4 +1,18 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+// --- SMART API RESOLVER ---
+// Automatically figures out if you are on localhost, an IP, or a domain, 
+// and routes the backend call to port 3001 of that exact same host.
+const getApiUrl = () => {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+      return process.env.NEXT_PUBLIC_API_URL;
+  }
+  if (typeof window !== 'undefined') {
+      // e.g., if on http://76.13.247.225:3000, returns http://76.13.247.225:3001
+      return `${window.location.protocol}//${window.location.hostname}:3001`;
+  }
+  return 'http://localhost:3001';
+};
+
+const API_URL = getApiUrl();
 
 export const parentApi = {
   getToken() {
