@@ -14,9 +14,10 @@ services:
     container_name: aims_postgres
     logging: *default-logging
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: aims_db
+      # Updated to match the credentials from your .env files!
+      POSTGRES_USER: aims_manual
+      POSTGRES_PASSWORD: Sameer
+      POSTGRES_DB: aims_manual
     ports:
       - "5432:5432"
     volumes:
@@ -36,10 +37,8 @@ services:
     env_file:
       - ./aims_backend/.env
     environment:
-      # We ONLY override the DATABASE_URL here because Docker needs to use the internal 'postgres' network name instead of 'localhost'
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/aims_db?schema=public
-      # Notice we REMOVED the fake Razorpay keys, VAPID keys, etc. 
-      # Docker will now use your real live keys from the .env file!
+      # Overrides the 'localhost' from your .env to 'postgres' so Docker can connect internally
+      - DATABASE_URL=postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public
     depends_on:
       - postgres
     restart: unless-stopped
@@ -51,7 +50,7 @@ services:
     build:
       context: ./aims_institute_app
       dockerfile: Dockerfile
-      # Removed the fake build args so Next.js will read your real frontend .env file during the build!
+      # Next.js will naturally read your ./aims_institute_app/.env file during the build phase!
     container_name: aims_frontend
     logging: *default-logging
     ports:
