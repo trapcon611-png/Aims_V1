@@ -94,7 +94,7 @@ const DashboardHome = ({
         <div className="flex flex-col gap-10 p-6 md:p-10 max-w-7xl mx-auto">
             {/* 1. Header & Navigation */}
             <div>
-                <h1 className="text-3xl font-black text-slate-800 mb-1">Director's Overview</h1>
+                <h1 className="text-3xl font-black text-slate-800 mb-1">Overview</h1>
                 <p className="text-slate-500 text-sm mb-8">Welcome back. Here is what's happening at the institute today.</p>
                 
                 <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-4">
@@ -259,12 +259,12 @@ const DirectorLogin = ({ onUnlock }: { onUnlock: () => void }) => {
       <div className="relative z-10 w-full max-w-sm bg-gradient-to-br from-red-900 to-red-800 backdrop-blur-xl border border-red-700/50 rounded-3xl shadow-2xl p-8">
          <div className="text-center mb-6">
              <div className="relative w-20 h-20 mx-auto mb-4 bg-white rounded-full p-2 shadow-lg"><Image src={LOGO_PATH} alt="Logo" fill className="object-contain" unoptimized/></div>
-             <h3 className="text-2xl font-bold text-white">Director Console</h3>
+             <h3 className="text-2xl font-bold text-white">ERP Console</h3>
              <p className="text-red-200 text-xs mt-1 font-mono uppercase tracking-widest flex items-center justify-center gap-2"><Activity size={12} className="animate-pulse"/> System Online</p>
          </div>
          <form onSubmit={handleUnlock} className="space-y-4">
              <div className="space-y-1">
-                <label className="text-xs font-bold text-red-200 uppercase tracking-wider ml-1">Director ID</label>
+                <label className="text-xs font-bold text-red-200 uppercase tracking-wider ml-1">ERP ID</label>
                 <input className="w-full p-4 bg-red-950/30 border border-red-700/50 rounded-xl text-white placeholder:text-red-300/50 outline-none focus:ring-2 focus:ring-white/30 transition" placeholder="root_access" value={creds.id} onChange={e => setCreds({...creds, id: e.target.value})}/>
              </div>
              <div className="space-y-1">
@@ -276,7 +276,7 @@ const DirectorLogin = ({ onUnlock }: { onUnlock: () => void }) => {
          </form>
          <div className="text-center mt-6 border-t border-red-700/30 pt-4"><Link href="/" className="text-red-200 text-xs hover:text-white flex items-center justify-center gap-1 transition"><ArrowLeft size={12}/> Return to Portal Hub</Link></div>
       </div>
-      <p className="absolute bottom-4 text-[10px] text-slate-400 font-mono">SECURED CONNECTION • AIMS POWER</p>
+      <p className="absolute bottom-4 text-[10px] text-slate-400 font-mono">SECURED CONNECTION • AIMS DEVELOPERS</p>
     </div>
   );
 };
@@ -416,7 +416,7 @@ export default function DirectorPage() {
              {!isSidebarCollapsed && (
                  <div className="flex items-center gap-2">
                     <div className="relative w-8 h-8 bg-white rounded-full p-1"><Image src={LOGO_PATH} alt="Logo" fill className="object-contain" unoptimized/></div>
-                    <div><h2 className="text-white font-bold text-lg leading-none">AIMS</h2><p className="text-[10px] text-[#c1121f] font-bold uppercase">Director</p></div>
+                    <div><h2 className="text-white font-bold text-lg leading-none">AIMS</h2><p className="text-[10px] text-[#c1121f] font-bold uppercase">ERP</p></div>
                  </div>
              )}
              <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="text-slate-400 hover:text-white"><Menu size={20}/></button>
