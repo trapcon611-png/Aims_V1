@@ -21,7 +21,22 @@ import {
   Server
 } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://76.13.247.225:3001';
+// --- SMART API RESOLVER ---
+// Automatically figures out if you are on localhost, an IP, or a domain, 
+// and routes the backend call to port 3001 of that exact same host.
+const getApiUrl = () => {
+    if (process.env.NEXT_PUBLIC_API_URL) {
+        return process.env.NEXT_PUBLIC_API_URL;
+    }
+    if (typeof window !== 'undefined') {
+        // e.g., if on http://76.13.247.225:3000, returns http://76.13.247.225:3001
+        // if on https://my-aims.com, returns https://my-aims.com:3001
+        return `${window.location.protocol}//${window.location.hostname}:3001`;
+    }
+    return 'http://localhost:3001';
+};
+
+const API_URL = getApiUrl();
 
 export default function SecurityPanel() {
   const [isAuth, setIsAuth] = useState(false);
@@ -53,31 +68,48 @@ export default function SecurityPanel() {
   };
 
   const fetchData = async () => {
-    const adminsRes = await fetch(`${API_URL}/erp/security/admins`);
-    if(adminsRes.ok) setAdmins(await adminsRes.json());
+    try {
+        const adminsRes = await fetch(`${API_URL}/erp/security/admins`);
+        if(adminsRes.ok) setAdmins(await adminsRes.json());
+        else console.error(`Admins Fetch Failed: ${adminsRes.status}`);
 
-    const parentsRes = await fetch(`${API_URL}/erp/security/directory`);
-    if(parentsRes.ok) setParents(await parentsRes.json());
+        const parentsRes = await fetch(`${API_URL}/erp/security/directory`);
+        if(parentsRes.ok) setParents(await parentsRes.json());
+        else console.error(`Parents Fetch Failed: ${parentsRes.status}`);
+    } catch (error: any) {
+        console.error("Network connection to backend failed:", error);
+        alert(`Connection Error: Could not reach backend at ${API_URL}`);
+    }
   };
 
   const toggleVisibility = async (parentId: string, currentStatus: boolean) => {
-    await fetch(`${API_URL}/erp/security/mobile-visibility`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ parentId, isVisible: !currentStatus })
-    });
-    fetchData(); 
+    try {
+        const res = await fetch(`${API_URL}/erp/security/mobile-visibility`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ parentId, isVisible: !currentStatus })
+        });
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
+        fetchData(); 
+    } catch (e: any) {
+        alert(`Failed to update visibility: ${e.message}`);
+    }
   };
 
   const toggleAllVisibility = async (status: boolean) => {
     if(!confirm(`Security Alert:\n\nAre you sure you want to ${status ? 'UNMASK' : 'MASK'} all parent mobile numbers for the Director?`)) return;
 
-    await fetch(`${API_URL}/erp/security/mobile-visibility/all`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isVisible: status })
-    });
-    fetchData();
+    try {
+        const res = await fetch(`${API_URL}/erp/security/mobile-visibility/all`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isVisible: status })
+        });
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
+        fetchData();
+    } catch (e: any) {
+        alert(`Failed to execute bulk update: ${e.message}`);
+    }
   };
 
   const handleCreateAdmin = async (e: React.FormEvent) => {
@@ -88,14 +120,18 @@ export default function SecurityPanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newAdmin)
       });
+      
       if(res.ok) {
         alert("System User Created Successfully");
         setNewAdmin({ username: '', password: '', role: 'TEACHER' });
         fetchData();
       } else {
-        alert("Failed to create user. Username might exist.");
+        const errorText = await res.text();
+        alert(`Failed to create user. Server response: ${res.status}\n${errorText}`);
       }
-    } catch (e) { alert("Network Error"); }
+    } catch (e: any) { 
+        alert(`Network Error: Could not connect to ${API_URL}\nDetails: ${e.message}`); 
+    }
   };
 
   // FILTER & PAGINATION LOGIC
@@ -225,7 +261,7 @@ export default function SecurityPanel() {
             {/* LIST */}
             <div className="grid gap-4">
               {paginatedParents.length === 0 ? (
-                <div className={`text-center py-10 ${theme.subtext}`}>NO RECORDS MATCH YOUR SEARCH</div>
+                <div className={`text-center py-10 ${theme.subtext}`}>NO RECORDS MATCH YOUR SEARCH OR BACKEND UNAVAILABLE</div>
               ) : (
                 paginatedParents.map(p => (
                   <div key={p.id} className={`flex flex-col md:flex-row justify-between items-start md:items-center border ${theme.border} p-4 rounded-lg transition-colors ${theme.rowHover}`}>
