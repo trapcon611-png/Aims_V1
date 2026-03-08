@@ -9,120 +9,120 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('⚠️  STARTING DATABASE INITIALIZATION / RECOVERY...');
 
-  // --- 1. DATA RECOVERY LOGIC ---
+  // --- 1. SAFETY CHECK: DOES DATA ALREADY EXIST? ---
+  try {
+    // We check if the User table has any records. If it does, the DB is populated.
+    const userCount = await prisma.user.count();
+    
+    if (userCount > 0) {
+      console.log('\n======================================================');
+      console.log('🛑 WARNING: Tables already exist and contain data!');
+      console.log('🛑 Backup restore stopped to prevent overwriting your live database.');
+      console.log('======================================================\n');
+      return; // Stops the script completely so no data is harmed
+    }
+  } catch (e) {
+    console.log('ℹ️  Database appears to be completely empty. Proceeding...');
+  }
+
+  // --- 2. DATA RECOVERY LOGIC (ONLY RUNS IF DB IS EMPTY) ---
   const backupDir = '/app/backups';
   let backupRestored = false;
 
+  console.log(`🔍 Checking for backups inside container at: ${backupDir}`);
+
   if (fs.existsSync(backupDir)) {
-    const files = fs.readdirSync(backupDir)
+    const allFiles = fs.readdirSync(backupDir);
+
+    // Filter for valid sql files, get their modification times, and sort newest to oldest
+    const files = allFiles
       .filter(file => file.endsWith('.sql.gz') || file.endsWith('.sql'))
       .map(file => ({ name: file, time: fs.statSync(path.join(backupDir, file)).mtime.getTime() }))
-      .sort((a, b) => b.time - a.time); // Gets newest backup first
+      .sort((a, b) => b.time - a.time); // b - a ensures the Newest file is at index 0
 
     if (files.length > 0) {
-      const latestBackup = files[0].name;
-      console.log(`📦 Found recent backup: ${latestBackup}. Injecting data...`);
+      // Because we sorted b.time - a.time, index [0] is ALWAYS the most recent backup
+      const mostRecentBackup = files[0].name;
+      console.log(`📦 Found backups! Selecting the most recent one: ${mostRecentBackup}. Injecting data...`);
+      
       try {
         const rawUrl = process.env.DATABASE_URL || '';
         // CRITICAL FIX: psql crashes if '?schema=public' is attached. We MUST strip it.
         const cleanDbUrl = rawUrl.split('?')[0]; 
-        const fullPath = path.join(backupDir, latestBackup);
+        const fullPath = path.join(backupDir, mostRecentBackup);
 
-        console.log(`⏳ Running restoration command... (You will see Postgres logs below)`);
-
-        if (latestBackup.endsWith('.gz')) {
-            execSync(`gunzip -c "${fullPath}" | psql "${cleanDbUrl}"`, { stdio: 'inherit' });
+        console.log(`⏳ Running restoration command...`);
+        
+        // Added -q to suppress noisy logs, but will still throw actual fatal errors
+        if (mostRecentBackup.endsWith('.gz')) {
+            execSync(`gunzip -c "${fullPath}" | psql "${cleanDbUrl}" -q`, { stdio: 'inherit' });
         } else {
-            execSync(`psql "${cleanDbUrl}" < "${fullPath}"`, { stdio: 'inherit' });
+            execSync(`psql "${cleanDbUrl}" -q < "${fullPath}"`, { stdio: 'inherit' });
         }
-
-        console.log('✅ Database data restored from backup successfully.');
+        
+        console.log('\n✅ Database data restored from backup successfully.');
         backupRestored = true;
       } catch (error: any) {
-        console.error('❌ Failed to inject backup. Error Details:');
+        console.error('\n❌ Failed to inject backup. Error Details:');
         console.error(error.message);
         console.log('Proceeding with normal dummy seed...');
       }
     } else {
-      console.log('ℹ️ No backup files found. Proceeding with normal seed.');
+      console.log('ℹ️ No valid .sql or .sql.gz backup files found in the directory.');
     }
   } else {
-    console.log(`ℹ️ Backup directory ${backupDir} does not exist. Proceeding with normal seed.`);
+    console.log(`ℹ️ Backup directory ${backupDir} does not exist inside the container.`);
   }
 
-  // --- 2. CLEANUP (ONLY IF NO BACKUP WAS RESTORED) ---
+  // --- 3. SEED DUMMY DATA (ONLY IF DB WAS EMPTY AND NO BACKUP WAS FOUND) ---
   if (!backupRestored) {
-    console.log('🧹 No backup found. Wiping database for fresh seed...');
-    await prisma.feeRecord.deleteMany();
-    await prisma.attendance.deleteMany();
-    await prisma.answer.deleteMany();
-    await prisma.testAttempt.deleteMany();
-    await prisma.question.deleteMany();
-    await prisma.exam.deleteMany();
-    await prisma.resource.deleteMany();
-    await prisma.notice.deleteMany();
-    await prisma.studentProfile.deleteMany();
-    await prisma.parentProfile.deleteMany();
-    await prisma.questionBank.deleteMany();
-    await prisma.teacherProfile.deleteMany();
-    await prisma.batch.deleteMany();
-    await prisma.enquiry.deleteMany();
-    await prisma.expense.deleteMany();
-    await prisma.user.deleteMany();
-    console.log('🗑️  All previous data deleted.');
-  } else {
-    console.log('🛡️  Backup restored: Skipping database wipe to protect your data.');
-  }
+    console.log('🌱 No backup restored. Generating dummy data...');
+    
+    const commonPassword = await bcrypt.hash('password123', 10);
+    const adminPassword = await bcrypt.hash('admin123', 10);
 
-  // --- 3. HASH PASSWORDS ---
-  const commonPassword = await bcrypt.hash('password123', 10);
-  const adminPassword = await bcrypt.hash('admin123', 10);
-
-  // --- 4. ENSURE ADMIN ACCOUNTS ALWAYS EXIST ---
-  console.log('🌱 Verifying/Seeding Director Account...');
-  await prisma.user.upsert({
-    where: { username: 'director' },
-    update: { password: adminPassword },
-    create: {
-      username: 'director',
-      password: adminPassword,
-      role: Role.SUPER_ADMIN,
-      isActive: true,
-      teacherProfile: {
-        create: {
-          fullName: 'Institute Director',
-          email: 'director@aims.edu',
-          mobile: '9999999999',
-          qualification: 'Administrator',
-          subject: 'Management'
+    console.log('🌱 Verifying/Seeding Director Account...');
+    await prisma.user.upsert({
+      where: { username: 'director' },
+      update: { password: adminPassword },
+      create: {
+        username: 'director',
+        password: adminPassword,
+        role: Role.SUPER_ADMIN,
+        isActive: true,
+        teacherProfile: {
+          create: {
+            fullName: 'Institute Director',
+            email: 'director@aims.edu',
+            mobile: '9999999999',
+            qualification: 'Administrator',
+            subject: 'Management'
+          }
         }
       }
-    }
-  });
+    });
 
-  console.log('🌱 Verifying/Seeding Academic Admin...');
-  await prisma.user.upsert({
-    where: { username: 'teacher' },
-    update: { password: commonPassword },
-    create: {
-      username: 'teacher',
-      password: commonPassword,
-      role: Role.TEACHER,
-      isActive: true,
-      teacherProfile: {
-        create: {
-          fullName: 'Rahul Sir (Physics)',
-          email: 'rahul@aims.edu',
-          mobile: '9876543210',
-          qualification: 'M.Sc Physics',
-          subject: 'PHYSICS'
+    console.log('🌱 Verifying/Seeding Academic Admin...');
+    await prisma.user.upsert({
+      where: { username: 'teacher' },
+      update: { password: commonPassword },
+      create: {
+        username: 'teacher',
+        password: commonPassword,
+        role: Role.TEACHER,
+        isActive: true,
+        teacherProfile: {
+          create: {
+            fullName: 'Rahul Sir (Physics)',
+            email: 'rahul@aims.edu',
+            mobile: '9876543210',
+            qualification: 'M.Sc Physics',
+            subject: 'PHYSICS'
+          }
         }
       }
-    }
-  });
+    });
 
-  // --- 5. SEED DUMMY DATA (ONLY IF NO BACKUP WAS RESTORED) ---
-  if (!backupRestored) {
     console.log('🌱 Seeding Batch...');
     const batch = await prisma.batch.create({
       data: { name: 'JEE Droppers 2026', startYear: '2025', strength: 60, fee: 150000 }
@@ -161,13 +161,16 @@ async function main() {
     });
   }
 
-  console.log('✅ SYSTEM READY');
+  console.log('\n✅ SYSTEM READY');
   console.log('------------------------------------------------');
-  console.log('👉 Director: director / admin123');
-  console.log('👉 Teacher:  teacher / password123');
   if (!backupRestored) {
+    console.log('👉 Director: director / admin123');
+    console.log('👉 Teacher:  teacher / password123');
     console.log('👉 Student:  student01 / password123');
     console.log('👉 Parent:   parent01 / password123');
+  } else {
+    console.log('👉 Backup successfully restored!');
+    console.log('👉 Use your real, live account credentials to log in.');
   }
   console.log('------------------------------------------------');
 }
