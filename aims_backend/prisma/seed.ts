@@ -15,7 +15,7 @@ async function main() {
 
   if (fs.existsSync(backupDir)) {
     const files = fs.readdirSync(backupDir)
-      .filter(file => file.endsWith('.sql.gz'))
+      .filter(file => file.endsWith('.sql.gz') || file.endsWith('.sql'))
       .map(file => ({ name: file, time: fs.statSync(path.join(backupDir, file)).mtime.getTime() }))
       .sort((a, b) => b.time - a.time); // Gets newest backup first
 
@@ -23,16 +23,31 @@ async function main() {
       const latestBackup = files[0].name;
       console.log(`📦 Found recent backup: ${latestBackup}. Injecting data...`);
       try {
-        const dbUrl = process.env.DATABASE_URL || '';
-        execSync(`gunzip -c ${path.join(backupDir, latestBackup)} | psql "${dbUrl}"`);
+        const rawUrl = process.env.DATABASE_URL || '';
+        // CRITICAL FIX: psql crashes if '?schema=public' is attached. We MUST strip it.
+        const cleanDbUrl = rawUrl.split('?')[0]; 
+        const fullPath = path.join(backupDir, latestBackup);
+
+        console.log(`⏳ Running restoration command... (You will see Postgres logs below)`);
+
+        if (latestBackup.endsWith('.gz')) {
+            execSync(`gunzip -c "${fullPath}" | psql "${cleanDbUrl}"`, { stdio: 'inherit' });
+        } else {
+            execSync(`psql "${cleanDbUrl}" < "${fullPath}"`, { stdio: 'inherit' });
+        }
+
         console.log('✅ Database data restored from backup successfully.');
         backupRestored = true;
-      } catch (error) {
-        console.error('❌ Failed to inject backup. Proceeding with normal seed.');
+      } catch (error: any) {
+        console.error('❌ Failed to inject backup. Error Details:');
+        console.error(error.message);
+        console.log('Proceeding with normal dummy seed...');
       }
     } else {
       console.log('ℹ️ No backup files found. Proceeding with normal seed.');
     }
+  } else {
+    console.log(`ℹ️ Backup directory ${backupDir} does not exist. Proceeding with normal seed.`);
   }
 
   // --- 2. CLEANUP (ONLY IF NO BACKUP WAS RESTORED) ---
