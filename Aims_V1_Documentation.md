@@ -272,3 +272,65 @@ NEXT_PUBLIC_API_URL="[https://api.aimsinstitute.com](https://api.aimsinstitute.c
 # VAPID Keys for Push Notifications
 VAPID_PUBLIC_KEY="<Generated Key>"
 VAPID_PRIVATE_KEY="<Generated Key>"
+
+
+Here is a complete cheat sheet of all the commands we figured out today. You can save these to a notepad or sticky note for easy server management!
+
+1. 🔄 Standard Docker Commands (Rebuilding & Logs)
+Use these when you change .env files, update React/NestJS code, or just need to restart the server.
+
+Stop all containers safely:
+
+Bash
+docker-compose down
+Start and Rebuild everything: (Crucial after changing .env or frontend API URLs)
+
+Bash
+docker-compose up -d --build
+Rebuild only one specific container: (Faster if you only changed the frontend)
+
+Bash
+docker-compose up -d --build aims_frontend
+Watch real-time live logs: (Press Ctrl+C to exit the logs)
+
+Bash
+docker logs -f aims_backend
+# or
+docker logs -f aims_frontend
+2. 🗄️ Database & Prisma Commands
+Use these when managing your database schema, pushing new tables, or running the seed script.
+
+Push Prisma Schema to the empty database: (Creates the actual tables)
+
+Bash
+docker exec -it aims_backend npx prisma db push
+Run the Database Seed / Backup Restore script: (The smart script we just perfected)
+
+Bash
+docker exec -it aims_backend npx ts-node prisma/seed.ts
+The "Nuclear Reset" (Wipe the database completely): (Use this ONLY if you are locked out and want to delete the entire database volume to start fresh)
+
+Bash
+docker-compose down -v
+3. 📦 Backup Management Commands
+Use these to verify, create, and manage your .sql.gz database backups.
+
+Check if backup files exist on the physical VPS:
+
+Bash
+ls -la ~/Aims_V1/backups
+Check if Docker can successfully "see" those backup files inside the container:
+
+Bash
+docker exec -it aims_backend ls -la /app/backups
+Take a Manual Database Backup instantly: (Compresses and saves it directly to your backups folder with a timestamp)
+
+Bash
+docker exec -t aims_postgres pg_dump -U aims_manual aims_manual | gzip > ~/Aims_V1/backups/manual_backup_$(date +%Y-%m-%d_%H-%M).sql.gz
+4. 🌐 File Transfer Command (From your Computer to VPS)
+If you ever download a backup from Google Drive to your local Windows/Mac computer and need to push it to the VPS.
+
+Run this on your local computer's terminal (Not the VPS):
+
+Bash
+scp your_downloaded_backup.sql.gz root@76.13.247.225:~/Aims_V1/backups/
