@@ -36,7 +36,7 @@ const API_URL = getApiUrl();
 
 export default function SecurityPanel() {
   const [isAuth, setIsAuth] = useState(false);
-  const [token, setToken] = useState(''); // NEW: Added token state
+  const [token, setToken] = useState(''); 
   const [creds, setCreds] = useState({ id: '', pass: '' });
   
   const [admins, setAdmins] = useState<any[]>([]);
@@ -45,15 +45,12 @@ export default function SecurityPanel() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
   
-  // Search & Pagination State
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
 
-  // New Admin Form State
   const [newAdmin, setNewAdmin] = useState({ username: '', password: '', role: 'TEACHER' });
 
-  // FIXED: Now authenticates with the backend to get a real JWT Token
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -66,17 +63,22 @@ export default function SecurityPanel() {
       if (!res.ok) throw new Error("Invalid Security Clearance");
 
       const data = await res.json();
-      const authToken = data.token || data.accessToken;
+      
+      // CRITICAL FIX: NestJS uses access_token (snake_case)
+      const authToken = data.access_token || data.token || data.accessToken;
+      
+      if (!authToken) {
+          throw new Error("Authentication failed: No token received.");
+      }
       
       setToken(authToken);
       setIsAuth(true);
-      fetchData(authToken); // Fetch immediately using the new token
+      fetchData(authToken); 
     } catch (error: any) {
       alert("Access Denied: " + error.message);
     }
   };
 
-  // FIXED: Added Authorization header to requests
   const fetchData = async (currentToken = token) => {
     if (!currentToken) return;
 
@@ -92,7 +94,6 @@ export default function SecurityPanel() {
         else console.error(`Parents Fetch Failed: ${parentsRes.status}`);
     } catch (error: any) {
         console.error("Network connection to backend failed:", error);
-        alert(`Connection Error: Could not reach backend at ${API_URL}`);
     }
   };
 
@@ -157,7 +158,6 @@ export default function SecurityPanel() {
     }
   };
 
-  // FILTER & PAGINATION LOGIC
   const filteredParents = parents.filter(p => 
     (p.parentId && p.parentId.toLowerCase().includes(searchQuery.toLowerCase())) || 
     (p.mobile && p.mobile.includes(searchQuery))
@@ -168,7 +168,6 @@ export default function SecurityPanel() {
 
   useEffect(() => { setCurrentPage(1); }, [searchQuery]);
 
-  // THEME CONFIGURATION
   const theme = {
     bg: isDarkMode ? 'bg-black' : 'bg-slate-50',
     text: isDarkMode ? 'text-green-500' : 'text-slate-800',
@@ -206,7 +205,6 @@ export default function SecurityPanel() {
 
   return (
     <div className={`min-h-screen font-mono pb-10 transition-colors duration-300 ${theme.bg} ${theme.text}`}>
-      {/* HEADER */}
       <header className={`flex flex-col md:flex-row justify-between items-center p-4 md:p-8 border-b ${theme.border} ${theme.headerBg} sticky top-0 z-50 backdrop-blur-md transition-colors`}>
         <div className="w-full flex justify-between items-center md:w-auto">
           <div className="flex items-center gap-3 md:gap-4">
@@ -237,7 +235,6 @@ export default function SecurityPanel() {
       </header>
 
       <main className="p-4 md:p-8 max-w-7xl mx-auto">
-        {/* TABS */}
         <div className="flex flex-col md:flex-row gap-2 md:gap-4 mb-8">
           <button onClick={() => setActiveTab('parents')} className={`flex-1 md:flex-none px-6 py-3 md:py-2 rounded border transition-all duration-300 flex items-center justify-center gap-2 text-xs md:text-sm font-bold ${activeTab === 'parents' ? theme.tabActive : theme.tabInactive}`}>
             <UserCheck size={16}/> PARENT PRIVACY
@@ -250,15 +247,11 @@ export default function SecurityPanel() {
           </button>
         </div>
 
-        {/* --- TAB: PARENT DIRECTORY --- */}
         {activeTab === 'parents' && (
           <div className={`border ${theme.border} rounded-xl p-4 md:p-6 ${theme.cardBg} transition-colors`}>
-            {/* TOOLBAR */}
             <div className={`flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 border-b ${theme.border} pb-4 gap-4`}>
                <h2 className={`text-sm md:text-lg flex items-center gap-2 ${theme.accent}`}><UserCheck size={18} /> PARENT DIRECTORY ACCESS</h2>
-               
                <div className="flex flex-col md:flex-row gap-4 w-full xl:w-auto">
-                  {/* SEARCH BAR */}
                   <div className="relative w-full md:w-64">
                     <input 
                       className={`w-full pl-9 pr-4 py-2 border rounded text-xs font-mono focus:outline-none focus:ring-1 focus:ring-current ${theme.inputBg}`}
@@ -268,8 +261,6 @@ export default function SecurityPanel() {
                     />
                     <Search size={14} className={`absolute left-3 top-2.5 ${theme.subtext}`}/>
                   </div>
-
-                  {/* BULK ACTIONS */}
                   <div className="flex gap-2 w-full md:w-auto">
                       <button onClick={() => toggleAllVisibility(true)} className={`flex-1 md:flex-none flex items-center justify-center gap-2 border px-3 py-2 rounded text-xs font-bold transition-all ${theme.buttonPrimary}`}>
                         <CheckCircle size={14} /> GRANT ALL
@@ -281,7 +272,6 @@ export default function SecurityPanel() {
                </div>
             </div>
 
-            {/* LIST */}
             <div className="grid gap-4">
               {paginatedParents.length === 0 ? (
                 <div className={`text-center py-10 ${theme.subtext}`}>NO RECORDS MATCH YOUR SEARCH OR BACKEND UNAVAILABLE</div>
@@ -316,7 +306,6 @@ export default function SecurityPanel() {
               )}
             </div>
 
-            {/* PAGINATION CONTROLS */}
             {totalPages > 1 && (
               <div className={`mt-6 pt-4 border-t ${theme.border} flex justify-between items-center text-xs ${theme.subtext}`}>
                 <span>Page {currentPage} of {totalPages}</span>
@@ -329,7 +318,6 @@ export default function SecurityPanel() {
           </div>
         )}
 
-        {/* --- TAB: ADMIN CREDENTIALS --- */}
         {activeTab === 'admins' && (
           <div className={`border ${theme.border} rounded-xl p-4 md:p-6 ${theme.cardBg}`}>
             <h2 className={`text-sm md:text-lg mb-6 flex items-center gap-2 border-b pb-2 ${theme.accent} ${theme.border}`}><Key size={18} /> ADMINISTRATIVE CREDENTIALS</h2>
@@ -356,7 +344,6 @@ export default function SecurityPanel() {
           </div>
         )}
 
-        {/* --- TAB: USER MANAGEMENT (NEW) --- */}
         {activeTab === 'create' && (
           <div className={`border ${theme.border} rounded-xl p-6 ${theme.cardBg} max-w-xl mx-auto`}>
             <h2 className={`text-lg mb-6 flex items-center gap-2 border-b pb-2 ${theme.border} ${theme.accent}`}><UserPlus size={18} /> CREATE NEW SYSTEM USER</h2>

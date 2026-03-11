@@ -16,6 +16,11 @@ export class RolesGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
+    // CRITICAL FIX: If the user object is missing, block them gracefully instead of crashing
+    if (!user) {
+        return false;
+    }
+
     // 3. Check if the user has the right badge
     return roles.includes(user.role);
   }
