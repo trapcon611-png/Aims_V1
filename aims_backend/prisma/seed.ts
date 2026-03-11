@@ -16,38 +16,47 @@ const MASTER_IDS = {
 async function main() {
   console.log('⚠️  STARTING DATABASE INITIALIZATION / RECOVERY...');
 
-  // --- 1. ENSURE SCHEMA EXISTS & CHECK IF DATABASE IS EMPTY ---
-  let isDatabaseEmpty = true;
+  // --- 1. ENSURE SCHEMA EXISTS ---
   try {
-    const userCount = await prisma.user.count();
-    if (userCount > 0) {
-      isDatabaseEmpty = false;
-    }
+    await prisma.user.count();
   } catch (e) {
-    // If an error is thrown here, it means the tables don't even exist yet!
     console.log('\n🏗️  Database tables are missing. Building schema now...');
     execSync('npx prisma db push', { stdio: 'inherit' });
     console.log('✅ Schema built successfully!\n');
-    isDatabaseEmpty = true;
+  }
+
+  // --- 2. CHECK IF BUSINESS DATA ALREADY EXISTS ---
+  // If we have actual students in the DB, we shouldn't overwrite them or generate dummies
+  let hasBusinessData = false;
+  const initialStudentCount = await prisma.studentProfile.count();
+  if (initialStudentCount > 0) {
+      hasBusinessData = true;
   }
 
   let backupRestored = false;
 
-  // --- 2. DATA RECOVERY LOGIC (ONLY RUNS IF DB IS EMPTY) ---
-  if (isDatabaseEmpty) {
+  // --- 3. DATA RECOVERY LOGIC (ONLY RUNS IF NO BUSINESS DATA) ---
+  if (!hasBusinessData) {
     const backupDir = '/app/backups';
     console.log(`🔍 Checking for backups inside container at: ${backupDir}`);
 
     if (fs.existsSync(backupDir)) {
       const allFiles = fs.readdirSync(backupDir);
+      
+      // CRITICAL FIX: Filter out 0-byte or corrupted tiny files!
       const files = allFiles
         .filter(file => file.endsWith('.sql.gz') || file.endsWith('.sql'))
-        .map(file => ({ name: file, time: fs.statSync(path.join(backupDir, file)).mtime.getTime() }))
+        .map(file => {
+            const fullPath = path.join(backupDir, file);
+            const stats = fs.statSync(fullPath);
+            return { name: file, time: stats.mtime.getTime(), size: stats.size };
+        })
+        .filter(file => file.size > 100) // Must be larger than 100 bytes (ignores empty files)
         .sort((a, b) => b.time - a.time);
 
       if (files.length > 0) {
         const mostRecentBackup = files[0].name;
-        console.log(`📦 Selecting the most recent backup: ${mostRecentBackup}. Injecting data...`);
+        console.log(`📦 Valid backup found: ${mostRecentBackup} (${files[0].size} bytes). Injecting data...`);
         try {
           const rawUrl = process.env.DATABASE_URL || '';
           const cleanDbUrl = rawUrl.split('?')[0]; 
@@ -58,32 +67,44 @@ async function main() {
           } else {
               execSync(`psql "${cleanDbUrl}" -q < "${fullPath}"`, { stdio: 'inherit' });
           }
-          console.log('\n✅ Database data restored from backup successfully.');
-          backupRestored = true;
+          
+          // Verify the backup actually contained data
+          const postRestoreStudentCount = await prisma.studentProfile.count();
+          if (postRestoreStudentCount > 0) {
+              console.log('\n✅ Database data restored from backup successfully.');
+              backupRestored = true;
+              hasBusinessData = true;
+          } else {
+              console.log('\n⚠️ Backup was restored but contained no student data. Proceeding to dummy generation...');
+          }
         } catch (error: any) {
           console.error('\n❌ Failed to inject backup. Error Details:', error.message);
         }
       } else {
-        console.log('ℹ️ No valid backup files found.');
+        console.log('ℹ️ No valid/populated backup files found (ignored empty 0-byte files).');
       }
     } else {
       console.log(`ℹ️ Backup directory ${backupDir} does not exist.`);
     }
 
-    // --- 3. SEED DUMMY DATA (ONLY IF DB WAS EMPTY AND NO BACKUP WAS FOUND) ---
+    // --- 4. SEED DUMMY DATA (ONLY IF STILL EMPTY) ---
     if (!backupRestored) {
-      console.log('🌱 No backup restored. Generating dummy data...');
+      console.log('\n🌱 Generating dummy data (Batch, Parent, Student)...');
       
       const commonPassword = await bcrypt.hash('password123', 10);
       
-      console.log('🌱 Seeding Batch...');
-      const batch = await prisma.batch.create({
-        data: { name: 'JEE Droppers 2026', startYear: '2025', strength: 60, fee: 150000 }
+      // Upsert Batch safely
+      const batch = await prisma.batch.upsert({
+        where: { id: 'dummy-batch-001' }, // Ensure we don't duplicate on multiple runs
+        update: {},
+        create: { id: 'dummy-batch-001', name: 'JEE Droppers 2026', startYear: '2025', strength: 60, fee: 150000 }
       });
 
-      console.log('🌱 Seeding Parent...');
-      const parentUser = await prisma.user.create({
-        data: {
+      // Upsert Parent safely
+      const parentUser = await prisma.user.upsert({
+        where: { username: 'parent01' },
+        update: {},
+        create: {
           username: 'parent01', password: commonPassword, visiblePassword: 'password123',
           role: Role.PARENT, isActive: true,
           parentProfile: { create: { mobile: '9000012345', isMobileVisible: true } }
@@ -91,10 +112,12 @@ async function main() {
         include: { parentProfile: true }
       });
 
-      console.log('🌱 Seeding Student...');
+      // Upsert Student safely
       if (parentUser.parentProfile) {
-        await prisma.user.create({
-          data: {
+        await prisma.user.upsert({
+          where: { username: 'student01' },
+          update: {},
+          create: {
             username: 'student01', password: commonPassword, visiblePassword: 'password123',
             role: Role.STUDENT, isActive: true,
             studentProfile: {
@@ -112,17 +135,17 @@ async function main() {
           }
         });
       }
+      console.log('✅ Dummy data seeded successfully!');
     }
   } else {
     console.log('\n======================================================');
-    console.log('🛑 WARNING: Tables already exist and contain data!');
-    console.log('🛑 Backup restore stopped to prevent overwriting your live database.');
+    console.log('🛑 WARNING: Live student data already exists in the database.');
+    console.log('🛑 Backup restore and dummy seeding skipped to protect records.');
     console.log('======================================================\n');
   }
 
-  // --- 4. ENSURE MASTER ACCOUNTS ALWAYS EXIST (RUNS EVERY TIME) ---
+  // --- 5. ENSURE MASTER ACCOUNTS ALWAYS EXIST (RUNS EVERY TIME) ---
   console.log('\n🔐 Ensuring all Master Admin accounts are active...');
-  console.log('ℹ️  If a backup was restored or data exists, existing IDs are kept. Otherwise, default IDs are injected.');
   
   const commonPassword = await bcrypt.hash('password123', 10);
   const adminPassword = await bcrypt.hash('admin123', 10);
@@ -191,7 +214,7 @@ async function main() {
   console.log('🛡️  Master Security: security_admin / secure_master_key');
   console.log('👉 Director: director / admin123');
   console.log('👉 Teacher:  teacher / password123');
-  if (isDatabaseEmpty && !backupRestored) {
+  if (!hasBusinessData && !backupRestored) {
     console.log('👉 Student:  student01 / password123');
     console.log('👉 Parent:   parent01 / password123');
   }
