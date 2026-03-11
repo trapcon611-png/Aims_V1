@@ -65,7 +65,7 @@ export const parentApi = {
       } catch(e) { return []; }
   },
 
-  // --- NEW: RAZORPAY PAYMENT METHODS ---
+  // --- RAZORPAY PAYMENT METHODS ---
 
   async createPaymentOrder(token: string, amount: number, receiptId: string) {
     const res = await fetch(`${API_URL}/payment/create-order`, {
@@ -77,7 +77,8 @@ export const parentApi = {
     return await res.json();
   },
 
-  async verifyPayment(token: string, paymentData: any) {
+  // UPDATED: Now passes studentId and amount so the backend can record it securely
+  async verifyPayment(token: string, paymentData: { razorpayOrderId: string, razorpayPaymentId: string, signature: string, studentId: string, amount: number }) {
     const res = await fetch(`${API_URL}/payment/verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -85,19 +86,7 @@ export const parentApi = {
     });
     if (!res.ok) throw new Error('Payment verification failed');
     return await res.json();
-  },
-
-  async recordFeePayment(token: string, data: any) {
-    const res = await fetch(`${API_URL}/finance/collect`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({
-        ...data,
-        paymentMode: 'RAZORPAY',
-        remarks: 'Paid via Parent Portal (Razorpay)',
-      }),
-    });
-    if (!res.ok) throw new Error('Failed to record fee');
-    return await res.json();
   }
+
+  // NOTE: recordFeePayment() has been deleted! The backend creates the fee record automatically upon verification.
 };

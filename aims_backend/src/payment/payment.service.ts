@@ -1,53 +1,70 @@
-import { Injectable, InternalServerErrorException, BadRequestException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, BadRequestException, Logger } from '@nestjs/common';
 import * as crypto from 'crypto';
+import { PrismaService } from '../prisma/prisma.service';
 
-// We use require for Razorpay to ensure strict compatibility with NestJS
 const Razorpay = require('razorpay');
 
 @Injectable()
 export class PaymentService {
   private razorpay;
+  private readonly logger = new Logger(PaymentService.name);
 
-  constructor() {
-    // Initialize Razorpay with your Test Keys from the .env file
+  constructor(private prisma: PrismaService) {
     this.razorpay = new Razorpay({
       key_id: process.env.RAZORPAY_KEY_ID,
       key_secret: process.env.RAZORPAY_KEY_SECRET,
     });
   }
 
-  // 1. CREATE ORDER: Tells Razorpay "Expect a payment of ₹X"
   async createOrder(amount: number, receiptId: string) {
     try {
       const options = {
-        amount: Math.round(amount * 100), // Razorpay strictly requires amounts in paise (multiply by 100)
+        amount: Math.round(amount * 100), 
         currency: 'INR',
         receipt: receiptId,
       };
       
       const order = await this.razorpay.orders.create(options);
-      return order; // Returns { id: "order_...", amount: ... } to the frontend
+      return order; 
     } catch (error) {
-      console.error("❌ Razorpay Order Error:", error);
+      this.logger.error("❌ Razorpay Order Error:", error);
       throw new InternalServerErrorException('Failed to create payment order with Razorpay');
     }
   }
 
-  // 2. VERIFY PAYMENT: Cryptographically checks if the payment was actually successful and not hacked
-  async verifyPayment(orderId: string, paymentId: string, signature: string) {
+  // UPDATED: Now securely records data to DB upon verification
+  async verifyPayment(orderId: string, paymentId: string, signature: string, studentId: string, amount: number) {
     const secret = process.env.RAZORPAY_KEY_SECRET;
     
-    // Hash the order ID and payment ID using your secret key
     const generatedSignature = crypto
       .createHmac('sha256', secret || '')
       .update(orderId + '|' + paymentId)
       .digest('hex');
 
-    // If our hash matches Razorpay's hash, the payment is 100% authentic!
     if (generatedSignature !== signature) {
       throw new BadRequestException('🚨 ALERT: Invalid payment signature detected!');
     }
 
-    return { success: true, message: 'Payment cryptographically verified!' };
+    // --- SECURE DB RECORDING ---
+    // Because the signature matched, we know 100% this payment is real.
+    // We record it here on the backend so the frontend can't fake it.
+    try {
+      const feeRecord = await this.prisma.feeRecord.create({
+        data: {
+          studentId: studentId,
+          amount: Number(amount),
+          paymentMode: 'RAZORPAY',
+          transactionId: paymentId, // Save the actual Razorpay ID for auditing
+          date: new Date(),
+          remarks: 'Paid via Parent Portal (Razorpay)',
+        }
+      });
+
+      this.logger.log(`✅ Payment Verified & Recorded for Student: ${studentId}, Amount: ${amount}`);
+      return { success: true, message: 'Payment verified and recorded!', record: feeRecord };
+    } catch (dbError) {
+      this.logger.error("❌ DB Recording Error:", dbError);
+      throw new InternalServerErrorException('Payment successful, but failed to record in database. Please contact admin.');
+    }
   }
 }
