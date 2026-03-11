@@ -16,7 +16,7 @@ const MASTER_IDS = {
 async function main() {
   console.log('⚠️  STARTING DATABASE INITIALIZATION / RECOVERY...');
 
-  // --- 1. CHECK IF DATABASE IS EMPTY ---
+  // --- 1. ENSURE SCHEMA EXISTS & CHECK IF DATABASE IS EMPTY ---
   let isDatabaseEmpty = true;
   try {
     const userCount = await prisma.user.count();
@@ -24,6 +24,10 @@ async function main() {
       isDatabaseEmpty = false;
     }
   } catch (e) {
+    // If an error is thrown here, it means the tables don't even exist yet!
+    console.log('\n🏗️  Database tables are missing. Building schema now...');
+    execSync('npx prisma db push', { stdio: 'inherit' });
+    console.log('✅ Schema built successfully!\n');
     isDatabaseEmpty = true;
   }
 
