@@ -22,15 +22,11 @@ import {
 } from 'lucide-react';
 
 // --- SMART API RESOLVER ---
-// Automatically figures out if you are on localhost, an IP, or a domain, 
-// and routes the backend call to port 3001 of that exact same host.
 const getApiUrl = () => {
     if (process.env.NEXT_PUBLIC_API_URL) {
         return process.env.NEXT_PUBLIC_API_URL;
     }
     if (typeof window !== 'undefined') {
-        // e.g., if on http://76.13.247.225:3000, returns http://76.13.247.225:3001
-        // if on https://my-aims.com, returns https://my-aims.com:3001
         return `${window.location.protocol}//${window.location.hostname}:3001`;
     }
     return 'http://localhost:3001';
@@ -40,6 +36,7 @@ const API_URL = getApiUrl();
 
 export default function SecurityPanel() {
   const [isAuth, setIsAuth] = useState(false);
+  const [token, setToken] = useState(''); // NEW: Added token state
   const [creds, setCreds] = useState({ id: '', pass: '' });
   
   const [admins, setAdmins] = useState<any[]>([]);
@@ -56,24 +53,41 @@ export default function SecurityPanel() {
   // New Admin Form State
   const [newAdmin, setNewAdmin] = useState({ username: '', password: '', role: 'TEACHER' });
 
-  // Hardcoded Login for Security Master Access
-  const handleLogin = (e: React.FormEvent) => {
+  // FIXED: Now authenticates with the backend to get a real JWT Token
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (creds.id === 'security_admin' && creds.pass === 'secure_master_key') {
+    try {
+      const res = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: creds.id, password: creds.pass })
+      });
+
+      if (!res.ok) throw new Error("Invalid Security Clearance");
+
+      const data = await res.json();
+      const authToken = data.token || data.accessToken;
+      
+      setToken(authToken);
       setIsAuth(true);
-      fetchData();
-    } else {
-      alert("Access Denied: Invalid Security Clearance");
+      fetchData(authToken); // Fetch immediately using the new token
+    } catch (error: any) {
+      alert("Access Denied: " + error.message);
     }
   };
 
-  const fetchData = async () => {
+  // FIXED: Added Authorization header to requests
+  const fetchData = async (currentToken = token) => {
+    if (!currentToken) return;
+
     try {
-        const adminsRes = await fetch(`${API_URL}/erp/security/admins`);
+        const headers = { 'Authorization': `Bearer ${currentToken}` };
+
+        const adminsRes = await fetch(`${API_URL}/erp/security/admins`, { headers });
         if(adminsRes.ok) setAdmins(await adminsRes.json());
         else console.error(`Admins Fetch Failed: ${adminsRes.status}`);
 
-        const parentsRes = await fetch(`${API_URL}/erp/security/directory`);
+        const parentsRes = await fetch(`${API_URL}/erp/security/directory`, { headers });
         if(parentsRes.ok) setParents(await parentsRes.json());
         else console.error(`Parents Fetch Failed: ${parentsRes.status}`);
     } catch (error: any) {
@@ -86,7 +100,10 @@ export default function SecurityPanel() {
     try {
         const res = await fetch(`${API_URL}/erp/security/mobile-visibility`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}` 
+          },
           body: JSON.stringify({ parentId, isVisible: !currentStatus })
         });
         if (!res.ok) throw new Error(`Server returned ${res.status}`);
@@ -102,7 +119,10 @@ export default function SecurityPanel() {
     try {
         const res = await fetch(`${API_URL}/erp/security/mobile-visibility/all`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}` 
+          },
           body: JSON.stringify({ isVisible: status })
         });
         if (!res.ok) throw new Error(`Server returned ${res.status}`);
@@ -117,7 +137,10 @@ export default function SecurityPanel() {
     try {
       const res = await fetch(`${API_URL}/erp/security/admins`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
         body: JSON.stringify(newAdmin)
       });
       
@@ -136,8 +159,8 @@ export default function SecurityPanel() {
 
   // FILTER & PAGINATION LOGIC
   const filteredParents = parents.filter(p => 
-    p.parentId.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    p.mobile.includes(searchQuery)
+    (p.parentId && p.parentId.toLowerCase().includes(searchQuery.toLowerCase())) || 
+    (p.mobile && p.mobile.includes(searchQuery))
   );
 
   const paginatedParents = filteredParents.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
@@ -207,7 +230,7 @@ export default function SecurityPanel() {
           <button onClick={() => setIsDarkMode(!isDarkMode)} className={`hidden md:block p-2 rounded border hover:opacity-80 transition ${theme.border}`}>
              {isDarkMode ? <Sun size={20}/> : <Moon size={20}/>}
           </button>
-          <button onClick={() => setIsAuth(false)} className={`flex items-center justify-center gap-2 px-4 py-2 rounded border text-xs md:text-sm font-bold transition-colors ${theme.buttonDestructive}`}>
+          <button onClick={() => { setIsAuth(false); setToken(''); }} className={`flex items-center justify-center gap-2 px-4 py-2 rounded border text-xs md:text-sm font-bold transition-colors ${theme.buttonDestructive}`}>
             <LogOut size={14}/> LOCK SESSION
           </button>
         </div>
