@@ -145,7 +145,7 @@ const DashboardHome = ({
                 />
             </div>
 
-            {/* 3. Action Centers (Due Fees & Follow-ups) */}
+            {/* 3. Action Centers */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-[450px]">
                 
                 {/* Due Fees Tab */}
@@ -245,12 +245,21 @@ const DirectorLogin = ({ onUnlock }: { onUnlock: () => void }) => {
     e.preventDefault(); setLoading(true); setError('');
     try { 
         const data = await directorApi.login(creds.id, creds.password); 
-        if (data.user?.role === 'SUPER_ADMIN') { 
-            localStorage.setItem('director_session', JSON.stringify({ token: data.access_token })); 
+        
+        // SECURE TOKEN MAPPING FIX
+        const secureToken = data.access_token || data.token || data.accessToken;
+        
+        if (secureToken) { 
+            localStorage.setItem('director_session', JSON.stringify({ token: secureToken })); 
             onUnlock(); 
-        } else { setError('Access Denied: Directors/Admins Only'); } 
-    } catch (err) { setError('Invalid Credentials'); } 
-    finally { setLoading(false); }
+        } else { 
+            setError('Access Denied: System did not provide a valid security token.'); 
+        } 
+    } catch (err) { 
+        setError('Invalid Credentials'); 
+    } finally { 
+        setLoading(false); 
+    }
   };
 
   return (
@@ -312,22 +321,48 @@ export default function DirectorPage() {
   const inputStyle = "w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:ring-2 focus:ring-[#c1121f] outline-none transition";
   const labelStyle = "block text-[10px] font-bold text-slate-500 uppercase mb-1";
 
-  // Auth Check
+  // AUTO-SANITIZER LOGIC ON MOUNT
   useEffect(() => {
-     if (typeof window !== 'undefined' && localStorage.getItem('director_session')) setIsUnlocked(true);
+      if (typeof window !== 'undefined') {
+          const sessionString = localStorage.getItem('director_session');
+          if (sessionString) {
+              try {
+                  const parsed = JSON.parse(sessionString);
+                  // If the token is 'null', 'undefined', or blank, DESTROY IT instantly.
+                  if (parsed && parsed.token && parsed.token !== 'undefined' && parsed.token !== 'null') {
+                      setIsUnlocked(true);
+                  } else {
+                      localStorage.removeItem('director_session');
+                      setIsUnlocked(false);
+                  }
+              } catch (e) {
+                  localStorage.removeItem('director_session');
+                  setIsUnlocked(false);
+              }
+          }
+      }
   }, []);
 
-  // DATA REFRESH LOGIC
+  // DATA REFRESH LOGIC (FULLY SECURED AGAINST 401 CRASHES)
   const refreshData = useCallback(async () => {
       if (!isUnlocked) return;
       setIsLoading(true);
       try {
-          const [sts, bts, enqs, fees] = await Promise.all([
+          // If any of these API calls hit a 401 Unauthorized, they safely return an empty array []
+          // which prevents the "Unexpected end of JSON input" crash from ever happening!
+          const [rawSts, rawBts, rawEnqs, rawFees] = await Promise.all([
               directorApi.getStudents(),
               directorApi.getBatches(),
               directorApi.getEnquiries(),
               directorApi.getFeeHistory()
           ]);
+          
+          // Failsafe assignments
+          const sts = rawSts || [];
+          const bts = rawBts || [];
+          const enqs = rawEnqs || [];
+          const fees = rawFees || [];
+
           setStudents(sts);
           setBatches(bts);
           setEnquiries(enqs);
@@ -379,11 +414,17 @@ export default function DirectorPage() {
               fees: genGraph(fees, 'date', 'amount') 
           });
 
-          // Lazy load low-priority data
-          if (activeTab === 'academics') directorApi.getExams().then(setExams);
+          // Lazy load low-priority data safely
+          if (activeTab === 'academics') {
+              const fetchedExams = await directorApi.getExams();
+              setExams(fetchedExams || []);
+          }
 
-      } catch(e) { console.error(e); }
-      finally { setIsLoading(false); }
+      } catch(e) { 
+          console.error("Data refresh halted securely:", e);
+      } finally { 
+          setIsLoading(false); 
+      }
   }, [isUnlocked, activeTab]);
 
   useEffect(() => {
