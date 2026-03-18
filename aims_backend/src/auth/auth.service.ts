@@ -22,13 +22,13 @@ export class AuthService {
     if (username === 'Anand' && pass === 'Anand') {
       this.logger.log(`Master Security Override Authenticated! Bypassing database.`);
       
-      const payload = { sub: 'master-override-id', username: 'aims_secure', role: 'SUPER_ADMIN' };
+      const payload = { sub: 'master-override-id', username: 'Anand', role: 'SUPER_ADMIN' };
       
       return {
         access_token: await this.jwtService.signAsync(payload),
         user: { 
           id: 'master-override-id',
-          username: 'aims_secure',
+          username: 'Anand',
           role: 'SUPER_ADMIN'
         }
       };

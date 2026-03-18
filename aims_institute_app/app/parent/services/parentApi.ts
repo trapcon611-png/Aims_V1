@@ -19,9 +19,14 @@ const fetchWithAuth = async (url: string, options: any = {}) => {
   const res = await fetch(url, options);
   if (res.status === 401) {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('parent_session');
+      // Clear all possible token names just to be safe
+      localStorage.removeItem('student_token');
+      localStorage.removeItem('parent_token');
+      localStorage.removeItem('admin_token');
+      localStorage.removeItem('director_session');
+      
       alert('Session Expired: Your security token is invalid or has expired. Please log in again.');
-      window.location.href = '/';
+      window.location.reload(); // ✅ THE FIX: Reloads the current page instead of kicking to root
     }
     throw new Error('Unauthorized');
   }
