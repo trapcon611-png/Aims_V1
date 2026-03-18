@@ -7,6 +7,7 @@ interface InstallmentPlan { id: number; amount: number; dueDate: string; }
 
 export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[], onRefresh: () => void }) {
   const [status, setStatus] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false); // 🚨 The Loading Lock
   const [localBatches, setLocalBatches] = useState<any[]>(batches || []);
   const [isLoadingBatches, setIsLoadingBatches] = useState(false);
   
@@ -95,6 +96,7 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
 
   const handleAdmission = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     if (!admissionData.batchId) {
         setStatus('Error: Please select a batch.');
         return;
@@ -111,10 +113,14 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
         }
     }
 
+    // 🚨 Lock the button to prevent double-click submissions
+    setIsProcessing(true);
     setStatus('Processing...');
+    
     try {
         const finalFee = admissionData.withGst ? Math.round(admissionData.fees * 1.18) : admissionData.fees;
         await directorApi.registerStudent({ ...admissionData, fees: finalFee });
+        
         setStatus('Success! Student Registered.');
         // Reset fields
         setAdmissionData(prev => ({ 
@@ -125,12 +131,15 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
         }));
         onRefresh();
     } catch (e: any) { 
+        // 🚨 This gracefully catches our new duplicate ID error message!
         setStatus(`Error: ${e.message}`); 
+    } finally {
+        setIsProcessing(false); // Unlock the button
     }
   };
 
   return (
-    <div className="max-w-5xl mx-auto py-8 px-4"> {/* OPTIMIZED WIDTH */}
+    <div className="max-w-5xl mx-auto py-8 px-4">
       <div className="bg-white border border-slate-200 shadow-xl rounded-2xl overflow-hidden">
         
         {/* Header */}
@@ -143,6 +152,7 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
             </div>
         </div>
 
+        {/* Status Banner */}
         {status && (
             <div className={`mx-6 mt-6 p-3 rounded-lg text-sm font-bold border flex items-center gap-2 ${status.includes('Error') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
                 {status.includes('Success') ? <CheckCircle size={16}/> : <AlertCircle size={16}/>}
@@ -153,7 +163,7 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
         <form onSubmit={handleAdmission} className="p-6 md:p-8">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             
-            {/* LEFT COLUMN: Student Details (7 Columns) */}
+            {/* LEFT COLUMN: Student Details */}
             <div className="lg:col-span-7 space-y-6">
                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2">Student Info</h3>
                
@@ -220,7 +230,6 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                    </div>
                </div>
 
-               {/* Parent Section (Moved here for better flow) */}
                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2 mt-8">Parent Details</h3>
                <div className="grid grid-cols-3 gap-4">
                     <input className={inputStyle} required placeholder="Parent ID" value={admissionData.parentId} onChange={e => setAdmissionData({...admissionData, parentId: e.target.value})} />
@@ -229,10 +238,8 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                </div>
             </div>
 
-            {/* RIGHT COLUMN: Fees & Installments (5 Columns) */}
+            {/* RIGHT COLUMN: Fees & Installments */}
             <div className="lg:col-span-5 space-y-6">
-                
-                {/* FEE SECTION (RED THEME) */}
                 <div className="bg-red-50 p-6 rounded-xl border-2 border-red-100 shadow-inner relative overflow-hidden h-full flex flex-col">
                    
                    <div className="flex justify-between items-center mb-4 border-b border-red-200 pb-2">
@@ -259,7 +266,7 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                                 value={admissionData.installments} 
                                 onChange={e => {
                                     setAdmissionData({...admissionData, installments: +e.target.value});
-                                    setIsManualSchedule(false); // Reset manual flag on count change
+                                    setIsManualSchedule(false);
                                 }}
                             >
                                {[1,2,3,4,6,9,12].map(n => <option key={n} value={n}>{n} Installments</option>)}
@@ -267,7 +274,6 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                        </div>
                    </div>
 
-                   {/* EDITABLE INSTALLMENT SCHEDULE */}
                    <div className="flex-1 bg-white rounded-lg border border-red-200 overflow-hidden mb-4">
                        <div className="bg-red-100 px-3 py-2 flex text-[10px] font-bold text-red-800 uppercase tracking-wider">
                            <div className="w-10 text-center">#</div>
@@ -313,13 +319,15 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                        </div>
                    </div>
                 </div>
-
             </div>
           </div>
 
           <div className="mt-8 pt-6 border-t border-slate-200 flex justify-end items-center gap-4">
-            <button className="bg-[#c1121f] hover:bg-red-800 text-white px-10 py-4 rounded-xl font-bold shadow-lg transition-all flex items-center gap-2 active:scale-95 text-sm uppercase tracking-wider w-full md:w-auto justify-center">
-              <CheckCircle size={18} /> Confirm Admission
+            <button 
+                disabled={isProcessing}
+                className="bg-[#c1121f] hover:bg-red-800 disabled:opacity-50 text-white px-10 py-4 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95 text-sm uppercase tracking-wider w-full md:w-auto"
+            >
+              {isProcessing ? "Processing..." : <><CheckCircle size={18} /> Confirm Admission</>}
             </button>
           </div>
         </form>

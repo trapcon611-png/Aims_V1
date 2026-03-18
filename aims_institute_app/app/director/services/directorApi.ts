@@ -21,6 +21,18 @@ const fetchWithAuth = async (url: string, options: any = {}) => {
   return res;
 };
 
+// --- BULLETPROOF JSON PARSER ---
+// Safely prevents "Unexpected end of JSON input" crashes system-wide
+const parseJsonSafely = async (res: Response, fallback: any = null) => {
+    const text = await res.text();
+    if (!text || text.trim() === '') return fallback;
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        return fallback;
+    }
+};
+
 export const directorApi = {
   getToken() {
     if (typeof window === 'undefined') return '';
@@ -41,7 +53,10 @@ export const directorApi = {
         body: JSON.stringify({ username, password }) 
     });
     if (!response.ok) throw new Error('Invalid Credentials');
-    const data = await response.json();
+    
+    const data = await parseJsonSafely(response);
+    if (!data) throw new Error('Invalid Credentials');
+    
     data.token = data.access_token || data.token || data.accessToken;
     return data;
   },
@@ -53,24 +68,56 @@ export const directorApi = {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` }, 
         body: JSON.stringify(data) 
     });
-    if (!res.ok) throw new Error('Admission failed.');
-    return await res.json();
+    
+    // 1. If backend correctly threw a 409 ConflictException, extract the real error message
+    if (!res.ok) {
+        const errorText = await res.text();
+        let errorMessage = 'Admission failed. Please check the data and try again.';
+        try {
+            const errObj = JSON.parse(errorText);
+            if (errObj.message) errorMessage = errObj.message;
+        } catch (e) {
+            if (errorText) errorMessage = errorText;
+        }
+        throw new Error(errorMessage);
+    }
+
+    // 2. CRITICAL FALLBACK: If the backend returned a 201 Success but the body is completely empty,
+    // it means a duplicate was caught but 'return null' was triggered! We catch the empty text here.
+    const text = await res.text();
+    if (!text || text.trim() === '') {
+        throw new Error('Student ID or Parent ID already exists! Please use unique credentials.');
+    }
+
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        return null;
+    }
   },
   
   async getStudents() { 
       try { 
-          const res = await fetchWithAuth(`${API_URL}/erp/students`, { headers: { 'Authorization': `Bearer ${this.getToken()}` } }); 
+          const res = await fetchWithAuth(`${API_URL}/erp/students`, { 
+              headers: { 'Authorization': `Bearer ${this.getToken()}` } 
+          }); 
           if (!res.ok) return []; 
-          return await res.json(); 
-      } catch (e) { return []; } 
+          return await parseJsonSafely(res, []); 
+      } catch (e) { 
+          return []; 
+      } 
   },
 
   async getBatches() { 
       try { 
-          const res = await fetchWithAuth(`${API_URL}/erp/batches`, { headers: { 'Authorization': `Bearer ${this.getToken()}` } }); 
+          const res = await fetchWithAuth(`${API_URL}/erp/batches`, { 
+              headers: { 'Authorization': `Bearer ${this.getToken()}` } 
+          }); 
           if (!res.ok) return []; 
-          return await res.json(); 
-      } catch (e) { return []; } 
+          return await parseJsonSafely(res, []);
+      } catch (e) { 
+          return []; 
+      } 
   },
 
   async createBatch(data: any) { 
@@ -80,7 +127,7 @@ export const directorApi = {
           body: JSON.stringify(data) 
       }); 
       if (!res.ok) throw new Error('Failed to save batch'); 
-      return await res.json(); 
+      return await parseJsonSafely(res); 
   },
   
   async updateBatch(id: string, data: any) {
@@ -90,17 +137,21 @@ export const directorApi = {
           body: JSON.stringify(data) 
       }); 
       if (!res.ok) throw new Error('Failed to update batch'); 
-      return await res.json(); 
+      return await parseJsonSafely(res); 
   },
 
   // --- FINANCE ---
   async getExpenses() { 
       try { 
-          const res = await fetchWithAuth(`${API_URL}/erp/expenses`, { headers: { 'Authorization': `Bearer ${this.getToken()}` }}); 
+          const res = await fetchWithAuth(`${API_URL}/erp/expenses`, { 
+              headers: { 'Authorization': `Bearer ${this.getToken()}` }
+          }); 
           if (!res.ok) return []; 
-          const data = await res.json(); 
+          const data = await parseJsonSafely(res, []); 
           return data.map((d: any) => ({ ...d, date: new Date(d.date).toLocaleDateString() })); 
-      } catch (e) { return []; } 
+      } catch (e) { 
+          return []; 
+      } 
   },
 
   async createExpense(data: any) { 
@@ -110,7 +161,7 @@ export const directorApi = {
           body: JSON.stringify(data) 
       }); 
       if (!res.ok) throw new Error('Failed to save expense'); 
-      return await res.json(); 
+      return await parseJsonSafely(res); 
   },
 
   async deleteExpense(id: string) { 
@@ -119,7 +170,7 @@ export const directorApi = {
           headers: { 'Authorization': `Bearer ${this.getToken()}` }
       }); 
       if (!res.ok) throw new Error('Failed to delete expense'); 
-      return await res.json(); 
+      return await parseJsonSafely(res); 
   },
   
   async collectFee(data: any) { 
@@ -129,16 +180,20 @@ export const directorApi = {
           body: JSON.stringify(data) 
       }); 
       if (!res.ok) throw new Error('Failed to record fee'); 
-      return await res.json(); 
+      return await parseJsonSafely(res); 
   },
 
   async getSummary() { 
       try { 
-          const res = await fetchWithAuth(`${API_URL}/erp/summary`, { headers: { 'Authorization': `Bearer ${this.getToken()}` }}); 
+          const res = await fetchWithAuth(`${API_URL}/erp/summary`, { 
+              headers: { 'Authorization': `Bearer ${this.getToken()}` }
+          }); 
           if (!res.ok) return { revenue: 0, expenses: 0, profit: 0 }; 
-          const data = await res.json(); 
+          const data = await parseJsonSafely(res, { revenue: 0, expenses: 0, profit: 0 }); 
           return { revenue: data.revenue || 0, expenses: data.expenses || 0, profit: data.profit || 0 }; 
-      } catch (e) { return { revenue: 0, expenses: 0, profit: 0 }; } 
+      } catch (e) { 
+          return { revenue: 0, expenses: 0, profit: 0 }; 
+      } 
   },
 
   async getFeeHistory(token?: string) {
@@ -148,17 +203,23 @@ export const directorApi = {
               headers: { 'Authorization': `Bearer ${authToken}` } 
           });
           if (!res.ok) return [];
-          return await res.json();
-      } catch (e) { return []; }
+          return await parseJsonSafely(res, []);
+      } catch (e) { 
+          return []; 
+      }
   },
 
   // --- CRM ---
   async getEnquiries() { 
       try { 
-          const res = await fetchWithAuth(`${API_URL}/erp/enquiries`, { headers: { 'Authorization': `Bearer ${this.getToken()}` } }); 
+          const res = await fetchWithAuth(`${API_URL}/erp/enquiries`, { 
+              headers: { 'Authorization': `Bearer ${this.getToken()}` } 
+          }); 
           if (!res.ok) return []; 
-          return await res.json(); 
-      } catch (e) { return []; } 
+          return await parseJsonSafely(res, []); 
+      } catch (e) { 
+          return []; 
+      } 
   },
 
   async createEnquiry(data: any) { 
@@ -168,7 +229,7 @@ export const directorApi = {
           body: JSON.stringify(data) 
       }); 
       if (!res.ok) throw new Error('Failed to create enquiry'); 
-      return await res.json(); 
+      return await parseJsonSafely(res); 
   },
 
   async updateEnquiryStatus(id: string, status: string, followUpCount?: number) { 
@@ -178,16 +239,20 @@ export const directorApi = {
           body: JSON.stringify({ status, followUpCount }) 
       }); 
       if (!res.ok) throw new Error('Failed to update enquiry'); 
-      return await res.json(); 
+      return await parseJsonSafely(res); 
   },
 
   // --- CONTENT ---
   async getResources() { 
       try { 
-          const res = await fetchWithAuth(`${API_URL}/erp/resources`, { headers: { 'Authorization': `Bearer ${this.getToken()}` } }); 
+          const res = await fetchWithAuth(`${API_URL}/erp/resources`, { 
+              headers: { 'Authorization': `Bearer ${this.getToken()}` } 
+          }); 
           if (!res.ok) return []; 
-          return await res.json(); 
-      } catch (e) { return []; } 
+          return await parseJsonSafely(res, []); 
+      } catch (e) { 
+          return []; 
+      } 
   },
 
   async createResource(data: any) { 
@@ -197,7 +262,7 @@ export const directorApi = {
           body: JSON.stringify(data) 
       }); 
       if (!res.ok) throw new Error('Failed to create resource'); 
-      return await res.json(); 
+      return await parseJsonSafely(res); 
   },
 
   async deleteResource(id: string) { 
@@ -209,10 +274,14 @@ export const directorApi = {
 
   async getNotices() { 
       try { 
-          const res = await fetchWithAuth(`${API_URL}/erp/notices`, { headers: { 'Authorization': `Bearer ${this.getToken()}` } }); 
+          const res = await fetchWithAuth(`${API_URL}/erp/notices`, { 
+              headers: { 'Authorization': `Bearer ${this.getToken()}` } 
+          }); 
           if (!res.ok) return []; 
-          return await res.json(); 
-      } catch (e) { return []; } 
+          return await parseJsonSafely(res, []); 
+      } catch (e) { 
+          return []; 
+      } 
   },
 
   async createNotice(data: any) { 
@@ -222,7 +291,7 @@ export const directorApi = {
           body: JSON.stringify(data) 
       }); 
       if (!res.ok) throw new Error('Failed to create notice'); 
-      return await res.json(); 
+      return await parseJsonSafely(res); 
   },
 
   async deleteNotice(id: string) { 
@@ -235,9 +304,13 @@ export const directorApi = {
   // --- ACADEMICS ---
   async getExams() { 
       try { 
-          const res = await fetchWithAuth(`${API_URL}/erp/exams`, { headers: { 'Authorization': `Bearer ${this.getToken()}` } }); 
+          const res = await fetchWithAuth(`${API_URL}/erp/exams`, { 
+              headers: { 'Authorization': `Bearer ${this.getToken()}` } 
+          }); 
           if (!res.ok) return []; 
-          return await res.json(); 
-      } catch (e) { return []; } 
+          return await parseJsonSafely(res, []); 
+      } catch (e) { 
+          return []; 
+      } 
   }
 };

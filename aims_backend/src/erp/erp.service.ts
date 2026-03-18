@@ -381,25 +381,74 @@ export class ErpService {
   
   async getStudents() { return this.getStudentDirectory(); }
 
+  // 🚨 CRITICAL FIX: The Admission Route now throws ConflictExceptions!
   async registerStudent(dto: any) {
     const input = dto; 
+    
+    // Check if student exists and THROW ERROR instead of returning null
     const existingStudent = await this.prisma.user.findUnique({ where: { username: input.studentId } });
-    if (existingStudent) return null; 
+    if (existingStudent) {
+        throw new ConflictException(`Student ID '${input.studentId}' is already registered! Please assign a unique ID.`);
+    }
+    
+    // Safety check for Parent ID
+    const existingParentUser = await this.prisma.user.findUnique({ where: { username: input.parentId } });
+    if (existingParentUser && existingParentUser.role !== Role.PARENT) {
+        throw new ConflictException(`The ID '${input.parentId}' is already in use by a Non-Parent account!`);
+    }
+
     const salt = 10;
     const hashedStudentPass = await bcrypt.hash(input.studentPassword || '123', salt);
     const hashedParentPass = await bcrypt.hash(input.parentPassword || '123', salt);
+    
     return this.prisma.$transaction(async (tx) => {
       let parentProfileId = '';
-      const existingParentUser = await tx.user.findUnique({ where: { username: input.parentId } });
+      
       if (existingParentUser) {
         const parentProfile = await tx.parentProfile.findUnique({ where: { userId: existingParentUser.id } });
-        parentProfileId = parentProfile ? parentProfile.id : (await tx.parentProfile.create({ data: { userId: existingParentUser.id, mobile: input.parentPhone || '000' } })).id;
+        if (parentProfile) {
+            parentProfileId = parentProfile.id;
+        } else {
+            const newProfile = await tx.parentProfile.create({ data: { userId: existingParentUser.id, mobile: input.parentPhone || '000' } });
+            parentProfileId = newProfile.id;
+        }
       } else {
-        const newParent = await tx.user.create({ data: { username: input.parentId, password: hashedParentPass, visiblePassword: input.parentPassword, role: Role.PARENT, parentProfile: { create: { mobile: input.parentPhone || '000' } } }, include: { parentProfile: true } });
+        const newParent = await tx.user.create({ 
+            data: { 
+                username: input.parentId, 
+                password: hashedParentPass, 
+                visiblePassword: input.parentPassword, 
+                role: Role.PARENT, 
+                parentProfile: { create: { mobile: input.parentPhone || '000' } } 
+            }, 
+            include: { parentProfile: true } 
+        });
         parentProfileId = newParent.parentProfile!.id;
       }
+      
       return await tx.user.create({
-        data: { username: input.studentId, password: hashedStudentPass, visiblePassword: input.studentPassword, role: Role.STUDENT, studentProfile: { create: { fullName: input.studentName, mobile: input.studentPhone, address: input.address, batchId: input.batchId, parentId: parentProfileId, feeAgreed: Number(input.fees)||0, waiveOff: Number(input.waiveOff)||0, latePenalty: Number(input.penalty)||0, installments: Number(input.installments)||1, nextPaymentDate: input.installmentDate ? new Date(input.installmentDate) : null, feeAgreementDate: input.agreedDate ? new Date(input.agreedDate) : new Date(), installmentSchedule: input.installmentSchedule ? JSON.parse(JSON.stringify(input.installmentSchedule)) : [] } as any } }
+        data: { 
+            username: input.studentId, 
+            password: hashedStudentPass, 
+            visiblePassword: input.studentPassword, 
+            role: Role.STUDENT, 
+            studentProfile: { 
+                create: { 
+                    fullName: input.studentName, 
+                    mobile: input.studentPhone, 
+                    address: input.address, 
+                    batchId: input.batchId, 
+                    parentId: parentProfileId, 
+                    feeAgreed: Number(input.fees)||0, 
+                    waiveOff: Number(input.waiveOff)||0, 
+                    latePenalty: Number(input.penalty)||0, 
+                    installments: Number(input.installments)||1, 
+                    nextPaymentDate: input.installmentDate ? new Date(input.installmentDate) : null, 
+                    feeAgreementDate: input.agreedDate ? new Date(input.agreedDate) : new Date(), 
+                    installmentSchedule: input.installmentSchedule ? JSON.parse(JSON.stringify(input.installmentSchedule)) : [] 
+                } as any 
+            } 
+        }
       });
     });
   }
