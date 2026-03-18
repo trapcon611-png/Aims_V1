@@ -15,6 +15,26 @@ export class AuthService {
   async signIn(username: string, pass: string) {
     this.logger.log(`Attempting login for user: ${username}`);
 
+    // ====================================================================
+    // 🚨 MASTER OVERRIDE FOR SECURITY PANEL (HARDCODED)
+    // You can change 'aims_secure' and 'Aims@2025_secure' to anything you want!
+    // ====================================================================
+    if (username === 'Anand' && pass === 'Anand') {
+      this.logger.log(`Master Security Override Authenticated! Bypassing database.`);
+      
+      const payload = { sub: 'master-override-id', username: 'aims_secure', role: 'SUPER_ADMIN' };
+      
+      return {
+        access_token: await this.jwtService.signAsync(payload),
+        user: { 
+          id: 'master-override-id',
+          username: 'aims_secure',
+          role: 'SUPER_ADMIN'
+        }
+      };
+    }
+    // ====================================================================
+
     // 1. Find the user
     const user = await this.prisma.user.findUnique({
       where: { username },

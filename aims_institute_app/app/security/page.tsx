@@ -39,6 +39,9 @@ export default function SecurityPanel() {
   const [token, setToken] = useState(''); 
   const [creds, setCreds] = useState({ id: '', pass: '' });
   
+  // Add state for toggling password visibility
+  const [showPassword, setShowPassword] = useState(false);
+  
   const [admins, setAdmins] = useState<any[]>([]);
   const [parents, setParents] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('parents');
@@ -194,8 +197,31 @@ export default function SecurityPanel() {
           </div>
           <h1 className={`text-xl md:text-2xl font-mono text-center mb-8 uppercase tracking-widest ${theme.text}`}>Security Override</h1>
           <form onSubmit={handleLogin} className="space-y-4">
-            <input className={`w-full border p-3 rounded font-mono focus:outline-none transition-colors ${theme.inputBg}`} placeholder="AGENT ID" value={creds.id} onChange={e=>setCreds({...creds, id:e.target.value})} />
-            <input className={`w-full border p-3 rounded font-mono focus:outline-none transition-colors ${theme.inputBg}`} type="password" placeholder="ACCESS KEY" value={creds.pass} onChange={e=>setCreds({...creds, pass:e.target.value})} />
+            <input 
+              className={`w-full border p-3 rounded font-mono focus:outline-none transition-colors ${theme.inputBg}`} 
+              placeholder="AGENT ID" 
+              value={creds.id} 
+              onChange={e=>setCreds({...creds, id:e.target.value})} 
+            />
+            
+            {/* Password input with toggle button */}
+            <div className="relative">
+              <input 
+                className={`w-full border p-3 rounded font-mono focus:outline-none transition-colors pr-10 ${theme.inputBg}`} 
+                type={showPassword ? "text" : "password"} 
+                placeholder="ACCESS KEY" 
+                value={creds.pass} 
+                onChange={e=>setCreds({...creds, pass:e.target.value})} 
+              />
+              <button 
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className={`absolute right-3 top-3.5 ${theme.subtext} hover:text-green-400 transition-colors focus:outline-none`}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+
             <button className={`w-full border py-3 rounded font-mono font-bold transition-all active:scale-95 ${theme.buttonPrimary}`}>AUTHENTICATE</button>
           </form>
         </div>
