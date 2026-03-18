@@ -102,20 +102,16 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
         order_id: order.id,
         handler: async function (response: any) {
           try {
-            // Verify and Save to DB
+            // Verify and Save to DB in ONE secure call
             await parentApi.verifyPayment(token, {
               razorpayOrderId: response.razorpay_order_id,
               razorpayPaymentId: response.razorpay_payment_id,
-              signature: response.razorpay_signature
+              signature: response.razorpay_signature,
+              studentId: studentId, // Passed to backend for database recording
+              amount: amount        // Passed to backend for database recording
             });
 
-            await parentApi.recordFeePayment(token, {
-              studentId: studentId,
-              amount: amount,
-              transactionId: response.razorpay_payment_id,
-              razorpayOrderId: response.razorpay_order_id
-            });
-
+            // The backend has now automatically created the FeeRecord!
             alert("Payment Successful! Receipt generated.");
             window.location.reload(); // Refresh the dashboard to show updated dues
           } catch (err) {
@@ -128,19 +124,24 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
         theme: {
           color: "#9333ea", // Matches your purple theme!
         },
+        modal: {
+          ondismiss: function() {
+            setIsProcessing(false);
+          }
+        }
       };
 
       const rzp = new (window as any).Razorpay(options);
       rzp.on('payment.failed', function (response: any) {
         alert(`Payment Failed: ${response.error.description}`);
+        setIsProcessing(false);
       });
       rzp.open();
     } catch (error) {
       console.error(error);
       alert("Something went wrong initiating payment.");
-    } finally {
       setIsProcessing(false);
-    }
+    } 
   };
   
   const getInstallmentStatus = (dueDateStr: string, index: number, instAmount: number) => { 
@@ -189,7 +190,7 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
                        className="w-full bg-white text-slate-900 py-4 rounded-xl font-bold text-sm hover:scale-[1.02] transition-transform flex items-center justify-center gap-2 shadow-xl disabled:opacity-70 disabled:cursor-not-allowed"
                      >
                        {isProcessing ? <Loader2 size={16} className="animate-spin text-slate-900" /> : <Zap size={16} className="fill-slate-900"/>}
-                       <span>{isProcessing ? 'Processing...' : 'Pay Now'}</span>
+                       <span>{isProcessing ? 'Connecting Bank...' : 'Pay Now'}</span>
                      </button>
                     ) : (
                       <div className="w-full bg-emerald-500/20 text-emerald-100 py-3 rounded-xl font-bold text-sm text-center border border-emerald-500/30">Fees Fully Paid</div>
