@@ -14,6 +14,20 @@ const getApiUrl = () => {
 
 const API_URL = getApiUrl();
 
+// --- 401 INTERCEPTOR ---
+const fetchWithAuth = async (url: string, options: any = {}) => {
+  const res = await fetch(url, options);
+  if (res.status === 401) {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('parent_session');
+      alert('Session Expired: Your security token is invalid or has expired. Please log in again.');
+      window.location.href = '/';
+    }
+    throw new Error('Unauthorized');
+  }
+  return res;
+};
+
 export const parentApi = {
   getToken() {
     if (typeof window === 'undefined') return '';
@@ -34,11 +48,16 @@ export const parentApi = {
       body: JSON.stringify({ username, password }), 
     }); 
     if (!res.ok) throw new Error('Invalid Credentials'); 
-    return await res.json(); 
+    const data = await res.json(); 
+    
+    // --- CRITICAL 401 FIX ---
+    data.token = data.access_token || data.token || data.accessToken;
+    
+    return data;
   },
 
   async getFinancials(token: string) { 
-    const res = await fetch(`${API_URL}/parent/my-summary`, { 
+    const res = await fetchWithAuth(`${API_URL}/parent/my-summary`, { 
       headers: { 'Authorization': `Bearer ${token}` } 
     }); 
     if (!res.ok) throw new Error('Failed to load data'); 
@@ -47,7 +66,7 @@ export const parentApi = {
 
   async getStudentResults(token: string, userId: string) {
       try {
-        const res = await fetch(`${API_URL}/parent/student-attempts?studentId=${userId}`, { 
+        const res = await fetchWithAuth(`${API_URL}/parent/student-attempts?studentId=${userId}`, { 
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if(!res.ok) return [];
@@ -57,7 +76,7 @@ export const parentApi = {
 
   async getNotices(token: string) {
       try {
-        const res = await fetch(`${API_URL}/parent/notices`, {
+        const res = await fetchWithAuth(`${API_URL}/parent/notices`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if(!res.ok) return [];
@@ -68,7 +87,7 @@ export const parentApi = {
   // --- RAZORPAY PAYMENT METHODS ---
 
   async createPaymentOrder(token: string, amount: number, receiptId: string) {
-    const res = await fetch(`${API_URL}/payment/create-order`, {
+    const res = await fetchWithAuth(`${API_URL}/payment/create-order`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ amount, receiptId }),
@@ -79,7 +98,7 @@ export const parentApi = {
 
   // UPDATED: Now passes studentId and amount so the backend can record it securely
   async verifyPayment(token: string, paymentData: { razorpayOrderId: string, razorpayPaymentId: string, signature: string, studentId: string, amount: number }) {
-    const res = await fetch(`${API_URL}/payment/verify`, {
+    const res = await fetchWithAuth(`${API_URL}/payment/verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify(paymentData),

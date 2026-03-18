@@ -1,15 +1,25 @@
 // --- SMART API RESOLVER ---
 const getApiUrl = () => {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-      return process.env.NEXT_PUBLIC_API_URL;
-  }
-  if (typeof window !== 'undefined') {
-      return `${window.location.protocol}//${window.location.hostname}:3001`;
-  }
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  if (typeof window !== 'undefined') return `${window.location.protocol}//${window.location.hostname}:3001`;
   return 'http://localhost:3001';
 };
 
 const API_URL = getApiUrl();
+
+// --- 401 INTERCEPTOR ---
+const fetchWithAuth = async (url: string, options: any = {}) => {
+  const res = await fetch(url, options);
+  if (res.status === 401) {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('director_session');
+      alert('Session Expired: Your security token is invalid or has expired. Please log in again.');
+      window.location.href = '/';
+    }
+    throw new Error('Unauthorized');
+  }
+  return res;
+};
 
 export const directorApi = {
   getToken() {
@@ -31,12 +41,14 @@ export const directorApi = {
         body: JSON.stringify({ username, password }) 
     });
     if (!response.ok) throw new Error('Invalid Credentials');
-    return await response.json();
+    const data = await response.json();
+    data.token = data.access_token || data.token || data.accessToken;
+    return data;
   },
 
   // --- ACADEMIC & ADMISSIONS ---
   async registerStudent(data: any) {
-    const res = await fetch(`${API_URL}/erp/admissions`, { 
+    const res = await fetchWithAuth(`${API_URL}/erp/admissions`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` }, 
         body: JSON.stringify(data) 
@@ -47,7 +59,7 @@ export const directorApi = {
   
   async getStudents() { 
       try { 
-          const res = await fetch(`${API_URL}/erp/students`, { headers: { 'Authorization': `Bearer ${this.getToken()}` } }); 
+          const res = await fetchWithAuth(`${API_URL}/erp/students`, { headers: { 'Authorization': `Bearer ${this.getToken()}` } }); 
           if (!res.ok) return []; 
           return await res.json(); 
       } catch (e) { return []; } 
@@ -55,14 +67,14 @@ export const directorApi = {
 
   async getBatches() { 
       try { 
-          const res = await fetch(`${API_URL}/erp/batches`, { headers: { 'Authorization': `Bearer ${this.getToken()}` } }); 
+          const res = await fetchWithAuth(`${API_URL}/erp/batches`, { headers: { 'Authorization': `Bearer ${this.getToken()}` } }); 
           if (!res.ok) return []; 
           return await res.json(); 
       } catch (e) { return []; } 
   },
 
   async createBatch(data: any) { 
-      const res = await fetch(`${API_URL}/erp/batches`, { 
+      const res = await fetchWithAuth(`${API_URL}/erp/batches`, { 
           method: 'POST', 
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` }, 
           body: JSON.stringify(data) 
@@ -72,7 +84,7 @@ export const directorApi = {
   },
   
   async updateBatch(id: string, data: any) {
-      const res = await fetch(`${API_URL}/erp/batches/${id}`, { 
+      const res = await fetchWithAuth(`${API_URL}/erp/batches/${id}`, { 
           method: 'PATCH', 
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` }, 
           body: JSON.stringify(data) 
@@ -84,7 +96,7 @@ export const directorApi = {
   // --- FINANCE ---
   async getExpenses() { 
       try { 
-          const res = await fetch(`${API_URL}/erp/expenses`, { headers: { 'Authorization': `Bearer ${this.getToken()}` }}); 
+          const res = await fetchWithAuth(`${API_URL}/erp/expenses`, { headers: { 'Authorization': `Bearer ${this.getToken()}` }}); 
           if (!res.ok) return []; 
           const data = await res.json(); 
           return data.map((d: any) => ({ ...d, date: new Date(d.date).toLocaleDateString() })); 
@@ -92,7 +104,7 @@ export const directorApi = {
   },
 
   async createExpense(data: any) { 
-      const res = await fetch(`${API_URL}/erp/expenses`, { 
+      const res = await fetchWithAuth(`${API_URL}/erp/expenses`, { 
           method: 'POST', 
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` }, 
           body: JSON.stringify(data) 
@@ -102,7 +114,7 @@ export const directorApi = {
   },
 
   async deleteExpense(id: string) { 
-      const res = await fetch(`${API_URL}/erp/expenses/${id}`, { 
+      const res = await fetchWithAuth(`${API_URL}/erp/expenses/${id}`, { 
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${this.getToken()}` }
       }); 
@@ -111,12 +123,9 @@ export const directorApi = {
   },
   
   async collectFee(data: any) { 
-      const res = await fetch(`${API_URL}/erp/fees`, { 
+      const res = await fetchWithAuth(`${API_URL}/erp/fees`, { 
           method: 'POST', 
-          headers: { 
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${this.getToken()}` 
-          }, 
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` }, 
           body: JSON.stringify(data) 
       }); 
       if (!res.ok) throw new Error('Failed to record fee'); 
@@ -125,7 +134,7 @@ export const directorApi = {
 
   async getSummary() { 
       try { 
-          const res = await fetch(`${API_URL}/erp/summary`, { headers: { 'Authorization': `Bearer ${this.getToken()}` }}); 
+          const res = await fetchWithAuth(`${API_URL}/erp/summary`, { headers: { 'Authorization': `Bearer ${this.getToken()}` }}); 
           if (!res.ok) return { revenue: 0, expenses: 0, profit: 0 }; 
           const data = await res.json(); 
           return { revenue: data.revenue || 0, expenses: data.expenses || 0, profit: data.profit || 0 }; 
@@ -135,7 +144,7 @@ export const directorApi = {
   async getFeeHistory(token?: string) {
       try {
           const authToken = token || this.getToken();
-          const res = await fetch(`${API_URL}/erp/fees`, { 
+          const res = await fetchWithAuth(`${API_URL}/erp/fees`, { 
               headers: { 'Authorization': `Bearer ${authToken}` } 
           });
           if (!res.ok) return [];
@@ -146,14 +155,14 @@ export const directorApi = {
   // --- CRM ---
   async getEnquiries() { 
       try { 
-          const res = await fetch(`${API_URL}/erp/enquiries`, { headers: { 'Authorization': `Bearer ${this.getToken()}` } }); 
+          const res = await fetchWithAuth(`${API_URL}/erp/enquiries`, { headers: { 'Authorization': `Bearer ${this.getToken()}` } }); 
           if (!res.ok) return []; 
           return await res.json(); 
       } catch (e) { return []; } 
   },
 
   async createEnquiry(data: any) { 
-      const res = await fetch(`${API_URL}/erp/enquiries`, { 
+      const res = await fetchWithAuth(`${API_URL}/erp/enquiries`, { 
           method: 'POST', 
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` }, 
           body: JSON.stringify(data) 
@@ -163,7 +172,7 @@ export const directorApi = {
   },
 
   async updateEnquiryStatus(id: string, status: string, followUpCount?: number) { 
-      const res = await fetch(`${API_URL}/erp/enquiries/${id}/status`, { 
+      const res = await fetchWithAuth(`${API_URL}/erp/enquiries/${id}/status`, { 
           method: 'PATCH', 
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` }, 
           body: JSON.stringify({ status, followUpCount }) 
@@ -175,14 +184,14 @@ export const directorApi = {
   // --- CONTENT ---
   async getResources() { 
       try { 
-          const res = await fetch(`${API_URL}/erp/resources`, { headers: { 'Authorization': `Bearer ${this.getToken()}` } }); 
+          const res = await fetchWithAuth(`${API_URL}/erp/resources`, { headers: { 'Authorization': `Bearer ${this.getToken()}` } }); 
           if (!res.ok) return []; 
           return await res.json(); 
       } catch (e) { return []; } 
   },
 
   async createResource(data: any) { 
-      const res = await fetch(`${API_URL}/erp/resources`, { 
+      const res = await fetchWithAuth(`${API_URL}/erp/resources`, { 
           method: 'POST', 
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` }, 
           body: JSON.stringify(data) 
@@ -192,7 +201,7 @@ export const directorApi = {
   },
 
   async deleteResource(id: string) { 
-      await fetch(`${API_URL}/erp/resources/${id}`, { 
+      await fetchWithAuth(`${API_URL}/erp/resources/${id}`, { 
           method: 'DELETE', 
           headers: { 'Authorization': `Bearer ${this.getToken()}` } 
       }); 
@@ -200,14 +209,14 @@ export const directorApi = {
 
   async getNotices() { 
       try { 
-          const res = await fetch(`${API_URL}/erp/notices`, { headers: { 'Authorization': `Bearer ${this.getToken()}` } }); 
+          const res = await fetchWithAuth(`${API_URL}/erp/notices`, { headers: { 'Authorization': `Bearer ${this.getToken()}` } }); 
           if (!res.ok) return []; 
           return await res.json(); 
       } catch (e) { return []; } 
   },
 
   async createNotice(data: any) { 
-      const res = await fetch(`${API_URL}/erp/notices`, { 
+      const res = await fetchWithAuth(`${API_URL}/erp/notices`, { 
           method: 'POST', 
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` }, 
           body: JSON.stringify(data) 
@@ -217,7 +226,7 @@ export const directorApi = {
   },
 
   async deleteNotice(id: string) { 
-      await fetch(`${API_URL}/erp/notices/${id}`, { 
+      await fetchWithAuth(`${API_URL}/erp/notices/${id}`, { 
           method: 'DELETE', 
           headers: { 'Authorization': `Bearer ${this.getToken()}` } 
       }); 
@@ -226,7 +235,7 @@ export const directorApi = {
   // --- ACADEMICS ---
   async getExams() { 
       try { 
-          const res = await fetch(`${API_URL}/erp/exams`, { headers: { 'Authorization': `Bearer ${this.getToken()}` } }); 
+          const res = await fetchWithAuth(`${API_URL}/erp/exams`, { headers: { 'Authorization': `Bearer ${this.getToken()}` } }); 
           if (!res.ok) return []; 
           return await res.json(); 
       } catch (e) { return []; } 

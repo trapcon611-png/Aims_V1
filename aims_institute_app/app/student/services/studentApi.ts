@@ -11,6 +11,21 @@ const getApiUrl = () => {
 
 const API_URL = getApiUrl();
 
+// --- 401 INTERCEPTOR ---
+const fetchWithAuth = async (url: string, options: any = {}) => {
+  const res = await fetch(url, options);
+  if (res.status === 401) {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('student_token');
+      localStorage.removeItem('accessToken');
+      alert('Session Expired: Your security token is invalid or has expired. Please log in again.');
+      window.location.href = '/';
+    }
+    throw new Error('Unauthorized');
+  }
+  return res;
+};
+
 export const studentApi = {
   // --- AUTH HELPERS ---
   getToken() {
@@ -26,12 +41,17 @@ export const studentApi = {
       body: JSON.stringify({ username, password }),
     });
     if (!res.ok) throw new Error('Invalid Credentials');
-    return await res.json();
+    const data = await res.json();
+    
+    // --- CRITICAL 401 FIX ---
+    data.token = data.access_token || data.token || data.accessToken;
+    
+    return data;
   },
 
   async getProfile(token: string) {
     try {
-        const res = await fetch(`${API_URL}/auth/profile`, {
+        const res = await fetchWithAuth(`${API_URL}/auth/profile`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!res.ok) return null;
@@ -42,7 +62,7 @@ export const studentApi = {
   // --- EXAM LIST ---
   async getExams(token: string) {
     try {
-      const res = await fetch(`${API_URL}/student/exams`, {
+      const res = await fetchWithAuth(`${API_URL}/student/exams`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) return [];
@@ -54,7 +74,7 @@ export const studentApi = {
   // --- RESULT ANALYTICS (CRITICAL UPDATE) ---
   async getResults(token: string) {
     try {
-      const res = await fetch(`${API_URL}/student/results`, {
+      const res = await fetchWithAuth(`${API_URL}/student/results`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -137,7 +157,7 @@ export const studentApi = {
   // --- STUDY MATERIAL ---
   async getResources(token: string) {
      try {
-      const res = await fetch(`${API_URL}/student/resources`, {
+      const res = await fetchWithAuth(`${API_URL}/student/resources`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) return [];
@@ -148,7 +168,7 @@ export const studentApi = {
   // --- NOTICES ---
   async getNotices(token: string) {
     try {
-      const res = await fetch(`${API_URL}/student/notices`, {
+      const res = await fetchWithAuth(`${API_URL}/student/notices`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) return [];
@@ -158,7 +178,7 @@ export const studentApi = {
 
   // --- EXAM TAKING ENGINE ---
   async startAttempt(examId: string, token: string) {
-    const res = await fetch(`${API_URL}/student/exam/${examId}/attempt`, {
+    const res = await fetchWithAuth(`${API_URL}/student/exam/${examId}/attempt`, {
         method: 'POST',
         headers: { 
             'Authorization': `Bearer ${token}`,
@@ -177,7 +197,7 @@ export const studentApi = {
   },
 
   async submitExam(examId: string, answers: any[], token: string) {
-      const res = await fetch(`${API_URL}/student/exam/${examId}/submit`, {
+      const res = await fetchWithAuth(`${API_URL}/student/exam/${examId}/submit`, {
           method: 'POST',
           headers: { 
               'Authorization': `Bearer ${token}`,
