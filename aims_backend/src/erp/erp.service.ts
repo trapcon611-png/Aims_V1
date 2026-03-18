@@ -369,14 +369,74 @@ export class ErpService {
   async toggleMobileVisibility(parentId: string, isVisible: boolean) { return this.prisma.parentProfile.update({ where: { id: parentId }, data: { isMobileVisible: isVisible } }); }
   async toggleAllMobileVisibility(isVisible: boolean) { return this.prisma.parentProfile.updateMany({ data: { isMobileVisible: isVisible } }); }
 
-  // --- STUDENT DIRECTORY ---
-  async getStudentDirectory() {
-    const students = await this.prisma.studentProfile.findMany({ include: { user: true, batch: true, parent: { include: { user: true } }, feesPaid: true }, orderBy: { fullName: 'asc' } });
-    return students.map((s: any) => {
+  // --- STUDENT DIRECTORY (Hyper-Optimized Server-Side Pagination) ---
+  async getStudentDirectory(page: number = 1, limit: number = 20, search: string = '', batchFilter: string = '') {
+    // 1. Build the dynamic search query
+    const whereClause: any = {};
+
+    if (search) {
+        whereClause.OR = [
+            { fullName: { contains: search, mode: 'insensitive' } },
+            { user: { username: { contains: search, mode: 'insensitive' } } },
+            { parent: { user: { username: { contains: search, mode: 'insensitive' } } } },
+            // Only search mobile if it is NOT masked
+            { parent: { AND: [ { mobile: { contains: search } }, { isMobileVisible: true } ] } }
+        ];
+    }
+
+    if (batchFilter) {
+        whereClause.batch = { name: batchFilter };
+    }
+
+    // 2. Fetch total count for pagination math
+    const totalRecords = await this.prisma.studentProfile.count({ where: whereClause });
+
+    // 3. Fetch ONLY the requested page of students
+    const students = await this.prisma.studentProfile.findMany({ 
+        where: whereClause,
+        include: { 
+            user: true, 
+            batch: true, 
+            parent: { include: { user: true } }, 
+            feesPaid: true 
+        }, 
+        orderBy: { fullName: 'asc' },
+        skip: (page - 1) * limit,
+        take: limit
+    });
+
+    // 4. Map the data exactly as the frontend expects it
+    const formattedStudents = students.map((s: any) => {
       const paid = s.feesPaid ? s.feesPaid.reduce((sum: number, r: any) => sum + r.amount, 0) : 0;
       const effectiveTotal = Math.max(0, (s.feeAgreed || 0) - (s.waiveOff || 0));
-      return { id: s.id, name: s.fullName, studentId: s.user?.username || 'N/A', studentPassword: s.user?.visiblePassword || '******', parentId: s.parent?.user?.username || 'N/A', parentPassword: s.parent?.user?.visiblePassword || '******', parentMobile: s.parent?.mobile || 'N/A', isMobileMasked: !(s.parent?.isMobileVisible), batch: s.batch?.name || 'Unassigned', address: s.address, feeTotal: s.feeAgreed, feePaid: paid, feeRemaining: Math.max(0, effectiveTotal - paid), installments: s.installmentSchedule, joinedAt: s.user?.createdAt || new Date() };
+      return { 
+          id: s.id, 
+          name: s.fullName, 
+          studentId: s.user?.username || 'N/A', 
+          studentPassword: s.user?.visiblePassword || '******', 
+          parentId: s.parent?.user?.username || 'N/A', 
+          parentPassword: s.parent?.user?.visiblePassword || '******', 
+          parentMobile: s.parent?.mobile || 'N/A', 
+          isMobileMasked: !(s.parent?.isMobileVisible), 
+          batch: s.batch?.name || 'Unassigned', 
+          address: s.address, 
+          feeTotal: s.feeAgreed, 
+          feePaid: paid, 
+          feeRemaining: Math.max(0, effectiveTotal - paid), 
+          installments: s.installmentSchedule, 
+          joinedAt: s.user?.createdAt || new Date() 
+      };
     });
+
+    return {
+        data: formattedStudents,
+        meta: {
+            total: totalRecords,
+            page: page,
+            limit: limit,
+            totalPages: Math.ceil(totalRecords / limit)
+        }
+    };
   }
   
   async getStudents() { return this.getStudentDirectory(); }

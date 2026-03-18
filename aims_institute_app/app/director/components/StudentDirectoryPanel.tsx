@@ -1,9 +1,10 @@
 'use client';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     Users, Search, Filter, Lock, Copy, ChevronLeft, ChevronRight, 
-    Cake, RefreshCw, X, Key
+    Cake, RefreshCw, X, Key, Loader2
 } from 'lucide-react';
+import { directorApi } from '../services/directorApi';
 
 interface StudentRecord {
   id: string; name: string; studentId: string; studentPassword?: string; 
@@ -14,7 +15,7 @@ interface StudentRecord {
 interface Batch { id: string; name: string; }
 
 export default function StudentDirectoryPanel({ 
-    students, 
+    students, // Kept so parent component doesn't break, but bypassed for server-side fetching
     batches, 
     onRefresh 
 }: { 
@@ -26,39 +27,45 @@ export default function StudentDirectoryPanel({
     const [searchQuery, setSearchQuery] = useState('');
     const [batchFilter, setBatchFilter] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
-    const ITEMS_PER_PAGE = 20; // Increased to 20 for denser view
+    
+    // --- SERVER-SIDE STATE ---
+    const [directoryData, setDirectoryData] = useState<StudentRecord[]>([]);
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalRecords, setTotalRecords] = useState(0);
+    const [isFetching, setIsFetching] = useState(false);
+    const ITEMS_PER_PAGE = 20; 
 
     // --- STYLES ---
     const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl transition-all duration-300 overflow-hidden";
-    // Made inputs slightly smaller (py-2 instead of py-3)
     const inputStyle = "w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-[#c1121f] focus:border-[#c1121f] outline-none transition font-medium";
     const selectStyle = "w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-[#c1121f] outline-none transition font-medium cursor-pointer";
 
-    // --- FILTER LOGIC ---
-    const filteredStudents = useMemo(() => {
-        return students.filter(s => {
-            const query = searchQuery.toLowerCase();
-            // Search across visible fields
-            const matchesSearch = s.name.toLowerCase().includes(query) || 
-                                  s.studentId.toLowerCase().includes(query) || 
-                                  s.parentId.toLowerCase().includes(query) ||
-                                  (!s.isMobileMasked && s.parentMobile.includes(query)); 
-            
-            const matchesBatch = batchFilter ? s.batch === batchFilter : true;
+    // --- SERVER-SIDE FETCH LOGIC ---
+    useEffect(() => {
+        const fetchPaginatedData = async () => {
+            setIsFetching(true);
+            try {
+                const response = await directorApi.getStudents(currentPage, ITEMS_PER_PAGE, searchQuery, batchFilter);
+                setDirectoryData(response.data || []);
+                setTotalPages(response.meta?.totalPages || 1);
+                setTotalRecords(response.meta?.total || 0);
+            } catch (e) {
+                console.error("Failed to fetch directory:", e);
+            } finally {
+                setIsFetching(false);
+            }
+        };
 
-            return matchesSearch && matchesBatch;
-        });
-    }, [students, searchQuery, batchFilter]);
+        // Debounce search to prevent spamming the backend while typing
+        const timeoutId = setTimeout(() => {
+            fetchPaginatedData();
+        }, 300);
+
+        return () => clearTimeout(timeoutId);
+    }, [currentPage, searchQuery, batchFilter, onRefresh]);
 
     // Reset pagination on filter change
-    React.useEffect(() => { setCurrentPage(1); }, [searchQuery, batchFilter]);
-
-    // --- PAGINATION LOGIC ---
-    const totalPages = Math.ceil(filteredStudents.length / ITEMS_PER_PAGE);
-    const paginatedStudents = filteredStudents.slice(
-        (currentPage - 1) * ITEMS_PER_PAGE,
-        currentPage * ITEMS_PER_PAGE
-    );
+    useEffect(() => { setCurrentPage(1); }, [searchQuery, batchFilter]);
 
     const handleCopy = (text: string) => {
         navigator.clipboard.writeText(text);
@@ -68,7 +75,7 @@ export default function StudentDirectoryPanel({
         <div className="max-w-7xl mx-auto py-6 px-4">
             
             <div className={glassPanel}>
-                {/* HEADER & FILTERS - Reduced padding */}
+                {/* HEADER & FILTERS */}
                 <div className="p-4 border-b border-slate-200 bg-slate-50/50">
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
                         <div>
@@ -76,15 +83,17 @@ export default function StudentDirectoryPanel({
                                 <Users className="text-[#c1121f]" size={20}/> Student Directory
                             </h2>
                             <p className="text-[10px] text-slate-500 mt-0.5 font-medium">
-                                Showing {filteredStudents.length} of {students.length} Records
+                                Showing Page {currentPage} ({directoryData.length} Records) of {totalRecords} Total
                             </p>
                         </div>
                         <button 
                             onClick={onRefresh}
-                            className="p-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-500 transition shadow-sm flex items-center gap-2 text-[10px] font-bold"
+                            disabled={isFetching}
+                            className="p-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-500 transition shadow-sm flex items-center gap-2 text-[10px] font-bold disabled:opacity-50"
                             title="Refresh Data"
                         >
-                            <RefreshCw size={14}/> Refresh List
+                            {isFetching ? <Loader2 size={14} className="animate-spin"/> : <RefreshCw size={14}/>} 
+                            Refresh List
                         </button>
                     </div>
 
@@ -97,7 +106,7 @@ export default function StudentDirectoryPanel({
                                 <input 
                                     type="text" 
                                     className={inputStyle} 
-                                    placeholder="Search by Name, Student ID, Parent ID..." 
+                                    placeholder="Search by Name, Student ID, Parent ID, or Mobile..." 
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                 />
@@ -127,7 +136,13 @@ export default function StudentDirectoryPanel({
                 </div>
 
                 {/* COMPACT TABLE */}
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto relative">
+                    {/* Loading Overlay */}
+                    {isFetching && directoryData.length > 0 && (
+                        <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center">
+                            <Loader2 className="animate-spin text-[#c1121f]" size={24}/>
+                        </div>
+                    )}
                     <table className="w-full text-left border-collapse">
                         <thead className="bg-slate-100 text-slate-500 text-[10px] uppercase font-bold border-b border-slate-200 tracking-wider">
                             <tr>
@@ -140,14 +155,14 @@ export default function StudentDirectoryPanel({
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-xs">
-                            {paginatedStudents.length === 0 ? (
+                            {directoryData.length === 0 ? (
                                 <tr>
                                     <td colSpan={6} className="px-4 py-10 text-center text-slate-400 italic bg-slate-50/30">
-                                        <p>No student records found matching filters.</p>
+                                        {isFetching ? 'Loading directory...' : 'No student records found matching filters.'}
                                     </td>
                                 </tr>
                             ) : (
-                                paginatedStudents.map(s => (
+                                directoryData.map(s => (
                                     <tr key={s.id} className="hover:bg-slate-50/80 transition duration-150 group">
                                         
                                         {/* Name & Batch & DOB */}
@@ -240,14 +255,14 @@ export default function StudentDirectoryPanel({
                         <div className="flex gap-2">
                             <button 
                                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
-                                disabled={currentPage === 1}
+                                disabled={currentPage === 1 || isFetching}
                                 className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50 text-slate-600 transition"
                             >
                                 <ChevronLeft size={14}/>
                             </button>
                             <button 
                                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
-                                disabled={currentPage === totalPages}
+                                disabled={currentPage === totalPages || isFetching}
                                 className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50 text-slate-600 transition"
                             >
                                 <ChevronRight size={14}/>

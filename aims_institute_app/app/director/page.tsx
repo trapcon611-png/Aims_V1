@@ -350,15 +350,15 @@ export default function DirectorPage() {
       try {
           // If any of these API calls hit a 401 Unauthorized, they safely return an empty array []
           // which prevents the "Unexpected end of JSON input" crash from ever happening!
-          const [rawSts, rawBts, rawEnqs, rawFees] = await Promise.all([
-              directorApi.getStudents(),
+          const [rawStsRes, rawBts, rawEnqs, rawFees] = await Promise.all([
+              directorApi.getStudents(1, 10000), // Fetch a large batch just for dashboard metric calculations
               directorApi.getBatches(),
               directorApi.getEnquiries(),
               directorApi.getFeeHistory()
           ]);
           
-          // Failsafe assignments
-          const sts = rawSts || [];
+          // CRITICAL FIX: Extract the .data array so the dashboard metrics don't crash
+          const sts = rawStsRes?.data || [];
           const bts = rawBts || [];
           const enqs = rawEnqs || [];
           const fees = rawFees || [];

@@ -101,15 +101,27 @@ export const directorApi = {
     }
   },
   
-  async getStudents() { 
+  // 🚀 UPGRADED: Server-Side Pagination & Search
+  async getStudents(page: number = 1, limit: number = 20, search: string = '', batch: string = '') { 
       try { 
-          const res = await fetchWithAuth(`${API_URL}/erp/students`, { 
+          // Build the query string securely
+          const queryParams = new URLSearchParams({
+              page: page.toString(),
+              limit: limit.toString(),
+              search: search,
+              batch: batch
+          }).toString();
+
+          const res = await fetchWithAuth(`${API_URL}/erp/students?${queryParams}`, { 
               headers: { 'Authorization': `Bearer ${this.getToken()}` } 
           }); 
-          if (!res.ok) return []; 
-          return await parseJsonSafely(res, []); 
+          
+          if (!res.ok) return { data: [], meta: { total: 0, totalPages: 0 } }; 
+          
+          // Return the full paginated object (data + meta)
+          return await parseJsonSafely(res, { data: [], meta: { total: 0, totalPages: 0 } }); 
       } catch (e) { 
-          return []; 
+          return { data: [], meta: { total: 0, totalPages: 0 } }; 
       } 
   },
 

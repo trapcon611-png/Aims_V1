@@ -16,12 +16,16 @@ export class PaymentService {
     });
   }
 
-  async createOrder(amount: number, receiptId: string) {
+  async createOrder(amount: number, receiptId: string, studentId?: string) {
     try {
       const options = {
         amount: Math.round(amount * 100), 
         currency: 'INR',
         receipt: receiptId,
+        notes: {
+          // 🚨 Attach studentId so the Webhook knows who to credit later!
+          studentId: studentId || receiptId 
+        }
       };
       
       const order = await this.razorpay.orders.create(options);
@@ -46,9 +50,13 @@ export class PaymentService {
     }
 
     // --- SECURE DB RECORDING ---
-    // Because the signature matched, we know 100% this payment is real.
-    // We record it here on the backend so the frontend can't fake it.
     try {
+      // Prevent double-recording if the Webhook already caught it
+      const existing = await this.prisma.feeRecord.findFirst({ where: { transactionId: paymentId } });
+      if (existing) {
+         return { success: true, message: 'Payment already recorded by webhook!', record: existing };
+      }
+
       const feeRecord = await this.prisma.feeRecord.create({
         data: {
           studentId: studentId,
@@ -65,6 +73,54 @@ export class PaymentService {
     } catch (dbError) {
       this.logger.error("❌ DB Recording Error:", dbError);
       throw new InternalServerErrorException('Payment successful, but failed to record in database. Please contact admin.');
+    }
+  }
+
+  // 🚨 NEW: Webhook Background Verification (Ghost Payment Protection)
+  async processWebhook(body: any, signature: string) {
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    
+    if (!webhookSecret) {
+        this.logger.warn('Webhook secret is not defined in .env file! Ignoring webhook.');
+        return;
+    }
+
+    // Verify it actually came from Razorpay
+    const expectedSignature = crypto.createHmac('sha256', webhookSecret).update(JSON.stringify(body)).digest('hex');
+
+    if (expectedSignature !== signature) {
+      this.logger.error('🚨 Invalid Webhook Signature - Possible unauthorized ping.');
+      throw new BadRequestException('Invalid signature');
+    }
+
+    // If it's a successful payment...
+    if (body.event === 'payment.captured') {
+      const payment = body.payload.payment.entity;
+      const studentId = payment.notes?.studentId; // Read the ID we injected during createOrder
+      const amount = payment.amount / 100; // Convert from paise back to INR
+
+      if (studentId) {
+        // Check if the browser already recorded it
+        const existing = await this.prisma.feeRecord.findFirst({ where: { transactionId: payment.id } });
+        
+        if (!existing) {
+          await this.prisma.feeRecord.create({
+            data: {
+              studentId: studentId,
+              amount: amount,
+              paymentMode: 'RAZORPAY_WEBHOOK',
+              transactionId: payment.id,
+              remarks: 'Online Payment (Auto-captured via Webhook)',
+              date: new Date()
+            }
+          });
+          this.logger.log(`✅ Webhook: Fee of ₹${amount} securely recorded for student ${studentId}`);
+        } else {
+          this.logger.log(`ℹ️ Webhook: Fee already recorded by browser for ${payment.id}. Skipping duplicate.`);
+        }
+      } else {
+          this.logger.warn(`⚠️ Webhook: Payment ${payment.id} captured, but no studentId found in notes!`);
+      }
     }
   }
 }

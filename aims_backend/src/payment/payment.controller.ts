@@ -1,17 +1,20 @@
-import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Headers, HttpCode, HttpStatus } from '@nestjs/common';
 import { PaymentService } from './payment.service';
 import { AuthGuard } from '@nestjs/passport';
 
 @Controller('payment')
-@UseGuards(AuthGuard('jwt')) // Secures the endpoints
 export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}
 
+  // Secure this route for logged-in users only
+  @UseGuards(AuthGuard('jwt'))
   @Post('create-order')
-  async createOrder(@Body() body: { amount: number; receiptId: string }) {
-    return this.paymentService.createOrder(body.amount, body.receiptId);
+  async createOrder(@Body() body: { amount: number; receiptId: string; studentId?: string }) {
+    return this.paymentService.createOrder(body.amount, body.receiptId, body.studentId);
   }
 
+  // Secure this route for logged-in users only
+  @UseGuards(AuthGuard('jwt'))
   @Post('verify')
   async verifyPayment(
     @Body() body: { 
@@ -29,5 +32,17 @@ export class PaymentController {
       body.studentId,
       body.amount
     );
+  }
+
+  // 🚨 PUBLIC ROUTE: Razorpay Webhook (No JWT Guard here!)
+  // Secured via the cryptographic signature sent in the headers
+  @Post('webhook')
+  @HttpCode(HttpStatus.OK)
+  async handleWebhook(
+    @Body() body: any, 
+    @Headers('x-razorpay-signature') signature: string
+  ) {
+    await this.paymentService.processWebhook(body, signature);
+    return { status: 'ok' };
   }
 }
