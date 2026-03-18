@@ -385,18 +385,32 @@ export class ErpService {
   async registerStudent(dto: any) {
     const input = dto; 
     
-    // Check if student exists and THROW ERROR instead of returning null
+    // 1. DUPLICATE ID CHECKS
     const existingStudent = await this.prisma.user.findUnique({ where: { username: input.studentId } });
     if (existingStudent) {
         throw new ConflictException(`Student ID '${input.studentId}' is already registered! Please assign a unique ID.`);
     }
     
-    // Safety check for Parent ID
     const existingParentUser = await this.prisma.user.findUnique({ where: { username: input.parentId } });
     if (existingParentUser && existingParentUser.role !== Role.PARENT) {
         throw new ConflictException(`The ID '${input.parentId}' is already in use by a Non-Parent account!`);
     }
 
+    // 🔐 2. NEW: STRICT FINANCIAL VALIDATION
+    const totalFee = Number(input.fees) || 0;
+    const schedule = input.installmentSchedule || [];
+    
+    if (schedule.length > 0) {
+        // Calculate the sum of all installments coming from the frontend
+        const sumOfInstallments = schedule.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
+        
+        // If the math doesn't perfectly match, REJECT the admission!
+        if (sumOfInstallments !== totalFee) {
+            throw new BadRequestException(`Financial Tampering Detected: Installments sum (₹${sumOfInstallments}) does not match the Total Fee (₹${totalFee}).`);
+        }
+    }
+
+    // 3. SECURE REGISTRATION TRANSACTION
     const salt = 10;
     const hashedStudentPass = await bcrypt.hash(input.studentPassword || '123', salt);
     const hashedParentPass = await bcrypt.hash(input.parentPassword || '123', salt);
@@ -439,13 +453,13 @@ export class ErpService {
                     address: input.address, 
                     batchId: input.batchId, 
                     parentId: parentProfileId, 
-                    feeAgreed: Number(input.fees)||0, 
+                    feeAgreed: totalFee, 
                     waiveOff: Number(input.waiveOff)||0, 
                     latePenalty: Number(input.penalty)||0, 
                     installments: Number(input.installments)||1, 
                     nextPaymentDate: input.installmentDate ? new Date(input.installmentDate) : null, 
                     feeAgreementDate: input.agreedDate ? new Date(input.agreedDate) : new Date(), 
-                    installmentSchedule: input.installmentSchedule ? JSON.parse(JSON.stringify(input.installmentSchedule)) : [] 
+                    installmentSchedule: JSON.parse(JSON.stringify(schedule)) 
                 } as any 
             } 
         }
