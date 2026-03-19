@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   LayoutDashboard, FileText, Award, BookOpen, LogOut, 
-  ChevronRight, ChevronLeft, Bell, Loader2, Menu, PlayCircle
+  ChevronRight, ChevronLeft, Bell, Loader2, Menu
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -64,14 +64,12 @@ export default function StudentPage() {
   const refreshData = useCallback(async () => {
     if (!token) return;
     try {
-      console.log("Fetching Student Data...");
       const [exs, res, ress, nots] = await Promise.all([
         studentApi.getExams(token),
         studentApi.getResults(token),
         studentApi.getResources(token),
         studentApi.getNotices(token)
       ]);
-      console.log("Data Received:", { exams: exs.length, results: res.length, notices: nots.length });
       
       setExams(exs);
       setResults(res);
@@ -97,7 +95,6 @@ export default function StudentPage() {
         .then(registration => {
           return Notification.requestPermission().then(permission => {
             if (permission === 'granted') {
-              // VAPID Public Key (Must match backend)
               const PUBLIC_VAPID_KEY = 'BDwOUJgq4dnmv3Nd4PRK8A3SrEVmc1niFihfSIkEQlpYO8qr1_rDzV50CSngpdkZFu3Y9TX4rak2UNXktqeFpvw';
               
               const urlBase64ToUint8Array = (base64String: string) => {
@@ -118,7 +115,6 @@ export default function StudentPage() {
         })
         .then(subscription => {
           if (subscription) {
-            // Send subscription to backend to link with User
             fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/student/subscribe`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -130,7 +126,8 @@ export default function StudentPage() {
     }
   }, [token]);
 
-  const handleLogin = (data: any) => {
+  // QA FIX: Explicit type to fix the implicit 'any' error
+  const handleLogin = (data: { access_token: string, user: any }) => {
     const t = data.access_token;
     localStorage.setItem('student_token', t);
     localStorage.setItem('student_user', JSON.stringify(data.user));
@@ -154,24 +151,35 @@ export default function StudentPage() {
   const safeExams = exams.map(e => {
     let safeDateStr = e.scheduledAt;
     if (typeof safeDateStr === 'string' && !safeDateStr.endsWith('Z') && !safeDateStr.includes('+') && safeDateStr.includes('T')) {
-        safeDateStr += 'Z'; // Force JS to treat it as absolute UTC
+        safeDateStr += 'Z'; 
     }
     return { ...e, scheduledAt: safeDateStr };
   });
 
-  // Computed Stats for Dashboard Home
-  const avgScore = results.length > 0 
-    ? Math.round(results.reduce((acc, r) => acc + (r.totalScore / (r.totalMarks || 100)) * 100, 0) / results.length) 
-    : 0;
+  // 🚨 CRITICAL QA FIX: Computed Stats (Hyper-Accurate Math)
+  let totalPercentageSum = 0;
+  let validResultsCount = 0;
+
+  results.forEach(r => {
+      const maxMarks = r.exam?.totalMarks || r.totalMarks || 300; 
+      if (maxMarks > 0) {
+          totalPercentageSum += (r.totalScore / maxMarks) * 100;
+          validResultsCount++;
+      }
+  });
+  const avgScore = validResultsCount > 0 ? Math.round(totalPercentageSum / validResultsCount) : 0;
   
   const upcomingExams = safeExams
-    .filter(e => new Date(e.scheduledAt).getTime() > Date.now())
+    .filter(e => {
+        const startTime = new Date(e.scheduledAt).getTime();
+        const durationMs = (e.durationMin || 180) * 60000;
+        const endTime = startTime + durationMs;
+        return endTime > Date.now(); 
+    })
     .sort((a,b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
   
   const nextExam = upcomingExams.length > 0 ? upcomingExams[0] : null;
   const latestRank = results[0]?.rank || null;
-
-  // Calculate Attempted Exam IDs to grey them out
   const attemptedExamIds = results.map(r => r.examId);
 
   const sidebarItems = [
@@ -184,12 +192,10 @@ export default function StudentPage() {
   return (
     <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
       
-      {/* MOBILE SIDEBAR OVERLAY */}
       {isSidebarOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
 
-      {/* SIDEBAR - Calmer, Modern Deep Slate styling */}
       <aside className={`fixed inset-y-0 left-0 z-50 bg-[#0B1121] border-r border-slate-800/80 transform transition-all duration-300 ease-in-out lg:static lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} ${isSidebarCollapsed ? 'w-24' : 'w-64'}`}>
         <div className="h-full flex flex-col p-4 relative">
           
@@ -207,7 +213,6 @@ export default function StudentPage() {
             </div>
           </div>
 
-          {/* Collapse Toggle Button - Always Visible at bottom right of sidebar area on Desktop */}
            <button 
               onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
               className={`hidden lg:flex absolute top-5 -right-3 p-1.5 bg-slate-800 rounded-full border border-slate-700 text-slate-400 hover:text-white transition-colors z-10 shadow-md`}
@@ -242,7 +247,6 @@ export default function StudentPage() {
         </div>
       </aside>
 
-      {/* MAIN VIEW */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50 relative">
         <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-30 sticky top-0">
           <div className="flex items-center gap-4">
@@ -252,10 +256,7 @@ export default function StudentPage() {
              </h2>
           </div>
           
-          {/* UPDATED: Interactive Right Actions */}
           <div className="flex items-center gap-4 md:gap-6">
-             
-             {/* 3D Notification Bell routing to resources */}
              <button 
                  onClick={() => setActiveTab('resources')}
                  className="relative p-2.5 bg-white text-slate-500 border border-b-[3px] border-slate-200 rounded-xl hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 active:border-b active:translate-y-[2px] transition-all group"
@@ -267,19 +268,18 @@ export default function StudentPage() {
 
              <div className="h-8 w-px bg-slate-200 hidden sm:block"></div>
              
-             {/* 3D Profile Button with Greeting Tooltip */}
              <div className="relative">
                  <button className="flex items-center gap-3 bg-white px-2 py-1.5 rounded-2xl border border-b-[3px] border-slate-200 hover:bg-slate-50 hover:border-slate-300 active:border-b active:translate-y-[2px] transition-all group select-none text-left">
                      <div className="hidden md:flex flex-col items-end px-2">
                         <span className="text-sm font-bold text-slate-800 leading-none group-hover:text-blue-600 transition-colors">{profile?.name || user?.username}</span>
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{profile?.batch || 'Student'}</span>
                      </div>
-                     <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 border border-blue-400/50 flex items-center justify-center text-white font-black shadow-sm text-sm transform group-hover:scale-105 transition-transform">
+                     {/* QA FIX: Tailwind syntax updated to bg-linear-to-br */}
+                     <div className="w-10 h-10 rounded-xl bg-linear-to-br from-blue-600 to-indigo-700 border border-blue-400/50 flex items-center justify-center text-white font-black shadow-sm text-sm transform group-hover:scale-105 transition-transform">
                         {user?.username?.charAt(0).toUpperCase() || 'S'}
                      </div>
                  </button>
 
-                 {/* Greeting Popup */}
                  {showGreeting && (
                      <div className="absolute top-full right-0 mt-3 bg-slate-800 text-white text-sm font-bold px-4 py-2.5 rounded-2xl shadow-xl animate-bounce whitespace-nowrap z-50 pointer-events-none">
                          Hi, {(profile?.name || user?.username || 'Student').split(' ')[0]}! 👋
@@ -301,10 +301,9 @@ export default function StudentPage() {
                     nextExam={nextExam} 
                     setActiveTab={setActiveTab}
                     notices={notices}
-                    attemptedExamIds={attemptedExamIds} // Passed for greying out logic
+                    attemptedExamIds={attemptedExamIds} 
                  />
                )}
-               {/* Passed attemptedExamIds to handle button locking logic */}
                {activeTab === 'exams' && <ExamListPanel exams={safeExams} attemptedExamIds={attemptedExamIds} />} 
                {activeTab === 'results' && <ResultsPanel results={results} />}
                {activeTab === 'resources' && <ResourcesPanel resources={resources} notices={notices} />}

@@ -26,11 +26,13 @@ export default function ExamListPanel({ exams, attemptedExamIds = [] }: ExamList
                 <div className="col-span-2 p-12 text-center text-slate-400 border border-dashed border-slate-300 rounded-xl">No exams scheduled.</div>
              ) : (
                 exams.map((exam) => {
-                    const isAttempted = attemptedExamIds.includes(exam.id);
+                    // QA FIX: Added safety chaining in case attemptedExamIds is undefined
+                    const isAttempted = attemptedExamIds?.includes(exam.id) || false;
                     
-                    // TIMELINE LOGIC
+                    // TIMELINE LOGIC (QA FIX: Safe fallback for durationMin to prevent NaN crashes)
                     const startTime = new Date(exam.scheduledAt).getTime();
-                    const endTime = startTime + (exam.durationMin * 60 * 1000); // Start + Duration in ms
+                    const durationMs = (exam.durationMin || 180) * 60 * 1000; 
+                    const endTime = startTime + durationMs; 
                     
                     const isFuture = currentTime < startTime;
                     const isPast = currentTime > endTime;
@@ -47,17 +49,17 @@ export default function ExamListPanel({ exams, attemptedExamIds = [] }: ExamList
                                             {exam.subject || 'General'}
                                         </span>
                                         {isLive && !isAttempted && (
-                                            <span className="flex items-center gap-1 text-[10px] text-red-500 font-bold bg-red-50 px-2 py-1 rounded uppercase tracking-wider animate-pulse">
+                                            <span className="flex items-center gap-1 text-[10px] text-red-500 font-bold bg-red-50 px-2 py-1 rounded uppercase tracking-wider animate-pulse border border-red-100">
                                                 <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span> Live
                                             </span>
                                         )}
                                     </div>
-                                    <span className="text-slate-400 text-xs font-mono">{exam.durationMin} mins</span>
+                                    <span className="text-slate-400 text-xs font-mono bg-slate-100 px-2 py-1 rounded">{exam.durationMin || 180} mins</span>
                                 </div>
                                 <h3 className="text-lg font-bold text-slate-900 mb-2">{exam.title}</h3>
                                 <div className="flex items-center gap-4 text-xs text-slate-500">
-                                    <span className="flex items-center gap-1"><CheckCircle size={12}/> {exam.totalMarks} Marks</span>
-                                    <span className="flex items-center gap-1"><LayoutDashboard size={12}/> {exam.questionCount} Qs</span>
+                                    <span className="flex items-center gap-1"><CheckCircle size={12}/> {exam.totalMarks || 300} Marks</span>
+                                    <span className="flex items-center gap-1"><LayoutDashboard size={12}/> {exam.questionCount || exam.questions?.length || 0} Qs</span>
                                 </div>
                             </div>
                             <div className="mt-6 pt-4 border-t border-slate-100">
@@ -73,7 +75,7 @@ export default function ExamListPanel({ exams, attemptedExamIds = [] }: ExamList
                                     </button>
                                 ) : (
                                     <Link href={`/student/exam/${exam.id}`} className="block w-full">
-                                        <button className="w-full py-2.5 bg-slate-900 hover:bg-blue-600 text-white text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2">
+                                        <button className="w-full py-2.5 bg-slate-900 hover:bg-blue-600 text-white text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm">
                                             Take Test <ChevronRight size={14}/>
                                         </button>
                                     </Link>

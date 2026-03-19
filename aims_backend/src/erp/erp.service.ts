@@ -544,14 +544,41 @@ export class ErpService {
 
   // --- ACADEMICS ---
   async getExamResults(examId: string, batchId?: string) { 
-    const whereClause: any = { examId }; 
+    const whereClause: any = { examId, status: 'EVALUATED' }; 
+    
     if (batchId) { 
       const students = await this.prisma.studentProfile.findMany({ where: { batchId }, select: { userId: true } }); 
       const userIds = students.map(s => s.userId); 
       whereClause.userId = { in: userIds }; 
     } 
-    const attempts = await this.prisma.testAttempt.findMany({ where: whereClause, include: { user: { include: { studentProfile: true } } }, orderBy: { totalScore: 'desc' } }); 
-    return attempts.map((a, index) => ({ id: a.id, rank: index + 1, studentName: a.user.studentProfile?.fullName || a.user.username, physics: a.physics, chemistry: a.chemistry, maths: a.maths, total: a.totalScore })); 
+    
+    const attempts = await this.prisma.testAttempt.findMany({ 
+        where: whereClause, 
+        include: { user: { include: { studentProfile: true } } }, 
+        orderBy: { totalScore: 'desc' } // Still order by highest score first
+    }); 
+
+    // 🚨 FIX: Standard Competitive Ranking (Handles Ties Perfectly)
+    let currentRank = 1;
+    let previousScore: number | null = null;
+
+    return attempts.map((a, index) => { 
+        // If the score is lower than the previous guy, the rank drops to their actual position
+        if (previousScore !== null && a.totalScore < previousScore) {
+            currentRank = index + 1;
+        }
+        previousScore = a.totalScore;
+
+        return { 
+            id: a.id, 
+            rank: currentRank, 
+            studentName: a.user.studentProfile?.fullName || a.user.username, 
+            physics: a.physics, 
+            chemistry: a.chemistry, 
+            maths: a.maths, 
+            total: a.totalScore 
+        };
+    }); 
   }
   
   async getAttendanceStats(batchId: string) { 

@@ -34,7 +34,7 @@ export default function ExamHeader({
                 </div>
             </div>
             <div className="flex items-center gap-4">
-                <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full font-mono font-bold text-lg border ${timeLeft < 300 ? 'bg-red-50 text-red-600 border-red-200 animate-pulse' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full font-mono font-bold text-lg border transition-colors ${timeLeft < 300 ? 'bg-red-50 text-red-600 border-red-200 animate-pulse' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
                     <Clock size={18}/> {formatTime(timeLeft)}
                 </div>
                 
@@ -45,7 +45,7 @@ export default function ExamHeader({
                     <FileText size={18}/> <span className="hidden lg:inline">Question Paper</span>
                 </button>
 
-                <button onClick={onToggleSidebar} className="md:hidden p-2 bg-slate-100 rounded-lg text-slate-600">
+                <button onClick={onToggleSidebar} className="md:hidden p-2 bg-slate-100 rounded-lg text-slate-600 hover:bg-slate-200 transition">
                     <Menu size={20}/>
                 </button>
             </div>
