@@ -91,12 +91,19 @@ export const parentApi = {
 
   // --- RAZORPAY PAYMENT METHODS ---
 
-  async createPaymentOrder(token: string, amount: number, receiptId: string) {
+  // 🚨 FIX 1: Explicitly pass studentId and prevent the 40-char limit crash
+  async createPaymentOrder(token: string, amount: number, studentId: string) {
+    // Razorpay has a strict 40 character limit. UUIDs are 36. 
+    // We truncate the ID to guarantee it never crashes the Razorpay API.
+    const safeReceipt = `rc_${studentId.substring(0, 30)}`;
+
     const res = await fetchWithAuth(`${API_URL}/payment/create-order`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ amount, receiptId }),
+      // Send the studentId explicitly so the backend Webhook knows who is paying!
+      body: JSON.stringify({ amount, receiptId: safeReceipt, studentId }),
     });
+    
     if (!res.ok) throw new Error('Failed to create order');
     return await res.json();
   },

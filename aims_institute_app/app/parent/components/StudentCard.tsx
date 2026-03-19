@@ -75,6 +75,14 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
     try {
       setIsProcessing(true);
 
+      // 🚨 FIX 2: Safety Check for Frontend API Key
+      const rzpKey = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+      if (!rzpKey) {
+        alert("System Error: Razorpay Public Key is missing in the frontend environment variables.");
+        setIsProcessing(false);
+        return;
+      }
+
       // 1. Load Script
       const isLoaded = await loadRazorpayScript();
       if (!isLoaded) {
@@ -83,37 +91,35 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
         return;
       }
 
-      // 2. Create Order
-      const order = await parentApi.createPaymentOrder(token, amount, `rcpt_${studentId}`);
+      // 2. Create Order (Pass the studentId directly now)
+      const order = await parentApi.createPaymentOrder(token, amount, studentId);
 
       // 3. Configure Razorpay Window
       const baseUrl = process.env.NEXT_PUBLIC_API_URL 
-        ? process.env.NEXT_PUBLIC_API_URL.replace(':3001', ':3000') // Switch backend port to frontend port
+        ? process.env.NEXT_PUBLIC_API_URL.replace(':3001', ':3000') 
         : 'http://localhost:3000';
 
-      // 3. Configure Razorpay Window
       const options = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        key: rzpKey,
         amount: order.amount,
         currency: "INR",
         name: "AIMS Institute",
         description: `Fee Payment for ${child.name}`,
-        image: `${baseUrl}/logo.png`, // Absolutely resolved URL
+        image: `${baseUrl}/logo.png`, 
         order_id: order.id,
         handler: async function (response: any) {
           try {
-            // Verify and Save to DB in ONE secure call
+            // Verify and Save to DB
             await parentApi.verifyPayment(token, {
               razorpayOrderId: response.razorpay_order_id,
               razorpayPaymentId: response.razorpay_payment_id,
               signature: response.razorpay_signature,
-              studentId: studentId, // Passed to backend for database recording
-              amount: amount        // Passed to backend for database recording
+              studentId: studentId, 
+              amount: amount        
             });
 
-            // The backend has now automatically created the FeeRecord!
             alert("Payment Successful! Receipt generated.");
-            window.location.reload(); // Refresh the dashboard to show updated dues
+            window.location.reload(); 
           } catch (err) {
             alert("Payment verification failed. Please contact admin.");
           }
@@ -122,7 +128,7 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
           name: child.name,
         },
         theme: {
-          color: "#9333ea", // Matches your purple theme!
+          color: "#9333ea", 
         },
         modal: {
           ondismiss: function() {
@@ -138,7 +144,7 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
       });
       rzp.open();
     } catch (error) {
-      console.error(error);
+      console.error("Payment Error:", error);
       alert("Something went wrong initiating payment.");
       setIsProcessing(false);
     } 
