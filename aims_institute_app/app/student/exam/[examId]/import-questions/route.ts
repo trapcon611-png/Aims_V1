@@ -29,7 +29,6 @@ export async function POST(
         questionImage: q.questionImage ? String(q.questionImage) : null,
         
         subject: String(q.subject || "General"),
-        // NOW WE CAN SAVE THESE:
         topic: String(q.topic || "General"),
         type: String(q.type || "SINGLE").toUpperCase(), 
         difficulty: String(q.difficulty || "MEDIUM").toUpperCase(),
@@ -38,7 +37,8 @@ export async function POST(
         correctOption: String(q.correctOption || "a"),
         
         marks: Number(q.marks) || 4,
-        negative: -1,
+        // 🚨 QA FIX: Do not hardcode negative marks! Respect the payload.
+        negative: Number(q.negative) || -1,
         orderIndex: index + 1
     }));
 

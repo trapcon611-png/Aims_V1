@@ -37,14 +37,18 @@ export default function ExamPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [submissionStatus, setSubmissionStatus] = useState<'IDLE' | 'SUBMITTING' | 'COMPLETED'>('IDLE');
   
-  // Refs for Stability (Breaks dependency loops)
+  // Refs for Stability (Breaks dependency loops & allows timer to access latest state safely)
   const answersRef = useRef<Record<string, string>>({});
   const timeSpentRef = useRef<Record<string, number>>({});
   const lastSwitchTime = useRef<number>(Date.now());
   const examIdRef = useRef(examId);
+  const currentQIndexRef = useRef(currentQIndex); // 🚨 QA FIX: Needed for final time capture
+  const examDataRef = useRef<ExamData | null>(null); // 🚨 QA FIX: Needed for final time capture
 
   // Sync state to refs
   useEffect(() => { answersRef.current = answers; }, [answers]);
+  useEffect(() => { currentQIndexRef.current = currentQIndex; }, [currentQIndex]);
+  useEffect(() => { examDataRef.current = examData; }, [examData]);
 
   // --- NETWORK MONITORING ---
   useEffect(() => {
@@ -58,26 +62,22 @@ export default function ExamPage() {
       };
   }, []);
 
-  // --- ANTI-CHEAT ---
-  useEffect(() => {
-      if (!hasStarted || submissionStatus !== 'IDLE') return;
-      const handleVisibilityChange = () => {
-          if (document.hidden) {
-              alert("WARNING: Tab switching is monitored. Please stay on this tab.");
-          }
-      };
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-      return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [hasStarted, submissionStatus]);
-
-  // --- SUBMIT FUNCTION (STABLE) ---
+  // --- SUBMIT FUNCTION (STABLE & MATHEMATICALLY SOUND) ---
   const handleSubmit = useCallback(async (auto = false) => {
-    if(!auto && !confirm("Are you sure you want to submit the exam?")) return;
+    if(!auto && !window.confirm("Are you sure you want to submit the exam?")) return;
     
     setSubmissionStatus('SUBMITTING');
     const token = studentApi.getToken();
     
-    // Use refs to get latest data without re-rendering hook
+    // 🚨 QA FIX: Capture time spent on the VERY LAST question before locking
+    const currentExam = examDataRef.current;
+    if (currentExam && currentExam.questions.length > 0) {
+        const finalQId = currentExam.questions[currentQIndexRef.current].id;
+        const now = Date.now();
+        const diff = (now - lastSwitchTime.current) / 1000;
+        timeSpentRef.current[finalQId] = (timeSpentRef.current[finalQId] || 0) + diff;
+    }
+    
     const currentAnswers = answersRef.current;
     const currentTimeSpent = timeSpentRef.current;
     
@@ -98,15 +98,37 @@ export default function ExamPage() {
         });
         
     } catch(e: any) {
-        alert("Submission Failed. Please try again.");
+        alert("Submission Failed. Please check your internet connection and try again.");
         setSubmissionStatus('IDLE');
     }
   }, []); 
 
+  // --- ANTI-CHEAT (STRICT 3-STRIKE RULE) ---
+  const violationsRef = useRef(0);
+  useEffect(() => {
+      if (!hasStarted || submissionStatus !== 'IDLE') return;
+      
+      const handleVisibilityChange = () => {
+          if (document.hidden) {
+              violationsRef.current += 1;
+              
+              if (violationsRef.current >= 3) {
+                  alert("🚨 SECURITY VIOLATION 🚨\nYou have switched tabs 3 times. Your exam is now being automatically submitted.");
+                  handleSubmit(true);
+              } else {
+                  alert(`⚠️ WARNING: Tab switching is monitored. Violation ${violationsRef.current} of 3.\nIf you switch tabs again, your exam will be automatically submitted.`);
+              }
+          }
+      };
+      
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [hasStarted, submissionStatus, handleSubmit]);
+
   // --- LOAD EXAM ---
   useEffect(() => {
       if (!examId) return;
-      examIdRef.current = examId; // Sync ref
+      examIdRef.current = examId; 
 
       const initExam = async () => {
           setLoading(true);
@@ -169,7 +191,6 @@ export default function ExamPage() {
                                   text = String(parsedOpt || "");
                               }
 
-                              // Extract image URL or text so QuestionView renders it natively
                               if (img && !text) {
                                   cleanOptions[key] = img;
                               } else if (text && !img) {
@@ -191,7 +212,7 @@ export default function ExamPage() {
               const startTimeDate = new Date(data.exam.scheduledAt);
               const now = new Date();
               if (startTimeDate > now) {
-                  setExamData(data); // Needed for title
+                  setExamData(data); 
                   setIsTooEarly(true);
                   setLoading(false);
                   return;
@@ -223,7 +244,6 @@ export default function ExamPage() {
               const remaining = (data.exam.duration * 60) - elapsed;
               
               if(remaining <= 0) { 
-                  // If time expired, submit immediately
                   handleSubmit(true); 
               } else { 
                   setTimeLeft(remaining); 
@@ -280,7 +300,6 @@ export default function ExamPage() {
       
       const newAnswers = { ...answers, [qId]: val };
       setAnswers(newAnswers);
-      // answersRef updated via useEffect
       localStorage.setItem(`exam_ans_${examData!.attemptId}`, JSON.stringify(newAnswers));
   };
 
@@ -314,13 +333,13 @@ export default function ExamPage() {
              <h2 className="text-xl font-bold text-slate-800">Exam Not Started</h2>
              <p className="text-slate-500 mt-2 text-sm">This exam is scheduled for:</p>
              <p className="text-lg font-bold text-blue-600 mt-2">{new Date(examData!.exam.scheduledAt).toLocaleString()}</p>
-             <button onClick={() => router.push('/student')} className="mt-6 w-full py-3 bg-slate-800 text-white rounded-lg font-bold">Back to Dashboard</button>
+             <button onClick={() => router.push('/student')} className="mt-6 w-full py-3 bg-slate-800 text-white rounded-lg font-bold hover:bg-slate-700 transition">Back to Dashboard</button>
           </div>
       </div>
   );
 
   // Completion Screen
-  if (submissionStatus === 'COMPLETED') return <div className="h-screen flex flex-col items-center justify-center bg-slate-50"><CheckCircle className="text-green-500 mb-4" size={64}/><h2 className="text-2xl font-bold text-slate-800">Exam Submitted!</h2><p className="text-slate-500 mt-2">Go to the Results tab to view your score.</p><button onClick={() => router.push('/student')} className="mt-6 px-8 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg">Return Home</button></div>;
+  if (submissionStatus === 'COMPLETED') return <div className="h-screen flex flex-col items-center justify-center bg-slate-50"><CheckCircle className="text-green-500 mb-4" size={64}/><h2 className="text-2xl font-bold text-slate-800">Exam Submitted!</h2><p className="text-slate-500 mt-2">Go to the Results tab to view your score.</p><button onClick={() => router.push('/student')} className="mt-6 px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg transition">Return Home</button></div>;
 
   // Rules Modal
   if (!hasStarted) {
