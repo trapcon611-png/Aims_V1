@@ -381,6 +381,7 @@ export default function DirectorPage() {
           setPendingEnquiries(enqs.filter((e: any) => e.status === 'PENDING').slice(0, 10));
 
           // 🚨 CRITICAL FIX: Smart Accounting for Pending Dues
+          // 🚨 CRITICAL FIX: Smart Accounting for Pending Dues (Strict 3-Day Window)
           const pendingDues: any[] = [];
           sts.forEach((s: any) => {
               if (s.feeRemaining > 0 && s.installments) {
@@ -389,22 +390,28 @@ export default function DirectorPage() {
                   s.installments.forEach((inst: any) => {
                       cumulativeInst += inst.amount;
                       
-                      // 1. Check if this specific installment is unpaid (or partially unpaid)
+                      // 1. Check if this specific installment has an unpaid balance
                       if (cumulativeInst > s.feePaid) {
                           
-                          // 2. Check if it is due (or upcoming within 7 days)
-                          if (new Date(inst.dueDate) < new Date(Date.now() + 7 * 86400000)) {
+                          // 2. Strict 3-Day Window Logic
+                          const threeDaysFromNow = new Date(Date.now() + 3 * 86400000);
+                          const dueDate = new Date(inst.dueDate);
+                          
+                          // Include if it is OVERDUE or upcoming within exactly 3 days
+                          if (dueDate <= threeDaysFromNow) {
                               
                               // 3. Calculate EXACT remainder for this specific installment
                               const remainder = cumulativeInst - Math.max(s.feePaid, cumulativeInst - inst.amount);
                               
-                              pendingDues.push({ 
-                                  name: s.name, 
-                                  batch: s.batch, 
-                                  mobile: s.parentMobile, 
-                                  amount: remainder, // Only asks for what is actually left!
-                                  date: inst.dueDate 
-                              });
+                              if (remainder > 0) {
+                                  pendingDues.push({ 
+                                      name: s.name, 
+                                      batch: s.batch, 
+                                      mobile: s.parentMobile, 
+                                      amount: remainder, // Exact remaining (e.g. ₹1)
+                                      date: inst.dueDate 
+                                  });
+                              }
                           }
                       }
                   });

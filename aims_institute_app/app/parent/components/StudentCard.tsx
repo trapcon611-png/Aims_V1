@@ -26,8 +26,6 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
   const [activeTab, setActiveTab] = useState<'fees' | 'invoices' | 'academics' | 'notices'>('fees');
   const [results, setResults] = useState<ExamResult[]>([]);
   const [loadingResults, setLoadingResults] = useState(false);
-  
-  // Loading State for Payments
   const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
@@ -60,7 +58,6 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
   
   const currentPayable = calculateCurrentPayable();
 
-  // --- ACTUAL RAZORPAY LOGIC ---
   const loadRazorpayScript = () => {
     return new Promise((resolve) => {
       const script = document.createElement('script');
@@ -75,7 +72,6 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
     try {
       setIsProcessing(true);
 
-      // 🚨 FIX 2: Safety Check for Frontend API Key
       const rzpKey = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
       if (!rzpKey) {
         alert("System Error: Razorpay Public Key is missing in the frontend environment variables.");
@@ -83,7 +79,6 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
         return;
       }
 
-      // 1. Load Script
       const isLoaded = await loadRazorpayScript();
       if (!isLoaded) {
         alert("Razorpay failed to load. Please check your internet connection.");
@@ -91,10 +86,8 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
         return;
       }
 
-      // 2. Create Order (Pass the studentId directly now)
       const order = await parentApi.createPaymentOrder(token, amount, studentId);
 
-      // 3. Configure Razorpay Window
       const baseUrl = process.env.NEXT_PUBLIC_API_URL 
         ? process.env.NEXT_PUBLIC_API_URL.replace(':3001', ':3000') 
         : 'http://localhost:3000';
@@ -109,7 +102,6 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
         order_id: order.id,
         handler: async function (response: any) {
           try {
-            // Verify and Save to DB
             await parentApi.verifyPayment(token, {
               razorpayOrderId: response.razorpay_order_id,
               razorpayPaymentId: response.razorpay_payment_id,
@@ -150,7 +142,6 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
     } 
   };
   
-  // 🚨 CRITICAL FIX: Partial Payment Status Logic
   const getInstallmentStatus = (dueDateStr: string, index: number, instAmount: number) => { 
     const paid = child.paidFees; 
     let cumulativeBefore = 0; 
@@ -180,7 +171,15 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
   return (
     <div className={`${cardBg} rounded-3xl shadow-xl border overflow-hidden transition-all duration-300 mb-8 flex flex-col lg:flex-row min-h-125`}>
       <div className={`lg:w-72 ${sidebarBg} border-b lg:border-b-0 lg:border-r p-6 flex flex-col`}>
-          <div className="flex items-center gap-4 mb-8"><div className="h-12 w-12 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg">{child.name.charAt(0)}</div><div><h2 className="text-lg font-bold truncate leading-tight">{child.name}</h2><p className="text-xs font-bold mt-1 text-purple-500">{child.batch}</p></div></div>
+          <div className="flex items-center gap-4 mb-8">
+            <div className="h-12 w-12 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg">
+                {child.name.charAt(0)}
+            </div>
+            <div>
+                <h2 className="text-lg font-bold truncate leading-tight">{child.name}</h2>
+                <p className="text-xs font-bold mt-1 text-purple-500">{child.batch}</p>
+            </div>
+          </div>
           <nav className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0">
              <button onClick={() => setActiveTab('fees')} className={`flex-1 lg:flex-none flex items-center gap-3 p-3.5 rounded-xl transition-all duration-200 text-sm font-bold whitespace-nowrap ${activeTab === 'fees' ? tabActive : tabInactive}`}><Wallet size={18}/> Financials</button>
              <button onClick={() => setActiveTab('invoices')} className={`flex-1 lg:flex-none flex items-center gap-3 p-3.5 rounded-xl transition-all duration-200 text-sm font-bold whitespace-nowrap ${activeTab === 'invoices' ? tabActive : tabInactive}`}><FileCheck size={18}/> Invoices</button>
@@ -195,7 +194,15 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
           <div className="animate-in fade-in slide-in-from-right-4 duration-500 space-y-8">
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                 <div className="p-8 rounded-3xl text-white shadow-2xl relative overflow-hidden bg-gradient-to-br from-purple-600 to-indigo-700">
-                   <div className="flex justify-between items-start mb-8"><div><p className="text-purple-200 text-xs font-bold uppercase tracking-widest mb-1">Active Installment</p><p className="text-4xl font-black tracking-tight">₹{currentPayable.toLocaleString()}</p></div><div className="p-3 bg-white/10 rounded-xl backdrop-blur-md"><CreditCard className="text-white" size={24}/></div></div>
+                   <div className="flex justify-between items-start mb-8">
+                       <div>
+                           <p className="text-purple-200 text-xs font-bold uppercase tracking-widest mb-1">Active Installment</p>
+                           <p className="text-4xl font-black tracking-tight">₹{currentPayable.toLocaleString()}</p>
+                       </div>
+                       <div className="p-3 bg-white/10 rounded-xl backdrop-blur-md">
+                           <CreditCard className="text-white" size={24}/>
+                       </div>
+                   </div>
                    
                    {currentPayable > 0 ? (
                      <button 
@@ -222,14 +229,13 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
                 </div>
               </div>
               
-              {/* 🚨 CRITICAL FIX: Schedule Rendering Logic */}
+              {/* 🚨 CRITICAL FIX: Schedule Rendering Logic (Cleaned up Partial UI) */}
               {child.installments && child.installments.length > 0 && (
                 <div className="space-y-3">
                   <h4 className={`text-xs font-bold ${labelColor} uppercase tracking-widest`}>Schedule</h4>
                   {child.installments.map((inst, idx) => { 
                     const status = getInstallmentStatus(inst.dueDate, idx, inst.amount); 
                     
-                    // Calculate exact remaining amount for this row
                     let displayAmount = inst.amount;
                     let cumulativeBefore = 0;
                     for(let i=0; i<idx; i++) cumulativeBefore += child.installments![i].amount;
@@ -242,13 +248,15 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
                       <div key={idx} className={`flex justify-between items-center p-4 rounded-xl border transition-colors ${status.bg}`}>
                         <div className="flex items-center gap-4">
                           <div className="flex flex-col">
-                             <span className={`font-mono font-bold ${status.label === 'Paid' ? 'line-through opacity-50' : ''}`}>
-                                ₹{displayAmount.toLocaleString()}
-                             </span>
-                             {status.label === 'Partial' && (
-                               <span className="text-[9px] text-amber-600 font-bold uppercase mt-0.5">
-                                 Left of ₹{inst.amount.toLocaleString()}
-                               </span>
+                             {status.label === 'Paid' ? (
+                                 <span className="font-mono font-bold line-through opacity-40">₹{inst.amount.toLocaleString()}</span>
+                             ) : status.label === 'Partial' ? (
+                                 <>
+                                    <span className="font-mono font-bold text-amber-600">₹{displayAmount.toLocaleString()}</span>
+                                    <span className="text-[9px] text-amber-600/70 font-bold uppercase mt-0.5">Remaining</span>
+                                 </>
+                             ) : (
+                                 <span className="font-mono font-bold">₹{inst.amount.toLocaleString()}</span>
                              )}
                           </div>
                           <span className={`text-xs ${status.color}`}>{new Date(inst.dueDate).toLocaleDateString()}</span>
