@@ -103,8 +103,8 @@ model Notice {
   batch     Batch?   @relation(fields: [batchId], references: [id])
   
   // Specific Targeting Fields
-  studentId String?    
-  parentId  String?    
+  studentId String?   
+  parentId  String?   
 
   createdAt DateTime @default(now())
 }
@@ -148,8 +148,8 @@ model QuestionBank {
   createdById     String
   createdBy       TeacherProfile @relation(fields: [createdById], references: [id])
   questionText    String
-  questionImage   String?       
-  solutionImage   String?       
+  questionImage   String?        
+  solutionImage   String?        
   options         Json
   correctOption   String
   explanation     String?
@@ -173,11 +173,11 @@ model Question {
   questionBank   QuestionBank? @relation(fields: [questionBankId], references: [id])
   
   questionText   String
-  questionImage  String?       
-  solutionImage  String?       
+  questionImage  String?        
+  solutionImage  String?        
   
-  topic          String?       
-  type           String?       
+  topic          String?        
+  type           String?        
 
   options        Json
   correctOption  String
@@ -199,9 +199,9 @@ enum AttemptStatus {
 model TestAttempt {
   id           String        @id @default(uuid())
   userId       String
-  user         User          @relation(fields: [userId], references: [id])
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   examId       String
-  exam         Exam          @relation(fields: [examId], references: [id])
+  exam         Exam          @relation(fields: [examId], references: [id], onDelete: Cascade)
   status       AttemptStatus @default(IN_PROGRESS)
   totalScore   Float         @default(0)
   
@@ -216,8 +216,6 @@ model TestAttempt {
   startedAt    DateTime      @default(now())
   submittedAt  DateTime?
   answers      Answer[]
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  exam       Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
 }
 
 model Answer {
@@ -244,13 +242,11 @@ model Attendance {
   batchId   String?
   batch     Batch?         @relation(fields: [batchId], references: [id])
   studentId String
-  student   StudentProfile @relation(fields: [studentId], references: [id])
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
   isPresent Boolean        @default(false)
   createdAt DateTime       @default(now())
 
-
   @@unique([date, studentId, subject, time]) 
-  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
 }
 
 // --- 5. FINANCE ---
@@ -258,7 +254,7 @@ model Attendance {
 model FeeRecord {
   id              String         @id @default(uuid())
   studentId       String
-  student         StudentProfile @relation(fields: [studentId], references: [id])
+  student         StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
   amount          Float
   date            DateTime       @default(now())
   remarks         String?
@@ -268,7 +264,6 @@ model FeeRecord {
   // --- NEW COLUMNS FOR RAZORPAY & INVOICES ---
   receiptNumber   String?        @unique
   razorpayOrderId String?
-  student       StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
 }
 
 model Expense {
