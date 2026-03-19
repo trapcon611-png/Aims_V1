@@ -125,6 +125,19 @@ export const directorApi = {
       } 
   },
 
+  // 🚨 NEW: DELETE STUDENT API CALL
+  async deleteStudent(id: string) {
+    const res = await fetchWithAuth(`${API_URL}/erp/students/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${this.getToken()}` }
+    });
+    if (!res.ok) {
+        const errorData = await parseJsonSafely(res, { message: 'Failed to delete student' });
+        throw new Error(errorData.message || 'Failed to delete student');
+    }
+    return await parseJsonSafely(res);
+  },
+
   async getBatches() { 
       try { 
           const res = await fetchWithAuth(`${API_URL}/erp/batches`, { 

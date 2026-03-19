@@ -216,6 +216,8 @@ model TestAttempt {
   startedAt    DateTime      @default(now())
   submittedAt  DateTime?
   answers      Answer[]
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exam       Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
 }
 
 model Answer {
@@ -246,7 +248,9 @@ model Attendance {
   isPresent Boolean        @default(false)
   createdAt DateTime       @default(now())
 
+
   @@unique([date, studentId, subject, time]) 
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
 }
 
 // --- 5. FINANCE ---
@@ -264,6 +268,7 @@ model FeeRecord {
   // --- NEW COLUMNS FOR RAZORPAY & INVOICES ---
   receiptNumber   String?        @unique
   razorpayOrderId String?
+  student       StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
 }
 
 model Expense {

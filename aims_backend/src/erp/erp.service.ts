@@ -441,6 +441,21 @@ export class ErpService {
   
   async getStudents() { return this.getStudentDirectory(); }
 
+  // 🚨 NEW: Delete Student Action
+  async deleteStudent(studentProfileId: string) {
+      const student = await this.prisma.studentProfile.findUnique({ 
+          where: { id: studentProfileId },
+          select: { userId: true }
+      });
+      
+      if (!student) throw new NotFoundException('Student not found');
+
+      // Deleting the base User record will automatically Cascade Delete their 
+      // StudentProfile, Fees, Attendance, and Test Attempts (if Schema was updated!)
+      await this.prisma.user.delete({ where: { id: student.userId } });
+      return { success: true, message: 'Student and all related records deleted' };
+  }
+
   // 🚨 CRITICAL FIX: The Admission Route now throws ConflictExceptions!
   async registerStudent(dto: any) {
     const input = dto; 

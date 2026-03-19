@@ -195,11 +195,17 @@ export class ErpController {
     @Query('search') search?: string,
     @Query('batch') batch?: string,
   ) {
-    // Parse the query strings into numbers, with fallbacks
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 20;
     
     return this.erpService.getStudentDirectory(pageNum, limitNum, search || '', batch || '');
+  }
+
+  // 🚨 NEW: Delete Student Route
+  @Delete('students/:id')
+  @Roles('SUPER_ADMIN')
+  async deleteStudent(@Param('id') id: string) {
+    return this.erpService.deleteStudent(id);
   }
 
   // --- ENQUIRIES (CRM) ---

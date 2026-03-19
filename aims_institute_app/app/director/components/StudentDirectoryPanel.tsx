@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
     Users, Search, Filter, Lock, Copy, ChevronLeft, ChevronRight, 
-    Cake, RefreshCw, X, Key, Loader2
+    Cake, RefreshCw, X, Key, Loader2, Trash2 // 🚨 Added Trash2 icon
 } from 'lucide-react';
 import { directorApi } from '../services/directorApi';
 
@@ -15,7 +15,7 @@ interface StudentRecord {
 interface Batch { id: string; name: string; }
 
 export default function StudentDirectoryPanel({ 
-    students, // Kept so parent component doesn't break, but bypassed for server-side fetching
+    students, // Kept so parent component doesn't break
     batches, 
     onRefresh 
 }: { 
@@ -56,7 +56,6 @@ export default function StudentDirectoryPanel({
             }
         };
 
-        // Debounce search to prevent spamming the backend while typing
         const timeoutId = setTimeout(() => {
             fetchPaginatedData();
         }, 300);
@@ -64,11 +63,34 @@ export default function StudentDirectoryPanel({
         return () => clearTimeout(timeoutId);
     }, [currentPage, searchQuery, batchFilter, onRefresh]);
 
-    // Reset pagination on filter change
     useEffect(() => { setCurrentPage(1); }, [searchQuery, batchFilter]);
 
     const handleCopy = (text: string) => {
         navigator.clipboard.writeText(text);
+    };
+
+    // 🚨 NEW: DELETE LOGIC WITH CONFIRMATION
+    const handleDelete = async (id: string, name: string) => {
+        const confirmDelete = window.confirm(
+            `⚠️ DANGER ZONE ⚠️\n\nAre you absolutely sure you want to permanently delete student: ${name}?\n\nThis will instantly erase their Profile, Parents, Fee Records, Exam Scores, and Attendance History. This action CANNOT be undone.`
+        );
+
+        if (confirmDelete) {
+            try {
+                setIsFetching(true);
+                await directorApi.deleteStudent(id);
+                alert(`${name} has been successfully deleted from the system.`);
+                onRefresh(); // Trigger parent refresh to update dashboard stats
+                
+                // Also locally filter out the deleted student so UI updates instantly
+                setDirectoryData(prev => prev.filter(s => s.id !== id));
+                setTotalRecords(prev => Math.max(0, prev - 1));
+            } catch (e: any) {
+                alert(e.message || "Failed to delete student.");
+            } finally {
+                setIsFetching(false);
+            }
+        }
     };
 
     return (
@@ -98,7 +120,6 @@ export default function StudentDirectoryPanel({
                     </div>
 
                     <div className="flex flex-col md:flex-row gap-3 items-end">
-                        {/* Search Bar */}
                         <div className="flex-1 w-full relative">
                             <label className="text-[9px] font-bold text-slate-500 uppercase mb-1 block tracking-wide">Search Directory</label>
                             <div className="relative group">
@@ -118,7 +139,6 @@ export default function StudentDirectoryPanel({
                             </div>
                         </div>
 
-                        {/* Batch Filter */}
                         <div className="w-full md:w-64">
                             <label className="text-[9px] font-bold text-slate-500 uppercase mb-1 block tracking-wide">Filter by Batch</label>
                             <select 
@@ -146,18 +166,20 @@ export default function StudentDirectoryPanel({
                     <table className="w-full text-left border-collapse">
                         <thead className="bg-slate-100 text-slate-500 text-[10px] uppercase font-bold border-b border-slate-200 tracking-wider">
                             <tr>
-                                <th className="px-4 py-2 w-[28%]">Student Profile</th>
-                                <th className="px-4 py-2 w-[18%]">Credentials (S)</th>
-                                <th className="px-4 py-2 w-[22%]">Parent Info</th>
-                                <th className="px-4 py-2 w-[18%]">Credentials (P)</th>
-                                <th className="px-4 py-2 w-[14%] text-center">Mobile</th>
-                                <th className="px-4 py-2 text-right w-[10%]">Balance</th>
+                                <th className="px-4 py-2 w-[25%]">Student Profile</th>
+                                <th className="px-4 py-2 w-[15%]">Credentials (S)</th>
+                                <th className="px-4 py-2 w-[20%]">Parent Info</th>
+                                <th className="px-4 py-2 w-[15%]">Credentials (P)</th>
+                                <th className="px-4 py-2 w-[12%] text-center">Mobile</th>
+                                <th className="px-4 py-2 text-right w-[8%]">Balance</th>
+                                {/* 🚨 NEW: Actions Column */}
+                                <th className="px-4 py-2 text-center w-[5%]">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-xs">
                             {directoryData.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="px-4 py-10 text-center text-slate-400 italic bg-slate-50/30">
+                                    <td colSpan={7} className="px-4 py-10 text-center text-slate-400 italic bg-slate-50/30">
                                         {isFetching ? 'Loading directory...' : 'No student records found matching filters.'}
                                     </td>
                                 </tr>
@@ -165,7 +187,6 @@ export default function StudentDirectoryPanel({
                                 directoryData.map(s => (
                                     <tr key={s.id} className="hover:bg-slate-50/80 transition duration-150 group">
                                         
-                                        {/* Name & Batch & DOB */}
                                         <td className="px-4 py-2 align-middle">
                                             <div className="font-bold text-slate-800 text-sm leading-tight">{s.name}</div>
                                             <div className="flex flex-wrap gap-2 items-center mt-1">
@@ -180,7 +201,6 @@ export default function StudentDirectoryPanel({
                                             </div>
                                         </td>
 
-                                        {/* Student Creds (Tighter) */}
                                         <td className="px-4 py-2 align-middle font-mono text-[11px]">
                                             <div className="flex items-center gap-1.5 mb-0.5">
                                                 <span className="text-slate-400 font-bold text-[9px] w-3">ID</span>
@@ -192,7 +212,6 @@ export default function StudentDirectoryPanel({
                                             </div>
                                         </td>
 
-                                        {/* Parent Info & Address */}
                                         <td className="px-4 py-2 align-middle">
                                             <div className="font-medium text-slate-700 text-xs">Parent of {s.name.split(' ')[0]}</div>
                                             {s.address && (
@@ -202,7 +221,6 @@ export default function StudentDirectoryPanel({
                                             )}
                                         </td>
 
-                                        {/* Parent Creds (Tighter) */}
                                         <td className="px-4 py-2 align-middle font-mono text-[11px]">
                                             <div className="flex items-center gap-1.5 mb-0.5">
                                                 <span className="text-slate-400 font-bold text-[9px] w-3">ID</span>
@@ -214,7 +232,6 @@ export default function StudentDirectoryPanel({
                                             </div>
                                         </td>
 
-                                        {/* Mobile (Compact Lock) */}
                                         <td className="px-4 py-2 align-middle text-center">
                                             {s.isMobileMasked ? (
                                                 <div className="inline-flex items-center gap-1 bg-red-50 text-red-500 px-2 py-1 rounded border border-red-100" title="Protected">
@@ -230,7 +247,6 @@ export default function StudentDirectoryPanel({
                                             )}
                                         </td>
 
-                                        {/* Fee Status (Aligned Numbers) */}
                                         <td className="px-4 py-2 align-middle text-right">
                                             <div className={`font-bold text-sm ${s.feeRemaining > 0 ? 'text-[#c1121f]' : 'text-emerald-600'}`}>
                                                 ₹ {s.feeRemaining.toLocaleString()}
@@ -238,6 +254,17 @@ export default function StudentDirectoryPanel({
                                             <div className="text-[9px] text-slate-400 mt-0.5">
                                                 Paid: ₹{s.feePaid.toLocaleString()}
                                             </div>
+                                        </td>
+
+                                        {/* 🚨 NEW: Delete Button Cell */}
+                                        <td className="px-4 py-2 align-middle text-center">
+                                            <button 
+                                                onClick={() => handleDelete(s.id, s.name)} 
+                                                className="p-1.5 text-slate-400 hover:text-white hover:bg-red-500 rounded-lg transition-colors"
+                                                title="Delete Student Permanently"
+                                            >
+                                                <Trash2 size={16}/>
+                                            </button>
                                         </td>
                                     </tr>
                                 ))

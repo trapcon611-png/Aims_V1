@@ -380,18 +380,32 @@ export default function DirectorPage() {
           // 2. Action Items
           setPendingEnquiries(enqs.filter((e: any) => e.status === 'PENDING').slice(0, 10));
 
+          // 🚨 CRITICAL FIX: Smart Accounting for Pending Dues
           const pendingDues: any[] = [];
           sts.forEach((s: any) => {
               if (s.feeRemaining > 0 && s.installments) {
+                  let cumulativeInst = 0;
+                  
                   s.installments.forEach((inst: any) => {
-                      if (new Date(inst.dueDate) < new Date(Date.now() + 7 * 86400000)) {
-                          pendingDues.push({ 
-                              name: s.name, 
-                              batch: s.batch, 
-                              mobile: s.parentMobile, 
-                              amount: inst.amount, 
-                              date: inst.dueDate 
-                          });
+                      cumulativeInst += inst.amount;
+                      
+                      // 1. Check if this specific installment is unpaid (or partially unpaid)
+                      if (cumulativeInst > s.feePaid) {
+                          
+                          // 2. Check if it is due (or upcoming within 7 days)
+                          if (new Date(inst.dueDate) < new Date(Date.now() + 7 * 86400000)) {
+                              
+                              // 3. Calculate EXACT remainder for this specific installment
+                              const remainder = cumulativeInst - Math.max(s.feePaid, cumulativeInst - inst.amount);
+                              
+                              pendingDues.push({ 
+                                  name: s.name, 
+                                  batch: s.batch, 
+                                  mobile: s.parentMobile, 
+                                  amount: remainder, // Only asks for what is actually left!
+                                  date: inst.dueDate 
+                              });
+                          }
                       }
                   });
               }
