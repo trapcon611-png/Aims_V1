@@ -113,7 +113,9 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
             alert("Payment Successful! Receipt generated.");
             window.location.reload(); 
           } catch (err) {
+            console.error("Verification Error:", err);
             alert("Payment verification failed. Please contact admin.");
+            setIsProcessing(false); // 🚨 QA FIX: Unfreeze button if backend verification fails
           }
         },
         prefill: {
@@ -172,7 +174,7 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
     <div className={`${cardBg} rounded-3xl shadow-xl border overflow-hidden transition-all duration-300 mb-8 flex flex-col lg:flex-row min-h-125`}>
       <div className={`lg:w-72 ${sidebarBg} border-b lg:border-b-0 lg:border-r p-6 flex flex-col`}>
           <div className="flex items-center gap-4 mb-8">
-            <div className="h-12 w-12 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg">
+            <div className="h-12 w-12 bg-linear-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg">
                 {child.name.charAt(0)}
             </div>
             <div>
@@ -193,7 +195,7 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
         {activeTab === 'fees' && (
           <div className="animate-in fade-in slide-in-from-right-4 duration-500 space-y-8">
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                <div className="p-8 rounded-3xl text-white shadow-2xl relative overflow-hidden bg-gradient-to-br from-purple-600 to-indigo-700">
+                <div className="p-8 rounded-3xl text-white shadow-2xl relative overflow-hidden bg-linear-to-br from-purple-600 to-indigo-700">
                    <div className="flex justify-between items-start mb-8">
                        <div>
                            <p className="text-purple-200 text-xs font-bold uppercase tracking-widest mb-1">Active Installment</p>
