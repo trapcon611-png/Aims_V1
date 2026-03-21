@@ -6,19 +6,21 @@ import {
   ChevronRight, ChevronLeft, Bell, Loader2, Menu
 } from 'lucide-react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation'; // ADDED: Next.js Router
 
 // Internal Components
 import DashboardHome from './components/DashboardHome';
 import ExamListPanel from './components/ExamListPanel';
 import ResultsPanel from './components/ResultsPanel';
 import ResourcesPanel from './components/ResourcesPanel';
-import StudentLogin from './components/StudentLogin';
 import { studentApi } from './services/studentApi';
 
 const LOGO_PATH = '/logo.png'; 
 
 // --- MAIN CONTROLLER ---
 export default function StudentPage() {
+  const router = useRouter(); // ADDED: Initialize router
+
   const [user, setUser] = useState<any>(null);
   const [token, setToken] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -36,20 +38,44 @@ export default function StudentPage() {
   const [resources, setResources] = useState<any[]>([]);
   const [notices, setNotices] = useState<any[]>([]);
 
-  // 1. Auth Initialization
+  // 1. Auth Initialization (UPDATED for Unified Login)
   useEffect(() => {
-    const t = localStorage.getItem('student_token');
+    // Check for new aims_token OR legacy tokens
+    const t = localStorage.getItem('aims_token') || localStorage.getItem('student_token') || localStorage.getItem('accessToken');
     const u = localStorage.getItem('student_user');
-    if (t && u) {
-      try {
-        setToken(t);
-        setUser(JSON.parse(u));
-      } catch (e) {
-        localStorage.removeItem('student_token');
-      }
+    
+    if (!t) {
+      // If no token, kick back to root login
+      router.push('/');
+      return;
     }
-    setLoading(false);
-  }, []);
+
+    setToken(t);
+
+    if (u) {
+      try {
+        setUser(JSON.parse(u));
+        setLoading(false);
+      } catch (e) {
+        console.error(e);
+        setLoading(false);
+      }
+    } else {
+      // If logged in via new Root Page, 'student_user' might be missing. Fetch it using the token.
+      studentApi.getProfile(t).then(profileData => {
+        if (profileData) {
+          setUser(profileData);
+          localStorage.setItem('student_user', JSON.stringify(profileData));
+        } else {
+          setUser({ username: 'Student' }); // Safe fallback
+        }
+        setLoading(false);
+      }).catch(() => {
+        setUser({ username: 'Student' }); // Safe fallback
+        setLoading(false);
+      });
+    }
+  }, [router]);
 
   // Show Greeting once when user is loaded
   useEffect(() => {
@@ -126,26 +152,19 @@ export default function StudentPage() {
     }
   }, [token]);
 
-  // QA FIX: Explicit type to fix the implicit 'any' error
-  const handleLogin = (data: { access_token: string, user: any }) => {
-    const t = data.access_token;
-    localStorage.setItem('student_token', t);
-    localStorage.setItem('student_user', JSON.stringify(data.user));
-    localStorage.setItem('accessToken', t);
-    setToken(t);
-    setUser(data.user);
-  };
+  // (REMOVED handleLogin here, as auth is now handled at root)
 
   const handleLogout = () => {
+    localStorage.removeItem('aims_token'); // Clear new token
     localStorage.removeItem('student_token');
     localStorage.removeItem('student_user');
     localStorage.removeItem('accessToken');
     setUser(null);
     setToken('');
+    router.push('/'); // Redirect to root
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-blue-600" size={32}/></div>;
-  if (!user) return <StudentLogin onLogin={handleLogin} />;
+  if (loading || !user) return <div className="h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-blue-600" size={32}/></div>;
 
   // --- SAFE TIMEZONE WRAPPER ---
   const safeExams = exams.map(e => {

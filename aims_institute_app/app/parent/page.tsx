@@ -3,10 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2, Sun, Moon, LogOut } from 'lucide-react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation'; // ADDED: Next.js Router
 
 // Custom Services & Components
 import { parentApi } from './services/parentApi';
-import ParentLogin from './components/ParentLogin';
 import StudentCard from './components/StudentCard';
 import NeuralBackground from './components/NeuralBackground';
 import InvoiceModal from './components/InvoiceModal';
@@ -14,6 +14,8 @@ import InvoiceModal from './components/InvoiceModal';
 const LOGO_PATH = '/logo.png';
 
 export default function ParentPage() {
+  const router = useRouter(); // ADDED: Initialize router
+
   const [user, setUser] = useState<any>(null);
   const [token, setToken] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -25,20 +27,31 @@ export default function ParentPage() {
   const [viewInvoice, setViewInvoice] = useState<any>(null);
   const [isDark, setIsDark] = useState(false);
 
-  // 1. Auth Check on Mount
+  // 1. Auth Check on Mount (UPDATED for Unified Login)
   useEffect(() => { 
-      const t = localStorage.getItem('parent_token'); 
+      const t = localStorage.getItem('aims_token') || localStorage.getItem('parent_token'); 
       const u = localStorage.getItem('parent_user'); 
-      if (t && u) { 
+      
+      if (!t) {
+        // Kicks unauthorized users back to root login
+        router.push('/');
+        return;
+      }
+
+      setToken(t); 
+
+      if (u) { 
         try { 
-            setToken(t); 
             setUser(JSON.parse(u)); 
         } catch (e) { 
-            localStorage.removeItem('parent_token'); 
+            console.error(e);
         } 
-      } 
+      } else {
+        // Safe fallback for new unified login
+        setUser({ name: 'Guardian', role: 'PARENT' });
+      }
       setLoading(false); 
-  }, []);
+  }, [router]);
 
   // 2. Fetch Data
   useEffect(() => {
@@ -100,29 +113,24 @@ export default function ParentPage() {
   }, [token]);
 
 
-  const handleLogin = (data: any) => { 
-      localStorage.setItem('parent_token', data.access_token); 
-      localStorage.setItem('parent_user', JSON.stringify(data.user)); 
-      setToken(data.access_token); 
-      setUser(data.user); 
-  };
+  // (REMOVED handleLogin here, as auth is now handled at root)
 
   const handleLogout = () => { 
+      localStorage.removeItem('aims_token'); // Clear new token
       localStorage.removeItem('parent_token'); 
       localStorage.removeItem('parent_user'); 
       localStorage.removeItem('parent_session');
       setUser(null); 
       setToken(''); 
       setChildren([]);
+      router.push('/'); // Redirect to root
   };
 
-  if (loading) return (
+  if (loading || !user) return (
       <div className="h-screen flex items-center justify-center bg-white">
           <Loader2 className="animate-spin text-purple-600" size={32}/>
       </div>
   );
-
-  if (!user) return <ParentLogin onLogin={handleLogin} />;
 
   // Theme Classes
   const bgClass = isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900';

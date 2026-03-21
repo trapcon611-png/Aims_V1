@@ -3,22 +3,42 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, Lock, ArrowRight, Shield, Settings, Image as ImageIcon } from 'lucide-react';
+import { loginStudent } from './student/services/studentApi';
+import { loginParent } from './parent/services/parentApi';
 
 export default function RootLoginPage() {
   const [activeRole, setActiveRole] = useState<'student' | 'parent'>('student');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+    setIsLoading(true);
     
-    // TODO: Connect to your Next.js API / NestJS backend here
-    // Redirecting based on role for now
-    if (activeRole === 'student') {
-      router.push('/student');
-    } else {
-      router.push('/parent');
+    try {
+      let data;
+      
+      // Call the API based on the selected role
+      if (activeRole === 'student') {
+        data = await loginStudent(identifier, password);
+      } else {
+        data = await loginParent(identifier, password);
+      }
+  
+      // Save the JWT token
+      localStorage.setItem('aims_token', data.access_token || data.token);
+      
+      // Route to the protected dashboard
+      router.push(`/${activeRole}`);
+  
+    } catch (err: any) {
+      setError(err.message || 'Login failed. Please check your credentials.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -48,6 +68,7 @@ export default function RootLoginPage() {
           <div className="flex bg-[#E6EEF8] rounded-2xl p-1.5 mb-8 shadow-[inset_4px_4px_8px_#c8d0e7,inset_-4px_-4px_8px_#ffffff] relative z-10">
             <button
               onClick={() => setActiveRole('student')}
+              type="button"
               className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all duration-300 ${
                 activeRole === 'student'
                   ? 'bg-[#F0F5FA] text-blue-600 shadow-[4px_4px_10px_#d1d9e6,-4px_-4px_10px_#ffffff]'
@@ -58,6 +79,7 @@ export default function RootLoginPage() {
             </button>
             <button
               onClick={() => setActiveRole('parent')}
+              type="button"
               className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all duration-300 ${
                 activeRole === 'parent'
                   ? 'bg-[#F0F5FA] text-blue-600 shadow-[4px_4px_10px_#d1d9e6,-4px_-4px_10px_#ffffff]'
@@ -107,6 +129,13 @@ export default function RootLoginPage() {
               </div>
             </div>
 
+            {/* Error Message Display */}
+            {error && (
+              <div className="text-red-500 text-sm font-semibold ml-1">
+                {error}
+              </div>
+            )}
+
             <div className="flex items-center justify-between mt-2">
               <label className="flex items-center space-x-2 cursor-pointer group">
                 <div className="w-5 h-5 rounded-md shadow-[inset_2px_2px_5px_#d1d9e6,inset_-2px_-2px_5px_#ffffff] flex items-center justify-center">
@@ -120,10 +149,11 @@ export default function RootLoginPage() {
             {/* Submit Button (Pushed out Clay effect) */}
             <button
               type="submit"
-              className="w-full flex items-center justify-center py-4 bg-blue-500 hover:bg-blue-600 text-white font-extrabold rounded-2xl shadow-[6px_6px_12px_#d1d9e6,-6px_-6px_12px_#ffffff,inset_2px_2px_5px_rgba(255,255,255,0.4)] transition-all active:shadow-[inset_4px_4px_8px_rgba(0,0,0,0.2)] mt-8"
+              disabled={isLoading}
+              className="w-full flex items-center justify-center py-4 bg-blue-500 hover:bg-blue-600 text-white font-extrabold rounded-2xl shadow-[6px_6px_12px_#d1d9e6,-6px_-6px_12px_#ffffff,inset_2px_2px_5px_rgba(255,255,255,0.4)] transition-all active:shadow-[inset_4px_4px_8px_rgba(0,0,0,0.2)] mt-8 disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              Access Portal
-              <ArrowRight className="ml-2 h-5 w-5" />
+              {isLoading ? 'Authenticating...' : 'Access Portal'}
+              {!isLoading && <ArrowRight className="ml-2 h-5 w-5" />}
             </button>
           </form>
         </div>
