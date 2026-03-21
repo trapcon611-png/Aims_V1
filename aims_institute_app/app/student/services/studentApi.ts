@@ -21,6 +21,7 @@ const fetchWithAuth = async (url: string, options: any = {}) => {
       localStorage.removeItem('parent_token');
       localStorage.removeItem('admin_token');
       localStorage.removeItem('director_session');
+      localStorage.removeItem('aims_token'); // Added the new unified token
       
       alert('Session Expired: Your security token is invalid or has expired. Please log in again.');
       window.location.reload(); // ✅ THE FIX: Reloads the current page instead of kicking to root
@@ -35,7 +36,7 @@ export const studentApi = {
   getToken() {
     if (typeof window === 'undefined') return '';
     // Check possible storage keys to be safe
-    return localStorage.getItem('student_token') || localStorage.getItem('accessToken') || '';
+    return localStorage.getItem('student_token') || localStorage.getItem('accessToken') || localStorage.getItem('aims_token') || '';
   },
 
   async login(username: string, password: string) {
@@ -44,7 +45,10 @@ export const studentApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     });
-    if (!res.ok) throw new Error('Invalid Credentials');
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Invalid Credentials');
+    }
     const data = await res.json();
     
     // --- CRITICAL 401 FIX ---
@@ -213,4 +217,9 @@ export const studentApi = {
       if (!res.ok) throw new Error("Submission failed. Please try again.");
       return await res.json();
   }
+};
+
+// --- Export for new Unified Login Page (app/page.tsx) ---
+export const loginStudent = async (identifier: string, password: string) => {
+  return await studentApi.login(identifier, password);
 };

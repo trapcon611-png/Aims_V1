@@ -24,6 +24,7 @@ const fetchWithAuth = async (url: string, options: any = {}) => {
       localStorage.removeItem('parent_token');
       localStorage.removeItem('admin_token');
       localStorage.removeItem('director_session');
+      localStorage.removeItem('aims_token'); // Added the new unified token
       
       alert('Session Expired: Your security token is invalid or has expired. Please log in again.');
       window.location.reload(); // ✅ THE FIX: Reloads the current page instead of kicking to root
@@ -37,13 +38,16 @@ export const parentApi = {
   getToken() {
     if (typeof window === 'undefined') return '';
     const session = localStorage.getItem('parent_session');
+    // Also check the unified token fallback
+    const unifiedToken = localStorage.getItem('aims_token');
+    
     if (session) {
         try {
             const parsed = JSON.parse(session);
-            return parsed.token || '';
-        } catch (e) { return ''; }
+            return parsed.token || unifiedToken || '';
+        } catch (e) { return unifiedToken || ''; }
     }
-    return '';
+    return unifiedToken || '';
   },
 
   async login(username: string, password: string) { 
@@ -52,7 +56,10 @@ export const parentApi = {
       headers: { 'Content-Type': 'application/json' }, 
       body: JSON.stringify({ username, password }), 
     }); 
-    if (!res.ok) throw new Error('Invalid Credentials'); 
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Invalid Credentials');
+    }
     const data = await res.json(); 
     
     // --- CRITICAL 401 FIX ---
@@ -120,4 +127,9 @@ export const parentApi = {
   }
 
   // NOTE: recordFeePayment() has been deleted! The backend creates the fee record automatically upon verification.
+};
+
+// --- Export for new Unified Login Page (app/page.tsx) ---
+export const loginParent = async (identifier: string, password: string) => {
+  return await parentApi.login(identifier, password);
 };
