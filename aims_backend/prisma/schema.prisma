@@ -50,7 +50,7 @@ model StudentProfile {
   latePenalty         Float           @default(0) 
   installments        Int             @default(1) 
   nextPaymentDate     DateTime?       
-  installmentSchedule Json?           
+  installmentSchedule Json?            
   feeAgreementDate    DateTime?       
 
   feesPaid            FeeRecord[]
@@ -67,17 +67,17 @@ model ParentProfile {
 }
 
 model TeacherProfile {
-  id            String         @id @default(uuid())
-  userId        String         @unique
-  user          User           @relation(fields: [userId], references: [id])
-  fullName      String
-  email         String?        @unique
-  mobile        String?        @unique
-  subject       String?
-  qualification String?
-  examsCreated  Exam[]
-  questionBanks QuestionBank[]
-  createdAt     DateTime       @default(now())
+  id              String         @id @default(uuid())
+  userId          String         @unique
+  user            User           @relation(fields: [userId], references: [id])
+  fullName        String
+  email           String?        @unique
+  mobile          String?        @unique
+  subject         String?
+  qualification   String?
+  examsCreated    Exam[]
+  questionBanks   QuestionBank[]
+  createdAt       DateTime       @default(now())
 }
 
 // --- 2. ACADEMIC ---
@@ -130,6 +130,7 @@ model Exam {
   id          String        @id @default(uuid())
   title       String
   description String?
+  examType    String?       @default("General") // NEW: Track if it's JEE, NEET, etc.
   durationMin Int
   totalMarks  Int
   scheduledAt DateTime
@@ -146,7 +147,7 @@ model Exam {
 model QuestionBank {
   id              String          @id @default(uuid())
   createdById     String
-  createdBy       TeacherProfile @relation(fields: [createdById], references: [id])
+  createdBy       TeacherProfile  @relation(fields: [createdById], references: [id])
   questionText    String
   questionImage   String?        
   solutionImage   String?        
@@ -157,6 +158,8 @@ model QuestionBank {
   topic           String?
   tags            String[]
   difficulty      String
+  type            String?         @default("MCQ") // NEW: Distinguish MCQ vs Numerical
+  examType        String?         @default("General") // NEW: Folder/Exam tracking
   marks           Int             @default(4)
   negative        Int             @default(-1)
   expectedTime    Int             @default(60) 
@@ -208,6 +211,7 @@ model TestAttempt {
   physics      Float         @default(0) 
   chemistry    Float         @default(0)
   maths        Float         @default(0)
+  biology      Float         @default(0) // NEW: Track Biology scores for NEET/CET
 
   scoreDetails Json?         
   correctCount Int           @default(0)
@@ -261,7 +265,6 @@ model FeeRecord {
   transactionId   String?        // We will store razorpayPaymentId here!
   paymentMode     String?        @default("CASH")
   
-  // --- NEW COLUMNS FOR RAZORPAY & INVOICES ---
   receiptNumber   String?        @unique
   razorpayOrderId String?
 }
@@ -310,8 +313,8 @@ model PushSubscription {
   id        String   @id @default(uuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id])
-  endpoint  String   @unique // The browser endpoint URL
-  p256dh    String   // Encryption key
-  auth      String   // Auth key
+  endpoint  String   @unique 
+  p256dh    String   
+  auth      String   
   createdAt DateTime @default(now())
 }

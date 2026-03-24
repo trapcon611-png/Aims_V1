@@ -255,4 +255,34 @@ export class ExamsService {
 
       return { count: result.count };
   }
+
+  // --- NEW: QUESTION BANK CSV IMPORT & REVIEW LOGIC ---
+
+  async getPendingQuestions() {
+    return this.prisma.questionBank.findMany({
+      where: { difficulty: 'pending' }, // Only grab unreviewed questions
+      orderBy: { topic: 'asc' },
+    });
+  }
+
+  async reviewQuestions(questions: any[]) {
+    // Transaction ensures all checked-off questions update safely at the exact same time
+    const updates = questions.map(q => this.prisma.questionBank.update({
+      where: { id: q.id },
+      data: {
+        questionText: q.questionText,
+        options: q.options,
+        correctOption: q.correctOption,
+        difficulty: q.difficulty // This changes from 'pending' -> 'easy'/'medium'/'hard'
+      }
+    }));
+    
+    await this.prisma.$transaction(updates);
+    
+    return { 
+      success: true, 
+      count: updates.length,
+      message: `Successfully reviewed ${updates.length} questions.`
+    };
+  }
 }

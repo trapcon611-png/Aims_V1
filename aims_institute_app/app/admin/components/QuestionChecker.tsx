@@ -1,19 +1,27 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Loader2, Filter, CheckCircle, ChevronLeft, ChevronRight } from 'lucide-react';
-import { adminApi } from '../services/adminApi';
-import { LatexRenderer } from './LatexRenderer';
+import { Search, Loader2, Filter, CheckCircle, ChevronLeft, ChevronRight, Edit3, Eye, Lightbulb, ToggleLeft, ToggleRight, AlertCircle } from 'lucide-react';
+import 'katex/dist/katex.min.css';
+import Latex from 'react-latex-next';
 
-// --- SYLLABUS DATA (MERGED CLASS 11 & 12 + BIOLOGY) ---
+// --- DYNAMIC CSV AVAILABILITY MAP ---
+const UPLOADED_CSVS: Record<string, string[]> = {
+    "JEE Advanced": ["Physics", "Chemistry"],
+    "JEE Main": ["Physics"],
+    "MHT-CET": ["Physics", "Chemistry", "Biology"],
+    "NEET": ["Physics", "Chemistry", "Biology"] 
+};
+
+// --- SYLLABUS DATA ---
 const SYLLABUS = {
     Physics: [
         "Physical World and Measurement", "Kinematics", "Laws of Motion", "Work, Energy, and Power", 
         "Rotational Motion", "Gravitation", "Properties of Solids and Liquids", "Thermodynamics", 
-        "Kinetic Theory of Gases", "Oscillations and Waves",
+        "Kinetic Theory", "Oscillations and Waves",
         "Electrostatics", "Current Electricity", "Magnetic Effects of Current and Magnetism", 
         "EMI and AC", "Optics", "Modern Physics", "Electronic Devices", "Communication Systems",
-        "Mechanics", "Electrodynamics & Optics"
+        "Mechanics", "Electrodynamics & Optics", "ALTERNATING CURRENT"
     ],
     Chemistry: [
         "Some Basic Concepts of Chemistry", "Structure of Atom", "Classification of Elements and Periodicity", 
@@ -35,428 +43,528 @@ const SYLLABUS = {
         "Vectors and 3D Geometry", "Probability"
     ],
     Biology: [
-        "Cell Structure & Function", "Cell theory", "organelles", "biomolecules", "mitosis", "meiosis", "Cell Cycle",
-        "Genetics & Evolution", "Mendelian inheritance", "DNA structure", "replication", "Evolution theories", "Molecular Basis of Inheritance",
-        "Human Physiology", "Neural control", "Endocrine system", "Respiration", "Circulation", "Digestion and Absorption", "Excretory Products", "Locomotion and Movement",
-        "Plant Physiology", "Photosynthesis", "Respiration in Plants", "Growth regulators", "Transport in Plants", "Mineral Nutrition",
-        "Reproduction", "Sexual reproduction in plants", "Human reproductive system", "Reproductive Health",
-        "Diversity in Living World & Ecology", "Biological classification", "Ecosystems", "Biodiversity", "Environmental Issues", "Organisms and Populations"
+        "Cell Structure & Function", "Genetics & Evolution", "Human Physiology", "Plant Physiology", 
+        "Reproduction", "Diversity in Living World & Ecology", "THE LIVING WORLD", "ENVIRONMENTAL ISSUES"
     ]
 };
 
-// --- SINGLE QUESTION CARD COMPONENT ---
+const LatexRenderer = ({ content }: { content: string }) => {
+    if (!content) return null;
+    return (
+        <div className="latex-container text-slate-800 font-medium">
+            <Latex>{content}</Latex>
+        </div>
+    );
+};
+
 const QuestionCard = ({ q, defaultTopic, availableTopics, onApprove, isApproving }: any) => {
     const [selectedTopic, setSelectedTopic] = useState(defaultTopic || q.topic || '');
+    const [isEditing, setIsEditing] = useState(false);
+    const [showDetails, setShowDetails] = useState(false);
+    
+    // PERFECT PARSER - Using the new, clean CSV structure
+    const qOpts = useMemo(() => {
+        let raw = q.options;
+        if (typeof raw === 'string') {
+            try { raw = JSON.parse(raw); } catch (e) {}
+        }
+        return {
+            a: raw?.a || '',
+            b: raw?.b || '',
+            c: raw?.c || '',
+            d: raw?.d || '',
+            img_a: raw?.img_a || null,
+            img_b: raw?.img_b || null,
+            img_c: raw?.img_c || null,
+            img_d: raw?.img_d || null,
+        };
+    }, [q.options]);
+
+    const hasTextOptions = !!(qOpts.a || qOpts.b || qOpts.c || qOpts.d);
+    const hasImageOptions = !!(qOpts.img_a || qOpts.img_b || qOpts.img_c || qOpts.img_d);
+    const hasOptions = hasTextOptions || hasImageOptions || q.type === 'MCQ';
+
+    const initialCorrect = useMemo(() => {
+        if (!q.correctOption || q.correctOption === 'pending') return 'pending';
+        if (!hasOptions) return q.correctOption; 
+
+        let val = String(q.correctOption).toLowerCase().trim();
+        return ['a', 'b', 'c', 'd'].includes(val) ? val : 'pending';
+    }, [q.correctOption, hasOptions]);
+
+    const [correctOption, setCorrectOption] = useState(initialCorrect);
+    const [qText, setQText] = useState(q.questionText || '');
+    const [qOptsState, setQOptsState] = useState(qOpts);
 
     useEffect(() => {
         if (defaultTopic) setSelectedTopic(defaultTopic);
     }, [defaultTopic]);
 
-    // Parse options safely and intercept Stringified JSON objects
-    const options = useMemo(() => {
-        if (!q.options) return [];
-        let rawOpts: any[] = [];
-        
-        if (Array.isArray(q.options)) rawOpts = q.options;
-        else if (typeof q.options === 'object') rawOpts = Object.values(q.options);
-        
-        return rawOpts.map(opt => {
-            if (typeof opt === 'string') {
-                const trimmed = opt.trim();
-                if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-                    try { return JSON.parse(trimmed); } catch(e) { return opt; }
-                }
-            }
-            return opt;
-        });
-    }, [q.options]);
+    const isValidImage = typeof q.questionImage === 'string' && q.questionImage.length > 5;
+    const optKeys = ['a', 'b', 'c', 'd'] as const;
 
-    const isMCQ = (q.question_type?.toLowerCase().includes('mcq') || options.length > 0) && q.question_type !== 'INTEGER';
-    const getOptionLabel = (idx: number) => String.fromCharCode(97 + idx); // a, b, c, d
+    const handleApproveClick = (difficulty: string) => {
+        if (correctOption === 'pending' || String(correctOption).trim() === '') {
+            alert(hasOptions 
+                ? 'Please select the correct Option (A, B, C, or D) before approving!'
+                : 'Please enter the correct numerical answer before approving!'
+            );
+            return;
+        }
+        
+        const updatedQuestion = {
+            ...q,
+            questionText: qText,
+            options: qOptsState,
+            correctOption: correctOption,
+            topic: selectedTopic,
+            type: hasOptions ? 'MCQ' : 'NUMERICAL'
+        };
 
-    // SAFELY CHECK IF QUESTION IMAGE EXISTS AND IS VALID URL
-    const imageUrl = q.question_images?.[0];
-    const isValidImage = typeof imageUrl === 'string' && imageUrl.length > 5 && imageUrl !== 'null';
+        onApprove(updatedQuestion, difficulty, selectedTopic);
+    };
 
     return (
-        // COMPACT UI: Reduced padding from p-6 to p-4
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-amber-300 transition group w-full">
-            <div className="flex justify-between items-start mb-3">
+        <div className={`bg-white p-5 rounded-2xl border transition-all group w-full shadow-sm ${correctOption !== 'pending' && String(correctOption).trim() !== '' ? 'border-amber-300 shadow-md' : 'border-slate-200 hover:shadow-md'}`}>
+            <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-bold uppercase text-slate-600">{q.subject}</span>
-                    <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-bold uppercase text-slate-600">{q.question_type}</span>
+                    <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-bold uppercase text-slate-600">
+                        {q.subject || 'Physics'}
+                    </span>
+                    <span className={`px-2 py-0.5 border rounded text-[10px] font-bold uppercase ${hasOptions ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>
+                        {hasOptions ? 'MCQ' : 'Numerical'}
+                    </span>
+                    <span className="px-2 py-0.5 bg-blue-50 border border-blue-200 rounded text-[10px] font-bold uppercase text-blue-700">
+                        DB: {q.examType}
+                    </span>
+                    {initialCorrect !== 'pending' && (
+                        <span className="px-2 py-0.5 bg-green-100 border border-green-200 rounded text-[10px] font-bold uppercase text-green-700">Has Set Answer</span>
+                    )}
+                </div>
+                <div className="flex items-center gap-3">
+                    <button 
+                        onClick={() => setShowDetails(!showDetails)} 
+                        className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-bold transition-colors ${showDetails ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700'}`}
+                    >
+                        <Eye size={14} /> {showDetails ? 'Hide Details' : 'View Details'}
+                    </button>
+                    <button onClick={() => setIsEditing(!isEditing)} className="text-slate-400 hover:text-amber-600 transition" title="Edit Question Text">
+                        <Edit3 size={16} />
+                    </button>
                 </div>
             </div>
             
-            <div className="text-slate-800 font-medium mb-3 text-sm leading-relaxed overflow-x-auto">
-                <LatexRenderer content={q.question_text} />
-            </div>
-            
-            {/* COMPACT UI: Max height restricted to 250px so it doesn't take the whole screen */}
-            {isValidImage && (
-                <div className="mb-3 max-h-[250px] w-full border border-slate-200 rounded-lg bg-slate-50 overflow-auto custom-scrollbar flex justify-center p-2">
-                    <img src={imageUrl} className="max-w-full h-auto object-contain" alt="Question Graphic"/>
-                </div>
-            )}
+            <div className={showDetails ? "grid grid-cols-1 lg:grid-cols-2 gap-8 items-start mb-4" : "mb-4"}>
+                <div className="flex flex-col">
+                    <div className="text-slate-800 font-medium mb-4 text-sm leading-relaxed overflow-x-auto">
+                        {isEditing ? (
+                            <textarea 
+                                value={qText} 
+                                onChange={e => setQText(e.target.value)} 
+                                className="w-full p-3 border border-slate-200 rounded-lg outline-none focus:border-amber-500 font-mono text-xs" 
+                                rows={4} 
+                            />
+                        ) : (
+                            <LatexRenderer content={qText} />
+                        )}
+                    </div>
+                    
+                    {isValidImage && (
+                        <div className="mb-4 max-h-62.5 w-full border border-slate-200 rounded-xl bg-slate-50 overflow-auto custom-scrollbar flex justify-center p-3">
+                            <img src={q.questionImage} className="max-w-full h-auto object-contain" alt="Question Graphic"/>
+                        </div>
+                    )}
 
-            {/* --- OPTIONS DISPLAY (COMPACT PARSED LOGIC) --- */}
-            {isMCQ && options.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
-                    {options.map((opt: any, idx: number) => {
-                        const label = getOptionLabel(idx);
-                        const isCorrect = String(q.correct_answer).toLowerCase() === label || String(q.correct_answer) === String(idx + 1);
-                        
-                        let optText = "";
-                        let optImg = null;
+                    {hasOptions ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {optKeys.map((key) => {
+                                const isCorrect = correctOption === key;
+                                const textVal = qOptsState[key];
+                                const imgVal = qOptsState[`img_${key}`];
 
-                        if (typeof opt === 'object' && opt !== null) {
-                            optText = opt.latex || opt.text || "";
-                            
-                            // FIX: If option image is just a filename, grab full URL from option_images array
-                            if (opt.image && opt.image !== 'null') {
-                                if (opt.image.startsWith('http')) {
-                                    optImg = opt.image;
-                                } else if (Array.isArray(q.option_images) && q.option_images.length > idx) {
-                                    optImg = q.option_images[idx];
-                                }
-                            }
-                        } else {
-                            optText = String(opt);
-                        }
+                                return (
+                                    <label 
+                                        key={key} 
+                                        className={`p-3 rounded-xl border text-sm flex items-start gap-3 transition-colors cursor-pointer ${
+                                            isCorrect ? 'bg-green-50 border-green-300 ring-1 ring-green-300 shadow-sm' : 'bg-slate-50 border-slate-200 hover:border-amber-300'
+                                        }`}
+                                    >
+                                        <input 
+                                            type="radio" 
+                                            name={`correct-${q.id}`} 
+                                            checked={isCorrect} 
+                                            onChange={() => setCorrectOption(key)}
+                                            className="mt-1 shrink-0 cursor-pointer"
+                                        />
+                                        <span className={`font-black uppercase w-5 shrink-0 pt-0.5 ${isCorrect ? 'text-green-700' : 'text-slate-400'}`}>
+                                            {key}.
+                                        </span>
+                                        <div className={`text-slate-700 leading-snug w-full overflow-x-auto ${isCorrect ? 'text-green-900 font-medium' : ''}`}>
+                                            {isEditing ? (
+                                                <input 
+                                                    type="text" 
+                                                    value={textVal} 
+                                                    onChange={e => setQOptsState({...qOptsState, [key]: e.target.value})} 
+                                                    className="w-full bg-white border border-slate-300 rounded px-2 py-1 outline-none text-xs font-mono focus:border-amber-500" 
+                                                    placeholder={`Option ${key.toUpperCase()}`}
+                                                />
+                                            ) : (
+                                                <LatexRenderer content={textVal} />
+                                            )}
 
-                        return (
-                            // COMPACT UI: Reduced padding to p-2
-                            <div 
-                                key={idx} 
-                                className={`p-2 rounded-lg border text-sm flex items-start gap-2 transition-colors ${
-                                    isCorrect ? 'bg-green-50 border-green-200 ring-1 ring-green-200' : 'bg-slate-50 border-slate-100'
-                                }`}
-                            >
-                                <span className={`font-bold uppercase w-5 shrink-0 pt-0.5 ${isCorrect ? 'text-green-700' : 'text-slate-500'}`}>
-                                    {label}.
-                                </span>
-                                <div className={`text-slate-700 leading-snug w-full overflow-x-auto ${isCorrect ? 'text-green-900 font-medium' : ''}`}>
-                                    {optText && <LatexRenderer content={optText} />}
-                                    
-                                    {/* COMPACT UI: Option images limited to 120px height */}
-                                    {optImg && (
-                                        <div className="mt-1 max-h-[120px] overflow-auto custom-scrollbar border border-slate-200 rounded p-1 bg-white inline-block">
-                                            <img src={optImg} alt={`Option ${label}`} className="max-h-[100px] w-auto object-contain" />
+                                            {imgVal && (
+                                                <div className="mt-2 max-h-30 w-full overflow-auto custom-scrollbar border border-slate-200 rounded-lg p-2 bg-white flex items-center justify-center">
+                                                    <img src={imgVal} alt={`Option ${key}`} className="max-h-24 w-auto object-contain" />
+                                                </div>
+                                            )}
                                         </div>
-                                    )}
-                                    
-                                    {!optText && !optImg && typeof opt === 'object' && (
-                                        <span className="text-xs text-slate-400 italic">Data missing</span>
-                                    )}
-                                </div>
-                                {isCorrect && <CheckCircle size={16} className="text-green-600 shrink-0 ml-1 mt-0.5" />}
+                                        {isCorrect && <CheckCircle size={18} className="text-green-600 shrink-0 ml-1 mt-0.5" />}
+                                    </label>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Numerical Answer (Required):</label>
+                            <input 
+                                type="text" 
+                                value={correctOption === 'pending' ? '' : correctOption}
+                                onChange={e => setCorrectOption(e.target.value)}
+                                className="w-full bg-white border border-slate-300 rounded-lg px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 font-mono text-sm shadow-sm"
+                                placeholder="e.g., 42 or 3.14"
+                            />
+                        </div>
+                    )}
+                </div>
+
+                {showDetails && (
+                    <div className="border-l-2 border-dashed border-slate-200 pl-6 h-full flex flex-col gap-4">
+                        <div className="flex items-center gap-2 mb-1">
+                            <Lightbulb size={18} className="text-amber-500" />
+                            <h4 className="text-sm font-bold text-slate-700 uppercase">Hints & Solution</h4>
+                        </div>
+                        
+                        {q.explanation ? (
+                            <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-4 text-sm text-slate-800 leading-relaxed overflow-x-auto shadow-inner">
+                                <LatexRenderer content={q.explanation} />
                             </div>
-                        );
-                    })}
-                </div>
-            )}
+                        ) : (
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm text-slate-400 italic">
+                                No text solution provided in database.
+                            </div>
+                        )}
 
-            {(!isMCQ || options.length === 0) && (
-                <div className="p-2 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-800 font-bold font-mono mb-3 flex items-center gap-2">
-                    <CheckCircle size={16} className="text-blue-500"/> Correct Answer: {q.correct_answer}
-                </div>
-            )}
-
-            <div className="mb-3">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Topic Tag:</label>
-                <select 
-                    className={`w-full p-2 text-sm border rounded-lg font-medium outline-none transition ${!selectedTopic ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-200 bg-slate-50 text-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500'}`}
-                    value={selectedTopic}
-                    onChange={(e) => setSelectedTopic(e.target.value)}
-                >
-                    <option value="">-- Select Topic (Required to Save) --</option>
-                    {availableTopics.map((t: string) => <option key={t} value={t}>{t}</option>)}
-                </select>
-                {!selectedTopic && <p className="text-[10px] text-red-500 mt-1 font-bold">Topic required for filtering in Manual Builder.</p>}
+                        {q.solutionImage && (
+                            <div className="max-h-62.5 w-full border border-slate-200 rounded-xl bg-slate-50 overflow-auto custom-scrollbar flex justify-center p-3 mt-2">
+                                <img src={q.solutionImage} className="max-w-full h-auto object-contain" alt="Solution Graphic"/>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
-            <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
-                <button 
-                    onClick={() => onApprove(q, 'EASY', selectedTopic)}
-                    disabled={isApproving || !selectedTopic}
-                    className="px-4 py-1.5 rounded-lg border border-green-200 bg-green-50 text-green-700 text-sm font-bold hover:bg-green-600 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    Easy
-                </button>
-                <button 
-                    onClick={() => onApprove(q, 'MEDIUM', selectedTopic)}
-                    disabled={isApproving || !selectedTopic}
-                    className="px-4 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-sm font-bold hover:bg-amber-500 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    Medium
-                </button>
-                <button 
-                    onClick={() => onApprove(q, 'HARD', selectedTopic)}
-                    disabled={isApproving || !selectedTopic}
-                    className="px-4 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm font-bold hover:bg-red-600 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    Hard
-                </button>
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-t border-slate-100 pt-4">
+                <div className="flex-1 max-w-sm">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Topic Tag:</label>
+                    <select 
+                        className={`w-full p-2.5 text-sm border rounded-lg font-medium outline-none transition shadow-sm ${!selectedTopic ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-200 bg-slate-50 text-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500'}`}
+                        value={selectedTopic}
+                        onChange={(e) => setSelectedTopic(e.target.value)}
+                    >
+                        <option value="">-- Select Topic (Required to Save) --</option>
+                        {availableTopics.map((t: string) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <button 
+                        onClick={() => handleApproveClick('easy')}
+                        disabled={isApproving || !selectedTopic}
+                        className="px-5 py-2 rounded-xl border border-green-200 bg-green-50 text-green-700 text-sm font-bold hover:bg-green-600 hover:text-white hover:shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        Easy
+                    </button>
+                    <button 
+                        onClick={() => handleApproveClick('medium')}
+                        disabled={isApproving || !selectedTopic}
+                        className="px-5 py-2 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 text-sm font-bold hover:bg-amber-500 hover:text-white hover:shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        Medium
+                    </button>
+                    <button 
+                        onClick={() => handleApproveClick('hard')}
+                        disabled={isApproving || !selectedTopic}
+                        className="px-5 py-2 rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm font-bold hover:bg-red-600 hover:text-white hover:shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        Hard
+                    </button>
+                </div>
             </div>
         </div>
     );
 };
 
 export default function QuestionChecker() {
-    const [query, setQuery] = useState('');
+    const [pendingQuestions, setPendingQuestions] = useState<any[]>([]);
+    
+    const [examType, setExamType] = useState('JEE Advanced');
     const [subject, setSubject] = useState('Physics'); 
     const [topic, setTopic] = useState(''); 
-    const [results, setResults] = useState<any[]>([]);
+    const [query, setQuery] = useState(''); 
+    const [showOnlyWithSolutions, setShowOnlyWithSolutions] = useState(false);
+    
     const [loading, setLoading] = useState(false);
     const [approvingId, setApprovingId] = useState<string | null>(null);
-    const [existingQuestions, setExistingQuestions] = useState<any[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     
-    // RESTORED TO 5: Show exactly 5 questions per page with pagination
     const ITEMS_PER_PAGE = 5;
 
-    // COMPACT UI: Reduced padding on inputs to save vertical space
-    const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl transition-all duration-300";
-    const inputStyle = "w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500 outline-none transition text-sm";
-    const labelStyle = "block text-[10px] font-bold text-slate-500 uppercase mb-1";
+    const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-2xl transition-all duration-300";
+    const inputStyle = "w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:ring-2 focus:ring-amber-500 outline-none transition text-sm font-medium disabled:opacity-50 disabled:bg-slate-100 disabled:cursor-not-allowed";
+    const labelStyle = "block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5";
 
     useEffect(() => {
-        fetchExistingQuestions();
+        fetchPendingQuestions();
     }, []);
 
-    const availableTopics = useMemo(() => {
-        // @ts-ignore
-        const rawTopics = SYLLABUS[subject] || [];
-        return Array.from(new Set(rawTopics)) as string[];
-    }, [subject]);
-
-    const fetchExistingQuestions = async () => {
-        try {
-            const data = await adminApi.getInternalQuestions();
-            setExistingQuestions(data);
-        } catch (e) {
-            console.error("Failed to load existing questions", e);
-        }
-    };
-
-    const handleSearch = async (overrideQuery?: string) => {
-        const searchTerm = overrideQuery || query || topic; 
-        if (!searchTerm) return;
-
+    const fetchPendingQuestions = async () => {
         setLoading(true);
-        setCurrentPage(1); 
         try {
-            const data = await adminApi.searchQuestionsExternal(searchTerm, subject, '');
-            
-            const filtered = data.filter((aiQ: any) => {
-                const aiText = aiQ.question_text?.trim();
-                const alreadyExists = existingQuestions.some((dbQ: any) => 
-                    dbQ.questionText?.trim() === aiText
-                );
-                return !alreadyExists;
-            });
-
-            setResults(filtered);
+            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+            const res = await fetch(`${API_URL}/exams/pending-questions`);
+            const data = await res.json();
+            setPendingQuestions(data);
         } catch (e) {
-            console.error(e);
+            console.error("Failed to load pending questions", e);
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        if (topic) {
-            setQuery(topic); 
-            handleSearch(topic);
+        const validSubjects = UPLOADED_CSVS[examType] || [];
+        if (!validSubjects.includes(subject) && validSubjects.length > 0) {
+            setSubject(validSubjects[0]);
+        } else if (validSubjects.length === 0) {
+            setSubject('');
         }
-    }, [topic]);
+    }, [examType]);
 
-    const handleApprove = async (question: any, difficulty: 'EASY' | 'MEDIUM' | 'HARD', finalTopic: string) => {
-        setApprovingId(question.question_id || 'temp');
-        try {
-            // Clean options and resolve images BEFORE saving to database
-            let rawOpts: any[] = [];
-            if (Array.isArray(question.options)) rawOpts = question.options;
-            else if (typeof question.options === 'object' && question.options !== null) rawOpts = Object.values(question.options);
+    const availableTopics = useMemo(() => {
+        // @ts-ignore
+        const rawTopics = SYLLABUS[subject] || [];
+        const dbTopics = pendingQuestions.filter(q => q.subject === subject || !q.subject).map(q => q.topic);
+        return Array.from(new Set([...rawTopics, ...dbTopics])).filter(Boolean).sort() as string[];
+    }, [subject, pendingQuestions]);
+
+    const filteredResults = useMemo(() => {
+        if (!UPLOADED_CSVS[examType]?.includes(subject)) return [];
+
+        const dbSourceExam = examType === 'NEET' ? 'MHT-CET' : examType;
+
+        return pendingQuestions.filter(q => {
+            const matchExam = q.examType === dbSourceExam;
+            const matchSubject = subject === '' || q.subject?.toLowerCase() === subject.toLowerCase() || !q.subject;
+            const matchTopic = topic === '' || q.topic?.toLowerCase() === topic.toLowerCase();
+            const matchQuery = query === '' || q.questionText?.toLowerCase().includes(query.toLowerCase());
             
-            const cleanOptions = rawOpts.map((opt, idx) => {
-                let parsedOpt = opt;
-                if (typeof opt === 'string') {
-                    const trimmed = opt.trim();
-                    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-                        try { parsedOpt = JSON.parse(trimmed); } catch(e) {}
-                    }
-                }
-                
-                // If it's an object with a filename image, swap it with the full URL from option_images
-                if (typeof parsedOpt === 'object' && parsedOpt !== null && parsedOpt.image && parsedOpt.image !== 'null') {
-                    if (!parsedOpt.image.startsWith('http') && Array.isArray(question.option_images) && question.option_images.length > idx) {
-                        parsedOpt.image = question.option_images[idx];
-                    }
-                }
-                return parsedOpt;
+            let matchSolution = true;
+            if (showOnlyWithSolutions) {
+                const hasText = q.explanation && q.explanation !== 'NaN' && q.explanation.trim() !== '';
+                const hasImage = q.solutionImage && q.solutionImage !== 'NaN' && q.solutionImage !== 'null';
+                matchSolution = hasText || hasImage;
+            }
+
+            return matchExam && matchSubject && matchTopic && matchQuery && matchSolution;
+        });
+    }, [pendingQuestions, examType, subject, topic, query, showOnlyWithSolutions]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [showOnlyWithSolutions, examType, subject]);
+
+    const handleApprove = async (question: any, difficulty: string, finalTopic: string) => {
+        setApprovingId(question.id);
+        try {
+            const payload = {
+                id: question.id,
+                questionText: question.questionText,
+                options: question.options,
+                correctOption: question.correctOption,
+                difficulty: difficulty.toLowerCase(),
+                topic: finalTopic,
+                type: question.type,
+                examType: examType 
+            };
+
+            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+            const res = await fetch(`${API_URL}/exams/review-questions`, { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ questions: [payload] }) 
             });
 
-            const formattedOptions = {
-                a: cleanOptions[0] || "",
-                b: cleanOptions[1] || "",
-                c: cleanOptions[2] || "",
-                d: cleanOptions[3] || ""
-            };
+            if (!res.ok) throw new Error("Failed to save to database");
 
-            const qImageUrl = question.question_images?.[0];
-            const safeImageUrl = typeof qImageUrl === 'string' && qImageUrl.length > 5 && qImageUrl !== 'null' ? qImageUrl : null;
-
-            const formatted = {
-                questionText: question.question_text,
-                options: formattedOptions, 
-                correctOption: String(question.correct_answer),
-                subject: question.subject || subject || 'General',
-                topic: finalTopic, 
-                tags: [finalTopic], 
-                difficulty: difficulty,
-                marks: 4, 
-                questionImage: safeImageUrl,
-                solutionImage: null
-            };
-
-            await adminApi.saveToQuestionBank(formatted); 
+            alert(`✅ Success! Question approved for ${examType} as ${difficulty}.`);
+            setPendingQuestions(prev => prev.filter(q => q.id !== question.id));
             
-            setResults(prev => prev.filter(q => q.question_id !== question.question_id));
-            setExistingQuestions(prev => [...prev, formatted]);
         } catch (e) {
             console.error(e);
-            alert("Failed to save question");
+            alert("❌ Failed to save question to database. Please check your connection.");
         } finally {
             setApprovingId(null);
         }
     };
 
-    const totalPages = Math.ceil(results.length / ITEMS_PER_PAGE);
-    const paginatedResults = results.slice(
+    const totalPages = Math.ceil(filteredResults.length / ITEMS_PER_PAGE);
+    const paginatedResults = filteredResults.slice(
         (currentPage - 1) * ITEMS_PER_PAGE, 
         currentPage * ITEMS_PER_PAGE
     );
 
+    const currentValidSubjects = UPLOADED_CSVS[examType] || [];
+
     return (
-        <div className="flex flex-col h-full gap-4">
-            {/* SEARCH PANEL (COMPACT) */}
-            <div className={`${glassPanel} p-4 shrink-0`}>
-                <div className="flex items-center gap-2 mb-3 border-b border-slate-100 pb-2">
-                    <Filter size={18} className="text-amber-600"/> 
-                    <h3 className="font-bold text-slate-800 text-sm">Question Repository Search</h3>
+        <div className="flex flex-col gap-5 font-sans min-h-[85vh]">
+            <div className={`${glassPanel} p-5`}>
+                <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2">
+                        <Filter size={18} className="text-amber-600"/> 
+                        <h3 className="font-bold text-slate-800 text-sm">Question Repository Search</h3>
+                    </div>
+
+                    <button 
+                        onClick={() => setShowOnlyWithSolutions(!showOnlyWithSolutions)}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${showOnlyWithSolutions ? 'bg-amber-50 border-amber-200 text-amber-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'}`}
+                    >
+                        {showOnlyWithSolutions ? <ToggleRight size={18} className="text-amber-600" /> : <ToggleLeft size={18} className="text-slate-400" />}
+                        Only Show Questions With Solutions
+                    </button>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
                     <div className="md:col-span-2">
+                        <label className={labelStyle}>Exam Type</label>
+                        <select 
+                            className={inputStyle}
+                            value={examType}
+                            onChange={e => setExamType(e.target.value)}
+                        >
+                            {Object.keys(UPLOADED_CSVS).map(exam => (
+                                <option key={exam} value={exam}>{exam}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="md:col-span-3">
                         <label className={labelStyle}>Subject</label>
                         <select 
                             className={inputStyle}
                             value={subject}
-                            onChange={e => { setSubject(e.target.value); setTopic(''); setQuery(''); }}
+                            onChange={e => { setSubject(e.target.value); setTopic(''); setCurrentPage(1); }}
+                            disabled={currentValidSubjects.length === 0}
                         >
-                            <option value="Physics">Physics</option>
-                            <option value="Chemistry">Chemistry</option>
-                            <option value="Mathematics">Mathematics</option>
-                            <option value="Biology">Biology</option>
+                            {currentValidSubjects.length === 0 ? (
+                                <option value="">Not Available</option>
+                            ) : (
+                                currentValidSubjects.map(sub => (
+                                    <option key={sub} value={sub}>{sub}</option>
+                                ))
+                            )}
                         </select>
                     </div>
 
-                    <div className="md:col-span-4">
+                    <div className="md:col-span-3">
                         <label className={labelStyle}>Topic (Syllabus Filter)</label>
                         <select 
                             className={inputStyle}
                             value={topic}
-                            onChange={e => setTopic(e.target.value)}
+                            onChange={e => { setTopic(e.target.value); setCurrentPage(1); }}
+                            disabled={currentValidSubjects.length === 0}
                         >
-                            <option value="">-- Select a Topic --</option>
+                            <option value="">-- All Topics --</option>
                             {availableTopics.map((t: string) => <option key={t} value={t}>{t}</option>)}
                         </select>
                     </div>
 
-                    <div className="md:col-span-5 relative">
+                    <div className="md:col-span-4 relative">
                         <label className={labelStyle}>Manual Search</label>
                         <div className="relative">
-                            <Search className="absolute left-3 top-2.5 text-slate-400" size={16}/>
+                            <Search className="absolute left-3.5 top-3 text-slate-400" size={16}/>
                             <input 
-                                className={inputStyle + " pl-9"}
-                                placeholder={topic ? topic : "Type custom query..."}
+                                className={inputStyle + " pl-10"}
+                                placeholder="Search text..."
                                 value={query}
-                                onChange={e => setQuery(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                                onChange={e => { setQuery(e.target.value); setCurrentPage(1); }}
+                                disabled={currentValidSubjects.length === 0}
                             />
                         </div>
-                    </div>
-
-                    <div className="md:col-span-1 flex items-end">
-                        <button 
-                            onClick={() => handleSearch()}
-                            className="w-full h-[38px] bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg transition shadow-md flex items-center justify-center"
-                        >
-                            <Search size={18}/>
-                        </button>
                     </div>
                 </div>
             </div>
 
-            {/* RESULTS GRID (MAXIMIZED HEIGHT) */}
-            <div className={`flex-1 overflow-hidden ${glassPanel} flex flex-col`}>
-                <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
-                    <span className="text-xs font-bold text-slate-500 uppercase">Search Results</span>
-                    <span className="text-xs font-bold bg-amber-50 text-amber-700 px-2 py-1 rounded">Found: {results.length}</span>
+            <div className={`${glassPanel} flex flex-col`}>
+                <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center rounded-t-2xl">
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Pending Review</span>
+                    <span className="text-xs font-bold bg-amber-100 text-amber-800 px-2.5 py-1 rounded-md shadow-sm">Found: {filteredResults.length}</span>
                 </div>
                 
-                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-slate-50/30">
+                <div className="p-4 md:p-6 bg-slate-50/50">
                     {loading ? (
-                        <div className="h-full flex items-center justify-center">
-                            <div className="flex flex-col items-center gap-2">
-                                <Loader2 className="animate-spin text-amber-600" size={32}/>
-                                <p className="text-slate-500 text-sm font-medium">Searching Repository...</p>
+                        <div className="py-20 flex items-center justify-center">
+                            <div className="flex flex-col items-center gap-3">
+                                <Loader2 className="animate-spin text-amber-600" size={36}/>
+                                <p className="text-slate-500 text-sm font-medium">Syncing with Database...</p>
                             </div>
                         </div>
-                    ) : results.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                            <Search size={48} className="mb-4 opacity-20"/>
-                            <p className="font-bold text-slate-600">No questions found.</p>
-                            <p className="text-xs mt-1">Select a topic or type a query to begin.</p>
+                    ) : currentValidSubjects.length === 0 ? (
+                        <div className="py-20 flex flex-col items-center justify-center text-slate-400">
+                            <AlertCircle size={56} className="mb-4 opacity-30 text-rose-500"/>
+                            <p className="font-bold text-slate-600 text-lg">Not available for the moment.</p>
+                            <p className="text-sm mt-1">We don't have CSV data for {examType} yet.</p>
+                        </div>
+                    ) : filteredResults.length === 0 ? (
+                        <div className="py-20 flex flex-col items-center justify-center text-slate-400">
+                            <CheckCircle size={56} className="mb-4 opacity-30 text-emerald-500"/>
+                            <p className="font-bold text-slate-600 text-lg">No pending questions found.</p>
+                            <p className="text-sm mt-1">Change filters or import a new CSV.</p>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 gap-4 max-w-7xl mx-auto w-full">
-                            {paginatedResults.map((q, idx) => (
+                        <div className="grid grid-cols-1 gap-6 max-w-7xl mx-auto w-full">
+                            {paginatedResults.map((q) => (
                                 <QuestionCard 
-                                    key={q.question_id || idx}
+                                    key={q.id}
                                     q={q}
-                                    subject={subject}
-                                    defaultTopic={topic}
+                                    defaultTopic={topic || q.topic}
                                     availableTopics={availableTopics}
                                     onApprove={handleApprove}
-                                    isApproving={approvingId !== null}
+                                    isApproving={approvingId === q.id}
                                 />
                             ))}
                         </div>
                     )}
                 </div>
 
-                {/* PAGINATION CONTROLS */}
-                {results.length > 0 && totalPages > 1 && (
-                    <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center shrink-0">
-                        <span className="text-xs text-slate-500 font-bold">
-                            Page {currentPage} of {totalPages}
+                {filteredResults.length > 0 && totalPages > 1 && (
+                    <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center rounded-b-2xl">
+                        <span className="text-sm text-slate-600 font-bold">
+                            Page <span className="text-slate-900">{currentPage}</span> of {totalPages}
                         </span>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2.5">
                             <button 
                                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                                 disabled={currentPage === 1}
-                                className="p-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 disabled:opacity-50 text-slate-600 transition"
+                                className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 disabled:opacity-40 text-slate-700 transition shadow-sm"
                             >
-                                <ChevronLeft size={16}/>
+                                <ChevronLeft size={18}/>
                             </button>
                             <button 
                                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                                 disabled={currentPage === totalPages}
-                                className="p-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 disabled:opacity-50 text-slate-600 transition"
+                                className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 disabled:opacity-40 text-slate-700 transition shadow-sm"
                             >
-                                <ChevronRight size={16}/>
+                                <ChevronRight size={18}/>
                             </button>
                         </div>
                     </div>

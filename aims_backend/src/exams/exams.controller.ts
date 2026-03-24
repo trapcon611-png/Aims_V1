@@ -42,6 +42,26 @@ export class ExamsController {
     return this.examsService.addQuestionsToExam(body.examId, body.questionIds);
   }
 
+  // --- NEW: QUESTION BANK API ROUTES ---
+  // Note: These must stay ABOVE the @Get(':id') route to prevent route collisions
+
+  @Get('pending-questions')
+  // @UseGuards(AuthGuard('jwt')) // Uncomment if your frontend sends the Bearer token for this call
+  getPendingQuestions() {
+    return this.examsService.getPendingQuestions();
+  }
+
+  @Post('review-questions')
+  // @UseGuards(AuthGuard('jwt')) // Uncomment if your frontend sends the Bearer token for this call
+  reviewQuestions(@Body() body: { questions: any[] }) {
+    if (!body.questions || !Array.isArray(body.questions)) {
+      throw new BadRequestException('A valid questions array is required');
+    }
+    return this.examsService.reviewQuestions(body.questions);
+  }
+
+  // --- GENERIC ROUTES (MUST BE AT THE BOTTOM) ---
+
   @Get(':id')
   @UseGuards(AuthGuard('jwt'))
   findOne(@Param('id') id: string) {
@@ -60,7 +80,7 @@ export class ExamsController {
 
     try {
       return await this.examsService.startAttempt(userId, examId);
-    } catch (error) {
+    } catch (error: any) {
       console.error('[ExamsController] Error starting attempt:', error);
       if (error.status && error.status !== 500) throw error;
       throw new InternalServerErrorException(error.message || 'Failed to start exam session');
