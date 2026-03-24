@@ -1,17 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Loader2, Filter, CheckCircle, ChevronLeft, ChevronRight, Edit3, Eye, Lightbulb, ToggleLeft, ToggleRight, AlertCircle } from 'lucide-react';
+import { Search, Loader2, Filter, CheckCircle, ChevronLeft, ChevronRight, Edit3, Eye, Lightbulb, ToggleLeft, ToggleRight } from 'lucide-react';
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
-
-// --- DYNAMIC CSV AVAILABILITY MAP ---
-const UPLOADED_CSVS: Record<string, string[]> = {
-    "JEE Advanced": ["Physics", "Chemistry"],
-    "JEE Main": ["Physics"],
-    "MHT-CET": ["Physics", "Chemistry", "Biology"],
-    "NEET": ["Physics", "Chemistry", "Biology"] 
-};
 
 const LatexRenderer = ({ content }: { content: string }) => {
     if (!content) return null;
@@ -22,7 +14,7 @@ const LatexRenderer = ({ content }: { content: string }) => {
     );
 };
 
-const QuestionCard = ({ q, defaultTopic, availableTopics, onApprove, isApproving }: any) => {
+const QuestionCard = ({ q, defaultTopic, onApprove, isApproving }: any) => {
     const parsedTopic = q.topic?.trim() || 'Uncategorized';
     const [selectedTopic, setSelectedTopic] = useState(defaultTopic || parsedTopic);
     const [isEditing, setIsEditing] = useState(false);
@@ -101,7 +93,7 @@ const QuestionCard = ({ q, defaultTopic, availableTopics, onApprove, isApproving
                         {hasOptions ? 'MCQ' : 'Numerical'}
                     </span>
                     <span className="px-2 py-0.5 bg-blue-50 border border-blue-200 rounded text-[10px] font-bold uppercase text-blue-700">
-                        DB: {q.examType}
+                        DB: {q.examType || 'General'}
                     </span>
                     {initialCorrect !== 'pending' && (
                         <span className="px-2 py-0.5 bg-green-100 border border-green-200 rounded text-[10px] font-bold uppercase text-green-700">Has Set Answer</span>
@@ -231,15 +223,14 @@ const QuestionCard = ({ q, defaultTopic, availableTopics, onApprove, isApproving
 
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-t border-slate-100 pt-4">
                 <div className="flex-1 max-w-sm">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Topic Tag:</label>
-                    <select 
-                        className={`w-full p-2.5 text-sm border rounded-lg font-medium outline-none transition shadow-sm ${!selectedTopic ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-200 bg-slate-50 text-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500'}`}
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Topic / Chapter:</label>
+                    <input 
+                        type="text"
+                        className={`w-full p-2.5 text-sm border rounded-lg font-medium outline-none transition shadow-sm border-slate-200 bg-slate-50 text-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500`}
                         value={selectedTopic}
                         onChange={(e) => setSelectedTopic(e.target.value)}
-                    >
-                        <option value="">-- Select Topic (Required to Save) --</option>
-                        {availableTopics.map((t: any) => <option key={t.name} value={t.name}>{t.name}</option>)}
-                    </select>
+                        placeholder="Edit or assign a topic..."
+                    />
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -273,9 +264,9 @@ const QuestionCard = ({ q, defaultTopic, availableTopics, onApprove, isApproving
 export default function QuestionChecker() {
     const [pendingQuestions, setPendingQuestions] = useState<any[]>([]);
     
-    // Filters
+    // Dynamic Filter State
     const [examType, setExamType] = useState('JEE Advanced');
-    const [subject, setSubject] = useState('Physics'); 
+    const [subject, setSubject] = useState(''); 
     const [topic, setTopic] = useState(''); 
     const [query, setQuery] = useState(''); 
     const [showOnlyWithSolutions, setShowOnlyWithSolutions] = useState(false);
@@ -301,6 +292,12 @@ export default function QuestionChecker() {
             const res = await fetch(`${API_URL}/exams/pending-questions`);
             const data = await res.json();
             setPendingQuestions(data);
+            
+            // Auto-select the first available subject if data exists
+            if (data.length > 0) {
+                const uniqueSubjects = Array.from(new Set(data.map((q: any) => q.subject))).filter(Boolean) as string[];
+                if (uniqueSubjects.length > 0) setSubject(uniqueSubjects[0]);
+            }
         } catch (e) {
             console.error("Failed to load pending questions", e);
         } finally {
@@ -308,51 +305,64 @@ export default function QuestionChecker() {
         }
     };
 
-    useEffect(() => {
-        const validSubjects = UPLOADED_CSVS[examType] || [];
-        if (!validSubjects.includes(subject) && validSubjects.length > 0) {
-            setSubject(validSubjects[0]);
-        } else if (validSubjects.length === 0) {
-            setSubject('');
-        }
-    }, [examType]);
+    // Extract Unique Exam Types dynamically from the Database
+    const availableExams = useMemo(() => {
+        const exams = new Set(pendingQuestions.map(q => q.examType).filter(Boolean));
+        if (exams.size === 0) return ['JEE Advanced', 'JEE Main', 'MHT-CET', 'NEET'];
+        return Array.from(exams).sort() as string[];
+    }, [pendingQuestions]);
 
-    // ✨ NEW: Dynamically calculate topics AND count how many questions are remaining!
-    const availableTopics = useMemo(() => {
+    // Extract Unique Subjects dynamically based on selected Exam
+    const availableSubjects = useMemo(() => {
+        const dbSourceExam = examType === 'NEET' ? 'MHT-CET' : examType;
+        const subjects = new Set(
+            pendingQuestions
+                .filter(q => q.examType === dbSourceExam)
+                .map(q => q.subject)
+                .filter(Boolean)
+        );
+        return Array.from(subjects).sort() as string[];
+    }, [examType, pendingQuestions]);
+
+    // Auto-adjust subject if the current one doesn't exist in the new exam
+    useEffect(() => {
+        if (availableSubjects.length > 0 && !availableSubjects.includes(subject)) {
+            setSubject(availableSubjects[0]);
+        }
+    }, [examType, availableSubjects]);
+
+    // ✨ Extract Topics AND Counts dynamically based on Exam + Subject!
+    const availableTopicsWithCount = useMemo(() => {
         const dbSourceExam = examType === 'NEET' ? 'MHT-CET' : examType;
         
-        // Only look at questions matching the current Subject and Exam Type
         const relevantQs = pendingQuestions.filter(q => {
             const matchExam = q.examType === dbSourceExam;
-            const matchSubject = subject === '' || q.subject?.toLowerCase() === subject.toLowerCase() || !q.subject;
+            const matchSubject = subject === '' || q.subject === subject;
             return matchExam && matchSubject;
         });
 
-        // Count occurrences of each topic
         const topicCounts: Record<string, number> = {};
         relevantQs.forEach(q => {
             const t = q.topic?.trim() || 'Uncategorized';
             topicCounts[t] = (topicCounts[t] || 0) + 1;
         });
             
-        // Convert to array of objects, sorted alphabetically
-        return Object.keys(topicCounts).sort().map(topic => ({
-            name: topic,
-            count: topicCounts[topic]
+        return Object.keys(topicCounts).sort().map(t => ({
+            name: t,
+            count: topicCounts[t]
         }));
     }, [subject, examType, pendingQuestions]);
 
+    // Final Filter Logic
     const filteredResults = useMemo(() => {
-        if (!UPLOADED_CSVS[examType]?.includes(subject)) return [];
-
         const dbSourceExam = examType === 'NEET' ? 'MHT-CET' : examType;
 
         return pendingQuestions.filter(q => {
             const matchExam = q.examType === dbSourceExam;
-            const matchSubject = subject === '' || q.subject?.toLowerCase() === subject.toLowerCase() || !q.subject;
+            const matchSubject = subject === '' || q.subject === subject;
             
             const qTopic = q.topic?.trim() || 'Uncategorized';
-            const matchTopic = topic === '' || qTopic.toLowerCase() === topic.toLowerCase();
+            const matchTopic = topic === '' || qTopic === topic;
             
             const matchQuery = query === '' || q.questionText?.toLowerCase().includes(query.toLowerCase());
             
@@ -369,7 +379,7 @@ export default function QuestionChecker() {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [showOnlyWithSolutions, examType, subject]);
+    }, [showOnlyWithSolutions, examType, subject, topic]);
 
     const handleApprove = async (question: any, difficulty: string, finalTopic: string) => {
         setApprovingId(question.id);
@@ -394,7 +404,6 @@ export default function QuestionChecker() {
 
             if (!res.ok) throw new Error("Failed to save to database");
 
-            alert(`✅ Success! Question approved for ${examType} as ${difficulty}.`);
             setPendingQuestions(prev => prev.filter(q => q.id !== question.id));
             
         } catch (e) {
@@ -410,8 +419,6 @@ export default function QuestionChecker() {
         (currentPage - 1) * ITEMS_PER_PAGE, 
         currentPage * ITEMS_PER_PAGE
     );
-
-    const currentValidSubjects = UPLOADED_CSVS[examType] || [];
 
     return (
         <div className="flex flex-col gap-5 font-sans min-h-[85vh]">
@@ -439,7 +446,7 @@ export default function QuestionChecker() {
                             value={examType}
                             onChange={e => setExamType(e.target.value)}
                         >
-                            {Object.keys(UPLOADED_CSVS).map(exam => (
+                            {availableExams.map(exam => (
                                 <option key={exam} value={exam}>{exam}</option>
                             ))}
                         </select>
@@ -450,13 +457,13 @@ export default function QuestionChecker() {
                         <select 
                             className={inputStyle}
                             value={subject}
-                            onChange={e => { setSubject(e.target.value); setTopic(''); setCurrentPage(1); }}
-                            disabled={currentValidSubjects.length === 0}
+                            onChange={e => { setSubject(e.target.value); setTopic(''); }}
+                            disabled={availableSubjects.length === 0}
                         >
-                            {currentValidSubjects.length === 0 ? (
-                                <option value="">Not Available</option>
+                            {availableSubjects.length === 0 ? (
+                                <option value="">No Subjects Found</option>
                             ) : (
-                                currentValidSubjects.map(sub => (
+                                availableSubjects.map(sub => (
                                     <option key={sub} value={sub}>{sub}</option>
                                 ))
                             )}
@@ -464,17 +471,15 @@ export default function QuestionChecker() {
                     </div>
 
                     <div className="md:col-span-3">
-                        {/* Renamed Label! */}
                         <label className={labelStyle}>Topic / Chapter</label>
                         <select 
                             className={inputStyle}
                             value={topic}
-                            onChange={e => { setTopic(e.target.value); setCurrentPage(1); }}
-                            disabled={currentValidSubjects.length === 0}
+                            onChange={e => setTopic(e.target.value)}
+                            disabled={availableTopicsWithCount.length === 0}
                         >
                             <option value="">-- All Topics --</option>
-                            {availableTopics.map((t: any) => (
-                                // Now shows Exact counts directly from the database!
+                            {availableTopicsWithCount.map((t: any) => (
                                 <option key={t.name} value={t.name}>{t.name} ({t.count})</option>
                             ))}
                         </select>
@@ -488,8 +493,7 @@ export default function QuestionChecker() {
                                 className={inputStyle + " pl-10"}
                                 placeholder="Search text..."
                                 value={query}
-                                onChange={e => { setQuery(e.target.value); setCurrentPage(1); }}
-                                disabled={currentValidSubjects.length === 0}
+                                onChange={e => setQuery(e.target.value)}
                             />
                         </div>
                     </div>
@@ -510,12 +514,6 @@ export default function QuestionChecker() {
                                 <p className="text-slate-500 text-sm font-medium">Syncing with Database...</p>
                             </div>
                         </div>
-                    ) : currentValidSubjects.length === 0 ? (
-                        <div className="py-20 flex flex-col items-center justify-center text-slate-400">
-                            <AlertCircle size={56} className="mb-4 opacity-30 text-rose-500"/>
-                            <p className="font-bold text-slate-600 text-lg">Not available for the moment.</p>
-                            <p className="text-sm mt-1">We don't have CSV data for {examType} yet.</p>
-                        </div>
                     ) : filteredResults.length === 0 ? (
                         <div className="py-20 flex flex-col items-center justify-center text-slate-400">
                             <CheckCircle size={56} className="mb-4 opacity-30 text-emerald-500"/>
@@ -528,8 +526,7 @@ export default function QuestionChecker() {
                                 <QuestionCard 
                                     key={q.id}
                                     q={q}
-                                    defaultTopic={topic || q.topic}
-                                    availableTopics={availableTopics}
+                                    defaultTopic={topic}
                                     onApprove={handleApprove}
                                     isApproving={approvingId === q.id}
                                 />
