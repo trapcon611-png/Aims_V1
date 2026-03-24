@@ -18,6 +18,9 @@ RUN npm install
 # Preserving this as requested for the Neural/3D components
 RUN npm install three postprocessing @types/three prisma@5.19.1 @prisma/client@5.19.1
 
+# ---> FIX: INSTALL LATEX DIRECTLY IN DOCKER <---
+RUN npm install react-latex-next katex --legacy-peer-deps
+
 # 7. Copy Prisma Schema
 COPY prisma ./prisma/
 

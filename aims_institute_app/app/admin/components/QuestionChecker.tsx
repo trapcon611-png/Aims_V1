@@ -13,41 +13,6 @@ const UPLOADED_CSVS: Record<string, string[]> = {
     "NEET": ["Physics", "Chemistry", "Biology"] 
 };
 
-// --- SYLLABUS DATA ---
-const SYLLABUS = {
-    Physics: [
-        "Physical World and Measurement", "Kinematics", "Laws of Motion", "Work, Energy, and Power", 
-        "Rotational Motion", "Gravitation", "Properties of Solids and Liquids", "Thermodynamics", 
-        "Kinetic Theory", "Oscillations and Waves",
-        "Electrostatics", "Current Electricity", "Magnetic Effects of Current and Magnetism", 
-        "EMI and AC", "Optics", "Modern Physics", "Electronic Devices", "Communication Systems",
-        "Mechanics", "Electrodynamics & Optics", "ALTERNATING CURRENT"
-    ],
-    Chemistry: [
-        "Some Basic Concepts of Chemistry", "Structure of Atom", "Classification of Elements and Periodicity", 
-        "Chemical Bonding and Molecular Structure", "States of Matter", "Chemical Thermodynamics", 
-        "Equilibrium", "Redox Reactions", "Hydrogen", "s-Block Elements", "p-Block Elements", 
-        "Organic Chemistry: Basic Principles", "Hydrocarbons", "Environmental Chemistry",
-        "Solid State", "Solutions", "Electrochemistry", "Chemical Kinetics", "Surface Chemistry", 
-        "Metallurgy", "d- and f-Block Elements", "Coordination Compounds", 
-        "Haloalkanes and Haloarenes", "Alcohols, Phenols and Ethers", "Aldehydes, Ketones and Carboxylic Acids", 
-        "Amines", "Biomolecules", "Polymers", "Chemistry in Everyday Life"
-    ],
-    Mathematics: [
-        "Sets, Relations, and Functions", "Trigonometry", "Complex Numbers and Quadratic Equations", 
-        "Linear Inequalities", "Permutations and Combinations", "Binomial Theorem", "Sequence and Series", 
-        "Straight Lines", "Conic Sections", "Introduction to 3D Geometry", "Limits and Derivatives", 
-        "Statistics and Probability",
-        "Inverse Trigonometric Functions", "Matrices and Determinants", "Continuity and Differentiability", 
-        "Applications of Derivatives", "Integrals", "Application of Integrals", "Differential Equations", 
-        "Vectors and 3D Geometry", "Probability"
-    ],
-    Biology: [
-        "Cell Structure & Function", "Genetics & Evolution", "Human Physiology", "Plant Physiology", 
-        "Reproduction", "Diversity in Living World & Ecology", "THE LIVING WORLD", "ENVIRONMENTAL ISSUES"
-    ]
-};
-
 const LatexRenderer = ({ content }: { content: string }) => {
     if (!content) return null;
     return (
@@ -58,11 +23,12 @@ const LatexRenderer = ({ content }: { content: string }) => {
 };
 
 const QuestionCard = ({ q, defaultTopic, availableTopics, onApprove, isApproving }: any) => {
-    const [selectedTopic, setSelectedTopic] = useState(defaultTopic || q.topic || '');
+    const parsedTopic = q.topic?.trim() || 'Uncategorized';
+    const [selectedTopic, setSelectedTopic] = useState(defaultTopic || parsedTopic);
     const [isEditing, setIsEditing] = useState(false);
     const [showDetails, setShowDetails] = useState(false);
     
-    // PERFECT PARSER - Using the new, clean CSV structure
+    // PERFECT PARSER - Using the clean CSV structure
     const qOpts = useMemo(() => {
         let raw = q.options;
         if (typeof raw === 'string') {
@@ -272,7 +238,7 @@ const QuestionCard = ({ q, defaultTopic, availableTopics, onApprove, isApproving
                         onChange={(e) => setSelectedTopic(e.target.value)}
                     >
                         <option value="">-- Select Topic (Required to Save) --</option>
-                        {availableTopics.map((t: string) => <option key={t} value={t}>{t}</option>)}
+                        {availableTopics.map((t: any) => <option key={t.name} value={t.name}>{t.name}</option>)}
                     </select>
                 </div>
 
@@ -307,6 +273,7 @@ const QuestionCard = ({ q, defaultTopic, availableTopics, onApprove, isApproving
 export default function QuestionChecker() {
     const [pendingQuestions, setPendingQuestions] = useState<any[]>([]);
     
+    // Filters
     const [examType, setExamType] = useState('JEE Advanced');
     const [subject, setSubject] = useState('Physics'); 
     const [topic, setTopic] = useState(''); 
@@ -350,12 +317,30 @@ export default function QuestionChecker() {
         }
     }, [examType]);
 
+    // ✨ NEW: Dynamically calculate topics AND count how many questions are remaining!
     const availableTopics = useMemo(() => {
-        // @ts-ignore
-        const rawTopics = SYLLABUS[subject] || [];
-        const dbTopics = pendingQuestions.filter(q => q.subject === subject || !q.subject).map(q => q.topic);
-        return Array.from(new Set([...rawTopics, ...dbTopics])).filter(Boolean).sort() as string[];
-    }, [subject, pendingQuestions]);
+        const dbSourceExam = examType === 'NEET' ? 'MHT-CET' : examType;
+        
+        // Only look at questions matching the current Subject and Exam Type
+        const relevantQs = pendingQuestions.filter(q => {
+            const matchExam = q.examType === dbSourceExam;
+            const matchSubject = subject === '' || q.subject?.toLowerCase() === subject.toLowerCase() || !q.subject;
+            return matchExam && matchSubject;
+        });
+
+        // Count occurrences of each topic
+        const topicCounts: Record<string, number> = {};
+        relevantQs.forEach(q => {
+            const t = q.topic?.trim() || 'Uncategorized';
+            topicCounts[t] = (topicCounts[t] || 0) + 1;
+        });
+            
+        // Convert to array of objects, sorted alphabetically
+        return Object.keys(topicCounts).sort().map(topic => ({
+            name: topic,
+            count: topicCounts[topic]
+        }));
+    }, [subject, examType, pendingQuestions]);
 
     const filteredResults = useMemo(() => {
         if (!UPLOADED_CSVS[examType]?.includes(subject)) return [];
@@ -365,7 +350,10 @@ export default function QuestionChecker() {
         return pendingQuestions.filter(q => {
             const matchExam = q.examType === dbSourceExam;
             const matchSubject = subject === '' || q.subject?.toLowerCase() === subject.toLowerCase() || !q.subject;
-            const matchTopic = topic === '' || q.topic?.toLowerCase() === topic.toLowerCase();
+            
+            const qTopic = q.topic?.trim() || 'Uncategorized';
+            const matchTopic = topic === '' || qTopic.toLowerCase() === topic.toLowerCase();
+            
             const matchQuery = query === '' || q.questionText?.toLowerCase().includes(query.toLowerCase());
             
             let matchSolution = true;
@@ -476,7 +464,8 @@ export default function QuestionChecker() {
                     </div>
 
                     <div className="md:col-span-3">
-                        <label className={labelStyle}>Topic (Syllabus Filter)</label>
+                        {/* Renamed Label! */}
+                        <label className={labelStyle}>Topic / Chapter</label>
                         <select 
                             className={inputStyle}
                             value={topic}
@@ -484,7 +473,10 @@ export default function QuestionChecker() {
                             disabled={currentValidSubjects.length === 0}
                         >
                             <option value="">-- All Topics --</option>
-                            {availableTopics.map((t: string) => <option key={t} value={t}>{t}</option>)}
+                            {availableTopics.map((t: any) => (
+                                // Now shows Exact counts directly from the database!
+                                <option key={t.name} value={t.name}>{t.name} ({t.count})</option>
+                            ))}
                         </select>
                     </div>
 
