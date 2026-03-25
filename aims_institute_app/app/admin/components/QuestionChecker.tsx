@@ -1,9 +1,17 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Loader2, Filter, CheckCircle, ChevronLeft, ChevronRight, Edit3, Eye, Lightbulb, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Search, Loader2, Filter, CheckCircle, ChevronLeft, ChevronRight, Edit3, Eye, Lightbulb, ToggleLeft, ToggleRight, AlertCircle } from 'lucide-react';
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
+
+// --- DYNAMIC CSV AVAILABILITY MAP ---
+const UPLOADED_CSVS: Record<string, string[]> = {
+    "JEE Advanced": ["Physics", "Chemistry"],
+    "JEE Main": ["Physics"],
+    "MHT-CET": ["Physics", "Chemistry", "Biology"],
+    "NEET": ["Physics", "Chemistry", "Biology"] 
+};
 
 const LatexRenderer = ({ content }: { content: string }) => {
     if (!content) return null;
@@ -305,39 +313,41 @@ export default function QuestionChecker() {
         }
     };
 
-    // Extract Unique Exam Types dynamically from the Database
     const availableExams = useMemo(() => {
         const exams = new Set(pendingQuestions.map(q => q.examType).filter(Boolean));
         if (exams.size === 0) return ['JEE Advanced', 'JEE Main', 'MHT-CET', 'NEET'];
         return Array.from(exams).sort() as string[];
     }, [pendingQuestions]);
 
-    // Extract Unique Subjects dynamically based on selected Exam
     const availableSubjects = useMemo(() => {
         const dbSourceExam = examType === 'NEET' ? 'MHT-CET' : examType;
         const subjects = new Set(
             pendingQuestions
                 .filter(q => q.examType === dbSourceExam)
-                .map(q => q.subject)
+                // Format subject properly so it looks clean
+                .map(q => {
+                    if (!q.subject) return null;
+                    return q.subject.charAt(0).toUpperCase() + q.subject.slice(1).toLowerCase();
+                })
                 .filter(Boolean)
         );
         return Array.from(subjects).sort() as string[];
     }, [examType, pendingQuestions]);
 
-    // Auto-adjust subject if the current one doesn't exist in the new exam
     useEffect(() => {
         if (availableSubjects.length > 0 && !availableSubjects.includes(subject)) {
             setSubject(availableSubjects[0]);
         }
     }, [examType, availableSubjects]);
 
-    // ✨ Extract Topics AND Counts dynamically based on Exam + Subject!
+    // ✨ BULLETPROOF: Case-Insensitive Topic Extraction & Counting
     const availableTopicsWithCount = useMemo(() => {
         const dbSourceExam = examType === 'NEET' ? 'MHT-CET' : examType;
         
         const relevantQs = pendingQuestions.filter(q => {
             const matchExam = q.examType === dbSourceExam;
-            const matchSubject = subject === '' || q.subject === subject;
+            const matchSubject = subject === '' || 
+                               (q.subject && q.subject.toLowerCase() === subject.toLowerCase());
             return matchExam && matchSubject;
         });
 
@@ -353,13 +363,15 @@ export default function QuestionChecker() {
         }));
     }, [subject, examType, pendingQuestions]);
 
-    // Final Filter Logic
+    // ✨ BULLETPROOF: Case-Insensitive Search & Filtering
     const filteredResults = useMemo(() => {
         const dbSourceExam = examType === 'NEET' ? 'MHT-CET' : examType;
 
         return pendingQuestions.filter(q => {
             const matchExam = q.examType === dbSourceExam;
-            const matchSubject = subject === '' || q.subject === subject;
+            
+            const matchSubject = subject === '' || 
+                               (q.subject && q.subject.toLowerCase() === subject.toLowerCase());
             
             const qTopic = q.topic?.trim() || 'Uncategorized';
             const matchTopic = topic === '' || qTopic === topic;
@@ -444,7 +456,7 @@ export default function QuestionChecker() {
                         <select 
                             className={inputStyle}
                             value={examType}
-                            onChange={e => setExamType(e.target.value)}
+                            onChange={e => { setExamType(e.target.value); setSubject(''); setTopic(''); }}
                         >
                             {availableExams.map(exam => (
                                 <option key={exam} value={exam}>{exam}</option>
