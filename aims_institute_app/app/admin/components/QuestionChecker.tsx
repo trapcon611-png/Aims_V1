@@ -296,7 +296,12 @@ export default function QuestionChecker() {
     const fetchPendingQuestions = async () => {
         setLoading(true);
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+            // ✨ MAGIC IP FIX: If the .env fails, it grabs the exact VPS IP you are visiting!
+            let API_URL = process.env.NEXT_PUBLIC_API_URL;
+            if (!API_URL || API_URL.includes('localhost')) {
+                API_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001';
+            }
+
             const res = await fetch(`${API_URL}/exams/pending-questions`);
             const data = await res.json();
             setPendingQuestions(data);
@@ -312,7 +317,7 @@ export default function QuestionChecker() {
             setLoading(false);
         }
     };
-
+    
     const availableExams = useMemo(() => {
         const exams = new Set(pendingQuestions.map(q => q.examType).filter(Boolean));
         if (exams.size === 0) return ['JEE Advanced', 'JEE Main', 'MHT-CET', 'NEET'];
