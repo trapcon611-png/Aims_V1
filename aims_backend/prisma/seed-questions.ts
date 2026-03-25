@@ -35,7 +35,7 @@ const formatExamType = (folderName: string) => {
     return folderName;
 };
 
-async function processFile(filePath: string, examType: string, fallbackSubject: string, teacherId: string, existingMap: Map<string, string>) {
+async function processFile(filePath: string, examType: string, fallbackSubject: string, teacherId: string, approvedMap: Map<string, boolean>) {
     return new Promise<void>((resolve, reject) => {
         const questionsToInsert: any[] = [];
         let skippedCount = 0;
@@ -50,11 +50,13 @@ async function processFile(filePath: string, examType: string, fallbackSubject: 
 
                 const normalizedQText = normalizeForCompare(qTextRaw) + `_${examType}`;
 
-                if (existingMap.has(normalizedQText)) {
+                // ✨ SMART CHECK: If you already approved this question, skip it so we don't duplicate it!
+                if (approvedMap.has(normalizedQText)) {
                     skippedCount++;
                     return;
                 }
 
+                // Clean and Bundle Options and their Images
                 const parsedOptions = {
                     a: cleanStr(row.option_a) || '',
                     b: cleanStr(row.option_b) || '',
@@ -72,9 +74,8 @@ async function processFile(filePath: string, examType: string, fallbackSubject: 
                 
                 let dbCorrectOpt = cleanStr(row.correct_answer)?.toLowerCase() || 'pending';
                 if (!['a', 'b', 'c', 'd'].includes(dbCorrectOpt)) dbCorrectOpt = 'pending';
-
-                existingMap.set(normalizedQText, 'pending_insert'); 
                 
+                // Add to Bulk Insert Array
                 questionsToInsert.push({
                     createdById: teacherId,
                     examType: examType,
@@ -93,16 +94,19 @@ async function processFile(filePath: string, examType: string, fallbackSubject: 
                 });
             })
             .on('end', async () => {
+                // Bulk Insert in chunks of 500 for LIGHTNING speed
                 if (questionsToInsert.length > 0) {
-                    const chunkSize = 50;
+                    const chunkSize = 500;
                     for (let i = 0; i < questionsToInsert.length; i += chunkSize) {
                         const chunk = questionsToInsert.slice(i, i + chunkSize);
                         await prisma.questionBank.createMany({ data: chunk, skipDuplicates: true });
                     }
-                    console.log(`✅ Inserted ${questionsToInsert.length} new questions.`);
-                } else {
-                    console.log(`🛑 Skipped ${skippedCount} existing questions.`);
+                    console.log(`✅ Successfully imported ${questionsToInsert.length} fresh questions!`);
                 }
+                if (skippedCount > 0) {
+                    console.log(`🛡️ Skipped ${skippedCount} questions that you had already approved.`);
+                }
+                
                 resolve();
             })
             .on('error', reject);
@@ -122,13 +126,17 @@ async function main() {
     let systemTeacher = await prisma.teacherProfile.findFirst({ where: { userId: systemUser.id } });
     if (!systemTeacher) systemTeacher = await prisma.teacherProfile.create({ data: { userId: systemUser.id, fullName: 'System Auto-Importer' } });
 
-    console.log('⏳ Fetching existing question bank to prevent duplicates...');
-    const existingDbQuestions = await prisma.questionBank.findMany({ select: { id: true, questionText: true, examType: true } });
+    console.log('⏳ Securing previously approved questions...');
+    // We only fetch questions that are NOT pending, so we protect your hard work.
+    const approvedDbQuestions = await prisma.questionBank.findMany({ 
+        where: { difficulty: { not: 'pending' } },
+        select: { questionText: true, examType: true } 
+    });
     
-    const existingMap = new Map();
-    existingDbQuestions.forEach(q => {
+    const approvedMap = new Map();
+    approvedDbQuestions.forEach(q => {
         const safeExam = q.examType || 'General';
-        existingMap.set(normalizeForCompare(q.questionText) + `_${safeExam}`, q.id);
+        approvedMap.set(normalizeForCompare(q.questionText) + `_${safeExam}`, true);
     });
 
     const folders = fs.readdirSync(csvBaseDir);
@@ -136,16 +144,24 @@ async function main() {
         const folderPath = path.join(csvBaseDir, folder);
         if (fs.statSync(folderPath).isDirectory()) {
             const examType = formatExamType(folder);
+            
+            // ✨ SMART WIPE: Delete ALL 'pending' questions for this exam to give us a clean slate!
+            console.log(`\n🧹 Wiping old 'pending' questions for ${examType}...`);
+            const deleted = await prisma.questionBank.deleteMany({
+                where: { examType: examType, difficulty: 'pending' }
+            });
+            console.log(`🗑️ Cleared ${deleted.count} old pending questions.`);
+
             const files = fs.readdirSync(folderPath).filter(f => f.endsWith('.csv'));
             
             for (const file of files) {
                 const subject = getSubjectFromFileName(file);
-                await processFile(path.join(folderPath, file), examType, subject, systemTeacher.id, existingMap);
+                await processFile(path.join(folderPath, file), examType, subject, systemTeacher.id, approvedMap);
             }
         }
     }
 
-    console.log('\n🎉 ALL FOLDERS PROCESSED SUCCESSFULLY!');
+    console.log('\n🎉 ALL FOLDERS PROCESSED AND SYNCED SUCCESSFULLY!');
     await prisma.$disconnect();
 }
 
