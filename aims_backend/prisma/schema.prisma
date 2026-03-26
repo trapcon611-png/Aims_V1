@@ -166,6 +166,7 @@ model QuestionBank {
   isActive        Boolean         @default(true)
   createdAt       DateTime        @default(now())
   usedInQuestions Question[]
+  @@index([difficulty])
 }
 
 model Question {

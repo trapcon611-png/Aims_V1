@@ -260,8 +260,9 @@ export class ExamsService {
 
   async getPendingQuestions() {
     return this.prisma.questionBank.findMany({
-      where: { difficulty: 'pending' }, // Only grab unreviewed questions
-      orderBy: { topic: 'asc' },
+      where: { difficulty: 'pending' },
+      take: 50, // ✨ MAGIC FIX: Only fetch 50 at a time to prevent Base64 crashes!
+      orderBy: { createdAt: 'asc' }, // Keep perfect CSV order
     });
   }
 
