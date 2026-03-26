@@ -81,7 +81,6 @@ const CreateQuestionCard = ({ defaultExamType, defaultSubject, defaultTopic, onC
             return showToast("Please enter question text or upload a question image.", "error");
         }
         
-        // Skip strict validation if they are just saving a draft
         if (difficulty !== 'pending') {
             if (qType === 'MCQ' && correctOption === 'pending') {
                 return showToast("Please select the correct Option (A, B, C, or D).", "error");
@@ -256,7 +255,6 @@ const CreateQuestionCard = ({ defaultExamType, defaultSubject, defaultTopic, onC
 
                 <div className="flex flex-col items-end gap-2">
                     <div className="flex items-center gap-2 w-full justify-end">
-                        {/* ✨ NEW: Save Draft Button for Creator */}
                         <button onClick={() => handleCreateClick('pending')} className="px-5 py-2.5 rounded-xl border border-blue-300 bg-blue-50 text-blue-700 text-sm font-bold hover:bg-blue-600 hover:text-white shadow-sm hover:shadow-md transition">Save Draft</button>
                         
                         <div className="w-px h-8 bg-slate-200 mx-1"></div>
@@ -358,7 +356,6 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
 
     const removeOptionImage = (key: string) => setQOptsState(prev => ({ ...prev, [`img_${key}`]: null }));
 
-    // ✨ NEW: Function that skips the strict answer validation so you can save unfinished work
     const handleSaveDraftClick = () => {
         const updatedQuestion = {
             ...q,
@@ -480,7 +477,7 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
                     
                     {!isEditing && isQImageValid && (
                         <div className="mb-4 max-h-62.5 w-full border border-slate-200 rounded-xl bg-slate-50 overflow-auto custom-scrollbar flex justify-center p-3">
-                            <img src={qImageState} className="max-w-full h-auto object-contain" alt="Question Graphic"/>
+                            <img src={qImageState} className="max-h-full w-auto object-contain" alt="Question Graphic"/>
                         </div>
                     )}
 
@@ -647,7 +644,6 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {/* ✨ THE NEW SAVE DRAFT BUTTON */}
                     <button 
                         onClick={handleSaveDraftClick}
                         disabled={isApproving || isSavingDraft || !selectedTopic}
@@ -688,136 +684,110 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
 
 export default function QuestionChecker() {
     const [pendingQuestions, setPendingQuestions] = useState<any[]>([]);
+    const [totalQuestions, setTotalQuestions] = useState(0);
+    const [availableTopicsWithCount, setAvailableTopicsWithCount] = useState<any[]>([]);
     const [toast, setToast] = useState<{message: string, type: 'error' | 'success'} | null>(null);
     
     const [isCreatingNew, setIsCreatingNew] = useState(false);
 
-    const [examType, setExamType] = useState('JEE Advanced');
-    const [subject, setSubject] = useState(''); 
+    // Initial constants
+    const availableExams = Object.keys(UPLOADED_CSVS);
+
+    const [examType, setExamType] = useState(availableExams[0]);
+    const [subject, setSubject] = useState(UPLOADED_CSVS[availableExams[0]][0]); 
     const [topic, setTopic] = useState(''); 
     const [query, setQuery] = useState(''); 
     const [showOnlyWithSolutions, setShowOnlyWithSolutions] = useState(false);
     
     const [loading, setLoading] = useState(false);
     const [approvingId, setApprovingId] = useState<string | null>(null);
-    const [savingDraftId, setSavingDraftId] = useState<string | null>(null); // ✨ Draft loading state
+    const [savingDraftId, setSavingDraftId] = useState<string | null>(null); 
     const [currentPage, setCurrentPage] = useState(1);
     
     const ITEMS_PER_PAGE = 5;
+    const totalPages = Math.max(1, Math.ceil(totalQuestions / ITEMS_PER_PAGE));
 
     const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-2xl transition-all duration-300";
     const inputStyle = "w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:ring-2 focus:ring-amber-500 outline-none transition text-sm font-medium disabled:opacity-50 disabled:bg-slate-100 disabled:cursor-not-allowed";
     const labelStyle = "block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5";
+
+    const availableSubjects = examType ? UPLOADED_CSVS[examType] : [];
 
     const showToast = (message: string, type: 'error' | 'success') => {
         setToast({ message, type });
         setTimeout(() => setToast(null), 4000);
     };
 
+    // 1. Fetch Dynamic Topics Server-Side
     useEffect(() => {
-        fetchPendingQuestions();
-    }, []);
-
-    const fetchPendingQuestions = async () => {
-        setLoading(true);
-        try {
+        if (!examType || !subject) return;
+        const fetchTopics = async () => {
             let API_URL = process.env.NEXT_PUBLIC_API_URL;
             if (!API_URL || API_URL.includes('localhost')) {
                 API_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001';
             }
+            try {
+                const res = await fetch(`${API_URL}/exams/pending-topics?examType=${encodeURIComponent(examType)}&subject=${encodeURIComponent(subject)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setAvailableTopicsWithCount(data);
+                }
+            } catch (e) { console.error("Failed to load topics", e); }
+        };
+        fetchTopics();
+    }, [examType, subject]);
 
-            const res = await fetch(`${API_URL}/exams/pending-questions`);
-            const data = await res.json();
+    // 2. Fetch exactly 5 Questions Server-Side
+    useEffect(() => {
+        if (!examType || !subject) return;
+        
+        const fetchQuestions = async () => {
+            setLoading(true);
+            let API_URL = process.env.NEXT_PUBLIC_API_URL;
+            if (!API_URL || API_URL.includes('localhost')) {
+                API_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001';
+            }
             
-            const perfectlyOrderedData = data.sort((a: any, b: any) => {
-                return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+            const params = new URLSearchParams({
+                examType,
+                subject,
+                topic,
+                searchQuery: query,
+                showOnlyWithSolutions: String(showOnlyWithSolutions),
+                page: String(currentPage)
             });
 
-            setPendingQuestions(perfectlyOrderedData);
-            
-            if (perfectlyOrderedData.length > 0) {
-                const uniqueSubjects = Array.from(new Set(perfectlyOrderedData.map((q: any) => q.subject))).filter(Boolean) as string[];
-                if (uniqueSubjects.length > 0 && !subject) setSubject(uniqueSubjects[0]);
+            try {
+                const res = await fetch(`${API_URL}/exams/pending-questions?${params.toString()}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setPendingQuestions(data.questions);
+                    setTotalQuestions(data.total);
+                }
+            } catch (e) { 
+                console.error("Failed to load pending questions", e); 
+            } finally {
+                setLoading(false);
             }
-        } catch (e) {
-            console.error("Failed to load pending questions", e);
-        } finally {
-            setLoading(false);
-        }
+        };
+
+        const delayDebounceFn = setTimeout(() => { fetchQuestions(); }, 300);
+        return () => clearTimeout(delayDebounceFn);
+        
+    }, [examType, subject, topic, query, showOnlyWithSolutions, currentPage]);
+
+    const handleExamChange = (newExam: string) => {
+        setExamType(newExam);
+        setSubject(UPLOADED_CSVS[newExam][0]); 
+        setTopic('');
+        setCurrentPage(1);
     };
 
-    const availableExams = useMemo(() => {
-        const exams = new Set(pendingQuestions.map(q => q.examType).filter(Boolean));
-        if (exams.size === 0) return ['JEE Advanced', 'JEE Main', 'MHT-CET', 'NEET'];
-        return Array.from(exams).sort() as string[];
-    }, [pendingQuestions]);
-
-    const availableSubjects = useMemo(() => {
-        const dbSourceExam = examType === 'NEET' ? 'MHT-CET' : examType;
-        const subjects = new Set(
-            pendingQuestions
-                .filter(q => q.examType === dbSourceExam)
-                .map(q => {
-                    if (!q.subject) return null;
-                    return q.subject.charAt(0).toUpperCase() + q.subject.slice(1).toLowerCase();
-                })
-                .filter(Boolean)
-        );
-        return Array.from(subjects).sort() as string[];
-    }, [examType, pendingQuestions]);
-
-    useEffect(() => {
-        if (availableSubjects.length > 0 && !availableSubjects.includes(subject)) {
-            setSubject(availableSubjects[0]);
-        }
-    }, [examType, availableSubjects]);
-
-    const availableTopicsWithCount = useMemo(() => {
-        const dbSourceExam = examType === 'NEET' ? 'MHT-CET' : examType;
-        
-        const relevantQs = pendingQuestions.filter(q => {
-            const matchExam = q.examType === dbSourceExam;
-            const matchSubject = subject === '' || 
-                               (q.subject && q.subject.toLowerCase() === subject.toLowerCase());
-            return matchExam && matchSubject;
-        });
-
-        const topicCounts: Record<string, number> = {};
-        relevantQs.forEach(q => {
-            const t = q.topic?.trim() || 'Uncategorized';
-            topicCounts[t] = (topicCounts[t] || 0) + 1;
-        });
-            
-        return Object.keys(topicCounts).sort().map(t => ({
-            name: t,
-            count: topicCounts[t]
-        }));
-    }, [subject, examType, pendingQuestions]);
-
-    const filteredResults = useMemo(() => {
-        const dbSourceExam = examType === 'NEET' ? 'MHT-CET' : examType;
-
-        return pendingQuestions.filter(q => {
-            const matchExam = q.examType === dbSourceExam;
-            const matchSubject = subject === '' || (q.subject && q.subject.toLowerCase() === subject.toLowerCase());
-            const qTopic = q.topic?.trim() || 'Uncategorized';
-            const matchTopic = topic === '' || qTopic === topic;
-            const matchQuery = query === '' || q.questionText?.toLowerCase().includes(query.toLowerCase());
-            
-            let matchSolution = true;
-            if (showOnlyWithSolutions) {
-                const hasText = q.explanation && q.explanation !== 'NaN' && q.explanation.trim() !== '';
-                const hasImage = q.solutionImage && q.solutionImage !== 'NaN' && q.solutionImage !== 'null';
-                matchSolution = hasText || hasImage;
-            }
-
-            return matchExam && matchSubject && matchTopic && matchQuery && matchSolution;
-        });
-    }, [pendingQuestions, examType, subject, topic, query, showOnlyWithSolutions]);
-
-    useEffect(() => {
+    const handleSubjectChange = (newSub: string) => {
+        setSubject(newSub);
+        setTopic('');
         setCurrentPage(1);
-    }, [showOnlyWithSolutions, examType, subject, topic]);
+    };
 
     const handleDelete = async (id: string) => {
         try {
@@ -830,14 +800,18 @@ export default function QuestionChecker() {
             if (!res.ok) throw new Error("Failed to delete");
 
             setPendingQuestions(prev => prev.filter(q => q.id !== id));
+            setTotalQuestions(prev => prev - 1);
             showToast("Question deleted forever.", "success");
+            
+            if (pendingQuestions.length === 1 && currentPage > 1) {
+                setCurrentPage(prev => prev - 1);
+            }
         } catch (e) {
             console.error(e);
             showToast("Failed to delete question.", "error");
         }
     };
 
-    // ✨ NEW: The Save Draft API Call
     const handleSaveDraft = async (question: any, finalTopic: string) => {
         setSavingDraftId(question.id);
         try {
@@ -849,7 +823,7 @@ export default function QuestionChecker() {
                 explanation: question.explanation,
                 options: question.options,
                 correctOption: question.correctOption,
-                difficulty: 'pending', // Keeps it in the draft state!
+                difficulty: 'pending', 
                 topic: finalTopic,
                 type: question.type,
                 examType: examType 
@@ -868,7 +842,6 @@ export default function QuestionChecker() {
 
             if (!res.ok) throw new Error("Failed to save to database");
 
-            // Update the UI WITHOUT removing the question from the screen!
             setPendingQuestions(prev => prev.map(q => q.id === question.id ? { ...q, ...payload } : q));
             showToast(`Draft successfully saved!`, "success");
             
@@ -911,8 +884,12 @@ export default function QuestionChecker() {
             if (!res.ok) throw new Error("Failed to save to database");
 
             setPendingQuestions(prev => prev.filter(q => q.id !== question.id));
+            setTotalQuestions(prev => prev - 1);
             showToast(`Approved as ${difficulty}!`, "success");
             
+            if (pendingQuestions.length === 1 && currentPage > 1) {
+                setCurrentPage(prev => prev - 1);
+            }
         } catch (e) {
             console.error(e);
             showToast("Failed to save question to database.", "error");
@@ -944,20 +921,16 @@ export default function QuestionChecker() {
             
             setIsCreatingNew(false);
             
-            // ✨ Reload the data so the brand new draft shows up instantly with a proper DB ID
-            fetchPendingQuestions(); 
+            // Re-fetch page 1 to see the new creation instantly
+            setTopic('');
+            setQuery('');
+            setCurrentPage(1);
             
         } catch (e) {
             console.error(e);
             showToast("Failed to create question.", "error");
         }
     };
-
-    const totalPages = Math.ceil(filteredResults.length / ITEMS_PER_PAGE);
-    const paginatedResults = filteredResults.slice(
-        (currentPage - 1) * ITEMS_PER_PAGE, 
-        currentPage * ITEMS_PER_PAGE
-    );
 
     return (
         <div className="flex flex-col gap-5 font-sans min-h-[85vh] relative">
@@ -977,7 +950,7 @@ export default function QuestionChecker() {
                     </div>
 
                     <button 
-                        onClick={() => setShowOnlyWithSolutions(!showOnlyWithSolutions)}
+                        onClick={() => { setShowOnlyWithSolutions(!showOnlyWithSolutions); setCurrentPage(1); }}
                         className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${showOnlyWithSolutions ? 'bg-amber-50 border-amber-200 text-amber-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'}`}
                     >
                         {showOnlyWithSolutions ? <ToggleRight size={18} className="text-amber-600" /> : <ToggleLeft size={18} className="text-slate-400" />}
@@ -988,47 +961,23 @@ export default function QuestionChecker() {
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
                     <div className="md:col-span-2">
                         <label className={labelStyle}>Exam Type</label>
-                        <select 
-                            className={inputStyle}
-                            value={examType}
-                            onChange={e => { setExamType(e.target.value); setSubject(''); setTopic(''); }}
-                        >
-                            {availableExams.map(exam => (
-                                <option key={exam} value={exam}>{exam}</option>
-                            ))}
+                        <select className={inputStyle} value={examType} onChange={e => handleExamChange(e.target.value)}>
+                            {availableExams.map(exam => <option key={exam} value={exam}>{exam}</option>)}
                         </select>
                     </div>
 
                     <div className="md:col-span-3">
                         <label className={labelStyle}>Subject</label>
-                        <select 
-                            className={inputStyle}
-                            value={subject}
-                            onChange={e => { setSubject(e.target.value); setTopic(''); }}
-                            disabled={availableSubjects.length === 0}
-                        >
-                            {availableSubjects.length === 0 ? (
-                                <option value="">No Subjects Found</option>
-                            ) : (
-                                availableSubjects.map(sub => (
-                                    <option key={sub} value={sub}>{sub}</option>
-                                ))
-                            )}
+                        <select className={inputStyle} value={subject} onChange={e => handleSubjectChange(e.target.value)}>
+                            {availableSubjects.map((sub: string) => <option key={sub} value={sub}>{sub}</option>)}
                         </select>
                     </div>
 
                     <div className="md:col-span-3">
                         <label className={labelStyle}>Topic / Chapter</label>
-                        <select 
-                            className={inputStyle}
-                            value={topic}
-                            onChange={e => setTopic(e.target.value)}
-                            disabled={availableTopicsWithCount.length === 0}
-                        >
+                        <select className={inputStyle} value={topic} onChange={e => { setTopic(e.target.value); setCurrentPage(1); }} disabled={availableTopicsWithCount.length === 0}>
                             <option value="">-- All Topics --</option>
-                            {availableTopicsWithCount.map((t: any) => (
-                                <option key={t.name} value={t.name}>{t.name} ({t.count})</option>
-                            ))}
+                            {availableTopicsWithCount.map((t: any) => <option key={t.name} value={t.name}>{t.name} ({t.count})</option>)}
                         </select>
                     </div>
 
@@ -1040,7 +989,7 @@ export default function QuestionChecker() {
                                 className={inputStyle + " pl-10"}
                                 placeholder="Search text..."
                                 value={query}
-                                onChange={e => setQuery(e.target.value)}
+                                onChange={e => { setQuery(e.target.value); setCurrentPage(1); }}
                             />
                         </div>
                     </div>
@@ -1051,7 +1000,7 @@ export default function QuestionChecker() {
                 <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center rounded-t-2xl">
                     <div className="flex items-center gap-3">
                         <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Pending Review</span>
-                        <span className="text-xs font-bold bg-amber-100 text-amber-800 px-2.5 py-1 rounded-md shadow-sm">Found: {filteredResults.length}</span>
+                        <span className="text-xs font-bold bg-amber-100 text-amber-800 px-2.5 py-1 rounded-md shadow-sm">Found: {totalQuestions}</span>
                     </div>
                     
                     <button 
@@ -1085,23 +1034,23 @@ export default function QuestionChecker() {
                                 />
                             )}
 
-                            {filteredResults.length === 0 && !isCreatingNew ? (
+                            {pendingQuestions.length === 0 && !isCreatingNew ? (
                                 <div className="py-20 flex flex-col items-center justify-center text-slate-400">
                                     <CheckCircle size={56} className="mb-4 opacity-30 text-emerald-500"/>
                                     <p className="font-bold text-slate-600 text-lg">No pending questions found.</p>
                                     <p className="text-sm mt-1">Change filters, create one, or import a new CSV.</p>
                                 </div>
                             ) : (
-                                paginatedResults.map((q) => (
+                                pendingQuestions.map((q) => (
                                     <QuestionCard 
                                         key={q.id}
                                         q={q}
                                         defaultTopic={topic}
                                         onApprove={handleApprove}
-                                        onSaveDraft={handleSaveDraft} // ✨ Passed new draft function
+                                        onSaveDraft={handleSaveDraft}
                                         onDelete={handleDelete}
                                         isApproving={approvingId === q.id}
-                                        isSavingDraft={savingDraftId === q.id} // ✨ Loading state for drafts
+                                        isSavingDraft={savingDraftId === q.id}
                                         showToast={showToast}
                                     />
                                 ))
@@ -1110,7 +1059,7 @@ export default function QuestionChecker() {
                     )}
                 </div>
 
-                {filteredResults.length > 0 && totalPages > 1 && (
+                {totalQuestions > 0 && totalPages > 1 && (
                     <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center rounded-b-2xl">
                         <span className="text-sm text-slate-600 font-bold">
                             Page <span className="text-slate-900">{currentPage}</span> of {totalPages}

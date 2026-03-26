@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Request, BadRequestException, InternalServerErrorException, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards, Request, BadRequestException, InternalServerErrorException, Query, Delete } from '@nestjs/common';
 import { ExamsService } from './exams.service';
 import { AuthGuard } from '@nestjs/passport';
 
@@ -45,10 +45,27 @@ export class ExamsController {
   // --- NEW: QUESTION BANK API ROUTES ---
   // Note: These must stay ABOVE the @Get(':id') route to prevent route collisions
 
+  @Get('pending-topics')
+  // @UseGuards(AuthGuard('jwt'))
+  getPendingTopics(@Query('examType') examType: string, @Query('subject') subject: string) {
+      return this.examsService.getPendingTopics(examType, subject);
+  }
+
   @Get('pending-questions')
   // @UseGuards(AuthGuard('jwt')) // Uncomment if your frontend sends the Bearer token for this call
-  getPendingQuestions() {
-    return this.examsService.getPendingQuestions();
+  getPendingQuestions(
+      @Query('examType') examType: string,
+      @Query('subject') subject: string,
+      @Query('topic') topic: string,
+      @Query('searchQuery') searchQuery: string,
+      @Query('showOnlyWithSolutions') showOnlyWithSolutions: string,
+      @Query('page') page: string,
+  ) {
+      const take = 5; // EXACTLY 5 questions per page to keep the payload tiny
+      const skip = (Number(page || 1) - 1) * take;
+      return this.examsService.getPendingQuestions({ 
+          examType, subject, topic, searchQuery, showOnlyWithSolutions, skip, take 
+      });
   }
 
   @Post('review-questions')
@@ -59,6 +76,7 @@ export class ExamsController {
     }
     return this.examsService.reviewQuestions(body.questions);
   }
+
   @Post('create-question')
   // @UseGuards(AuthGuard('jwt')) 
   createQuestion(@Body() body: any) {
@@ -66,6 +84,12 @@ export class ExamsController {
       throw new BadRequestException('Invalid question payload');
     }
     return this.examsService.createQuestionFromAdmin(body);
+  }
+
+  @Delete('pending-questions/:id')
+  // @UseGuards(AuthGuard('jwt'))
+  deletePendingQuestion(@Param('id') id: string) {
+      return this.examsService.deletePendingQuestion(id);
   }
 
   // --- GENERIC ROUTES (MUST BE AT THE BOTTOM) ---

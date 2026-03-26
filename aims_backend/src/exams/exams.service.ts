@@ -256,14 +256,54 @@ export class ExamsService {
       return { count: result.count };
   }
 
-  // --- NEW: QUESTION BANK CSV IMPORT & REVIEW LOGIC ---
+  // --- NEW: SERVER-SIDE FILTERING & PAGINATION LOGIC ---
 
-  async getPendingQuestions() {
-    return this.prisma.questionBank.findMany({
-      where: { difficulty: 'pending' },
-      take: 50, // ✨ MAGIC FIX: Only fetch 50 at a time to prevent Base64 crashes!
-      orderBy: { createdAt: 'asc' }, // Keep perfect CSV order
-    });
+  async getPendingTopics(examType: string, subject: string) {
+      const dbSourceExam = examType === 'NEET' ? 'MHT-CET' : examType;
+      const topics = await this.prisma.questionBank.groupBy({
+          by: ['topic'],
+          where: { 
+              difficulty: 'pending', 
+              examType: dbSourceExam, 
+              subject: { equals: subject, mode: 'insensitive' } 
+          },
+          _count: { id: true }
+      });
+      
+      return topics
+          .map(t => ({ name: t.topic || 'Uncategorized', count: t._count.id }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async getPendingQuestions(filters: any) {
+      const { examType, subject, topic, searchQuery, showOnlyWithSolutions, skip = 0, take = 5 } = filters;
+      
+      const whereClause: any = { difficulty: 'pending' };
+      
+      // Map NEET to MHT-CET for DB source just like the frontend did
+      if (examType) whereClause.examType = examType === 'NEET' ? 'MHT-CET' : examType;
+      if (subject) whereClause.subject = { equals: subject, mode: 'insensitive' };
+      if (topic) whereClause.topic = topic;
+      if (searchQuery) whereClause.questionText = { contains: searchQuery, mode: 'insensitive' };
+      
+      if (showOnlyWithSolutions === 'true') {
+           whereClause.OR = [
+               { explanation: { not: null, notIn: ['', 'NaN'] } },
+               { solutionImage: { not: null, notIn: ['null', 'NaN'] } }
+           ];
+      }
+
+      const [questions, total] = await Promise.all([
+          this.prisma.questionBank.findMany({
+              where: whereClause,
+              skip: Number(skip),
+              take: Number(take),
+              orderBy: { createdAt: 'asc' }
+          }),
+          this.prisma.questionBank.count({ where: whereClause })
+      ]);
+
+      return { questions, total };
   }
 
   async reviewQuestions(questions: any[]) {
@@ -272,9 +312,14 @@ export class ExamsService {
       where: { id: q.id },
       data: {
         questionText: q.questionText,
+        questionImage: q.questionImage, // Saved to DB
+        solutionImage: q.solutionImage, // Saved to DB
+        explanation: q.explanation,     // Saved to DB
         options: q.options,
         correctOption: q.correctOption,
-        difficulty: q.difficulty // This changes from 'pending' -> 'easy'/'medium'/'hard'
+        difficulty: q.difficulty,
+        topic: q.topic,                 // Saved to DB
+        type: q.type
       }
     }));
     
@@ -286,6 +331,7 @@ export class ExamsService {
       message: `Successfully reviewed ${updates.length} questions.`
     };
   }
+
   async createQuestionFromAdmin(data: any) {
     // Automatically attribute it to the System Admin
     const systemTeacher = await this.prisma.teacherProfile.findFirst({
@@ -304,5 +350,11 @@ export class ExamsService {
             negative: -1
         }
     });
+  }
+
+  async deletePendingQuestion(id: string) {
+      return this.prisma.questionBank.delete({
+          where: { id }
+      });
   }
 }
