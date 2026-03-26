@@ -285,4 +285,23 @@ export class ExamsService {
       message: `Successfully reviewed ${updates.length} questions.`
     };
   }
+  async createQuestionFromAdmin(data: any) {
+    // Automatically attribute it to the System Admin
+    const systemTeacher = await this.prisma.teacherProfile.findFirst({
+        where: { user: { username: 'system_admin' } }
+    });
+
+    if (!systemTeacher) throw new InternalServerErrorException('System Teacher profile not found');
+
+    return this.prisma.questionBank.create({
+        data: {
+            ...data,
+            createdById: systemTeacher.id,
+            isActive: true,
+            expectedTime: 60,
+            marks: 4,
+            negative: -1
+        }
+    });
+  }
 }

@@ -59,6 +59,14 @@ export class ExamsController {
     }
     return this.examsService.reviewQuestions(body.questions);
   }
+  @Post('create-question')
+  // @UseGuards(AuthGuard('jwt')) 
+  createQuestion(@Body() body: any) {
+    if (!body || !body.questionText) {
+      throw new BadRequestException('Invalid question payload');
+    }
+    return this.examsService.createQuestionFromAdmin(body);
+  }
 
   // --- GENERIC ROUTES (MUST BE AT THE BOTTOM) ---
 

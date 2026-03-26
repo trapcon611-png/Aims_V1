@@ -39,24 +39,28 @@ async function processFile(filePath: string, examType: string, fallbackSubject: 
     return new Promise<void>((resolve, reject) => {
         const questionsToInsert: any[] = [];
         let skippedCount = 0;
+        let rowCount = 0; // ✨ FIX #4: We will count the rows
+        
+        // Grab a base time so we can perfectly increment it
+        const baseTime = Date.now(); 
 
         console.log(`\n📄 Processing: [${examType}] - (${path.basename(filePath)})`);
 
         fs.createReadStream(filePath)
             .pipe(csv())
             .on('data', (row: any) => {
+                rowCount++; // Increment row counter
                 const qTextRaw = cleanStr(row.question_text);
                 if (!qTextRaw) return;
 
                 const normalizedQText = normalizeForCompare(qTextRaw) + `_${examType}`;
 
-                // ✨ SMART CHECK: If you already approved this question, skip it so we don't duplicate it!
+                // Skip if already approved
                 if (approvedMap.has(normalizedQText)) {
                     skippedCount++;
                     return;
                 }
 
-                // Clean and Bundle Options and their Images
                 const parsedOptions = {
                     a: cleanStr(row.option_a) || '',
                     b: cleanStr(row.option_b) || '',
@@ -75,7 +79,10 @@ async function processFile(filePath: string, examType: string, fallbackSubject: 
                 let dbCorrectOpt = cleanStr(row.correct_answer)?.toLowerCase() || 'pending';
                 if (!['a', 'b', 'c', 'd'].includes(dbCorrectOpt)) dbCorrectOpt = 'pending';
                 
-                // Add to Bulk Insert Array
+                // ✨ FIX #4: Force the creation time to increase by 1000 milliseconds (1 second) per row!
+                // This guarantees the database strictly respects the original CSV Top-to-Bottom order.
+                const sequentialTime = new Date(baseTime + (rowCount * 1000));
+
                 questionsToInsert.push({
                     createdById: teacherId,
                     examType: examType,
@@ -91,20 +98,20 @@ async function processFile(filePath: string, examType: string, fallbackSubject: 
                     type: cleanStr(row.type) === 'numerical' ? 'NUMERICAL' : 'MCQ',
                     marks: 4,
                     negative: -1,
+                    createdAt: sequentialTime // <-- Inserting perfect order here
                 });
             })
             .on('end', async () => {
-                // Bulk Insert in chunks of 500 for LIGHTNING speed
                 if (questionsToInsert.length > 0) {
                     const chunkSize = 500;
                     for (let i = 0; i < questionsToInsert.length; i += chunkSize) {
                         const chunk = questionsToInsert.slice(i, i + chunkSize);
                         await prisma.questionBank.createMany({ data: chunk, skipDuplicates: true });
                     }
-                    console.log(`✅ Successfully imported ${questionsToInsert.length} fresh questions!`);
+                    console.log(`✅ Successfully imported ${questionsToInsert.length} fresh questions in PERFECT ORDER!`);
                 }
                 if (skippedCount > 0) {
-                    console.log(`🛡️ Skipped ${skippedCount} questions that you had already approved.`);
+                    console.log(`🛡️ Skipped ${skippedCount} approved questions.`);
                 }
                 
                 resolve();
@@ -127,7 +134,6 @@ async function main() {
     if (!systemTeacher) systemTeacher = await prisma.teacherProfile.create({ data: { userId: systemUser.id, fullName: 'System Auto-Importer' } });
 
     console.log('⏳ Securing previously approved questions...');
-    // We only fetch questions that are NOT pending, so we protect your hard work.
     const approvedDbQuestions = await prisma.questionBank.findMany({ 
         where: { difficulty: { not: 'pending' } },
         select: { questionText: true, examType: true } 
@@ -145,7 +151,6 @@ async function main() {
         if (fs.statSync(folderPath).isDirectory()) {
             const examType = formatExamType(folder);
             
-            // ✨ SMART WIPE: Delete ALL 'pending' questions for this exam to give us a clean slate!
             console.log(`\n🧹 Wiping old 'pending' questions for ${examType}...`);
             const deleted = await prisma.questionBank.deleteMany({
                 where: { examType: examType, difficulty: 'pending' }
