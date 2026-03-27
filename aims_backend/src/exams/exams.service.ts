@@ -50,7 +50,6 @@ export class ExamsService {
     });
   }
 
-  // --- ADMIN: ANALYTICS LOGIC ---
   async getExamAnalytics(examId: string) {
     const attempts = await this.prisma.testAttempt.findMany({
       where: { examId, status: { in: ['SUBMITTED', 'EVALUATED'] } },
@@ -256,8 +255,6 @@ export class ExamsService {
       return { count: result.count };
   }
 
-  // --- NEW: SERVER-SIDE FILTERING & PAGINATION LOGIC ---
-
   async getPendingTopics(examType: string, subject: string) {
       const dbSourceExam = examType === 'NEET' ? 'MHT-CET' : examType;
       const topics = await this.prisma.questionBank.groupBy({
@@ -275,12 +272,46 @@ export class ExamsService {
           .sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  async getAvailableTopics(examType: string) {
+      const dbSourceExam = examType === 'NEET' ? 'MHT-CET' : examType;
+      
+      const whereClause: any = {
+          difficulty: { in: ['easy', 'medium', 'hard'] } 
+      };
+      
+      if (examType && examType !== 'Any') {
+          whereClause.examType = dbSourceExam;
+      }
+
+      const topics = await this.prisma.questionBank.groupBy({
+          by: ['subject', 'topic'],
+          where: whereClause,
+          _count: { id: true }
+      });
+      
+      const formatted: Record<string, string[]> = {};
+      topics.forEach(t => {
+          if (!t.subject) return;
+          
+          const subj = t.subject.charAt(0).toUpperCase() + t.subject.slice(1).toLowerCase();
+          const topic = t.topic?.trim() || 'Uncategorized';
+          
+          if (!formatted[subj]) formatted[subj] = [];
+          if (!formatted[subj].includes(topic)) formatted[subj].push(topic);
+      });
+
+      for (const subj in formatted) {
+          formatted[subj].sort();
+      }
+
+      return formatted;
+  }
+
   async getPendingQuestions(filters: any) {
       const { examType, subject, topic, searchQuery, showOnlyWithSolutions, skip = 0, take = 5 } = filters;
       
       const whereClause: any = { difficulty: 'pending' };
       
-      // Map NEET to MHT-CET for DB source just like the frontend did
       if (examType) whereClause.examType = examType === 'NEET' ? 'MHT-CET' : examType;
       if (subject) whereClause.subject = { equals: subject, mode: 'insensitive' };
       if (topic) whereClause.topic = topic;
@@ -306,19 +337,47 @@ export class ExamsService {
       return { questions, total };
   }
 
+  // ✨ NEW: FETCH APPROVED QUESTIONS (For Manual Editor)
+  async getApprovedQuestions(filters: any) {
+      const { examType, subject, topic, searchQuery, skip = 0, take = 20 } = filters;
+      
+      // STRICTLY ONLY EASY, MEDIUM, HARD
+      const whereClause: any = { 
+          difficulty: { in: ['easy', 'medium', 'hard'] } 
+      };
+      
+      if (examType && examType !== 'Any') {
+          whereClause.examType = examType === 'NEET' ? 'MHT-CET' : examType;
+      }
+      if (subject) whereClause.subject = { equals: subject, mode: 'insensitive' };
+      if (topic) whereClause.topic = topic;
+      if (searchQuery) whereClause.questionText = { contains: searchQuery, mode: 'insensitive' };
+
+      const [questions, total] = await Promise.all([
+          this.prisma.questionBank.findMany({
+              where: whereClause,
+              skip: Number(skip),
+              take: Number(take),
+              orderBy: { createdAt: 'desc' } // Newest approved questions first
+          }),
+          this.prisma.questionBank.count({ where: whereClause })
+      ]);
+
+      return { questions, total };
+  }
+
   async reviewQuestions(questions: any[]) {
-    // Transaction ensures all checked-off questions update safely at the exact same time
     const updates = questions.map(q => this.prisma.questionBank.update({
       where: { id: q.id },
       data: {
         questionText: q.questionText,
-        questionImage: q.questionImage, // Saved to DB
-        solutionImage: q.solutionImage, // Saved to DB
-        explanation: q.explanation,     // Saved to DB
+        questionImage: q.questionImage, 
+        solutionImage: q.solutionImage, 
+        explanation: q.explanation,     
         options: q.options,
         correctOption: q.correctOption,
         difficulty: q.difficulty,
-        topic: q.topic,                 // Saved to DB
+        topic: q.topic,                 
         type: q.type
       }
     }));
@@ -333,7 +392,6 @@ export class ExamsService {
   }
 
   async createQuestionFromAdmin(data: any) {
-    // Automatically attribute it to the System Admin
     const systemTeacher = await this.prisma.teacherProfile.findFirst({
         where: { user: { username: 'system_admin' } }
     });
@@ -356,5 +414,51 @@ export class ExamsService {
       return this.prisma.questionBank.delete({
           where: { id }
       });
+  }
+
+  async autoBuildFromDb(data: { examId: string; blueprint: { subject: string, difficulty: string, count: number }[], topics?: string[], sourceDb?: string }) {
+      const { examId, blueprint, topics, sourceDb } = data;
+      let selectedQuestionIds: string[] = [];
+      let missingWarning = "";
+
+      for (const req of blueprint) {
+          if (req.count <= 0) continue;
+
+          const whereClause: any = {
+              difficulty: req.difficulty,
+              subject: { equals: req.subject, mode: 'insensitive' }
+          };
+
+          if (sourceDb && sourceDb !== 'Any') {
+              whereClause.examType = sourceDb === 'NEET' ? 'MHT-CET' : sourceDb;
+          }
+
+          if (topics && topics.length > 0) {
+              whereClause.topic = { in: topics };
+          }
+
+          const availableQs = await this.prisma.questionBank.findMany({
+              where: whereClause,
+              select: { id: true }
+          });
+
+          if (availableQs.length < req.count) {
+              missingWarning += `Found ${availableQs.length}/${req.count} for ${req.subject} ${req.difficulty}. `;
+          }
+
+          const shuffled = availableQs.sort(() => 0.5 - Math.random());
+          const selected = shuffled.slice(0, req.count).map(q => q.id);
+          selectedQuestionIds.push(...selected);
+      }
+
+      if (selectedQuestionIds.length > 0) {
+          await this.addQuestionsToExam(examId, selectedQuestionIds);
+      }
+
+      return { 
+          success: true, 
+          addedCount: selectedQuestionIds.length,
+          warning: missingWarning || undefined
+      };
   }
 }

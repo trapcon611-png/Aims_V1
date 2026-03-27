@@ -166,7 +166,6 @@ model QuestionBank {
   isActive        Boolean         @default(true)
   createdAt       DateTime        @default(now())
   usedInQuestions Question[]
-  @@index([difficulty])
 }
 
 model Question {
@@ -318,4 +317,12 @@ model PushSubscription {
   p256dh    String   
   auth      String   
   createdAt DateTime @default(now())
+}
+
+model CarouselImage {
+  id          String   @id @default(uuid())
+  imageUrl    String   // Stores the Base64 image
+  aspectRatio String   @default("16:9") // "16:9" (Landscape) or "9:16" (Portrait)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
 }

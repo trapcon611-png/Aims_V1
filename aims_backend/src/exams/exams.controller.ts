@@ -12,7 +12,6 @@ export class ExamsController {
     return this.examsService.findAll();
   }
 
-  // --- STUDENT: Fetch My Past Attempts ---
   @Get('my-attempts')
   @UseGuards(AuthGuard('jwt'))
   getMyAttempts(@Request() req) {
@@ -21,7 +20,6 @@ export class ExamsController {
     return this.examsService.getMyAttempts(userId);
   }
 
-  // --- PARENT: Fetch Specific Student's Attempts ---
   @Get('student-attempts')
   @UseGuards(AuthGuard('jwt'))
   getStudentAttempts(@Query('studentId') studentId: string) {
@@ -29,7 +27,6 @@ export class ExamsController {
     return this.examsService.getMyAttempts(studentId);
   }
 
-  // --- ADMIN: Get Detailed Exam Analytics (Leaderboard) ---
   @Get(':id/analytics')
   @UseGuards(AuthGuard('jwt'))
   getExamAnalytics(@Param('id') id: string) {
@@ -42,17 +39,19 @@ export class ExamsController {
     return this.examsService.addQuestionsToExam(body.examId, body.questionIds);
   }
 
-  // --- NEW: QUESTION BANK API ROUTES ---
-  // Note: These must stay ABOVE the @Get(':id') route to prevent route collisions
+  // --- QUESTION BANK API ROUTES ---
 
   @Get('pending-topics')
-  // @UseGuards(AuthGuard('jwt'))
   getPendingTopics(@Query('examType') examType: string, @Query('subject') subject: string) {
       return this.examsService.getPendingTopics(examType, subject);
   }
 
+  @Get('available-topics')
+  getAvailableTopics(@Query('examType') examType: string) {
+      return this.examsService.getAvailableTopics(examType);
+  }
+
   @Get('pending-questions')
-  // @UseGuards(AuthGuard('jwt')) // Uncomment if your frontend sends the Bearer token for this call
   getPendingQuestions(
       @Query('examType') examType: string,
       @Query('subject') subject: string,
@@ -61,15 +60,30 @@ export class ExamsController {
       @Query('showOnlyWithSolutions') showOnlyWithSolutions: string,
       @Query('page') page: string,
   ) {
-      const take = 5; // EXACTLY 5 questions per page to keep the payload tiny
+      const take = 5; 
       const skip = (Number(page || 1) - 1) * take;
       return this.examsService.getPendingQuestions({ 
           examType, subject, topic, searchQuery, showOnlyWithSolutions, skip, take 
       });
   }
 
+  // ✨ NEW: FETCH APPROVED QUESTIONS (Paginated for Manual Editor)
+  @Get('approved-questions')
+  getApprovedQuestions(
+      @Query('examType') examType: string,
+      @Query('subject') subject: string,
+      @Query('topic') topic: string,
+      @Query('searchQuery') searchQuery: string,
+      @Query('page') page: string,
+  ) {
+      const take = 20; // 20 items per page for faster manual selection
+      const skip = (Number(page || 1) - 1) * take;
+      return this.examsService.getApprovedQuestions({ 
+          examType, subject, topic, searchQuery, skip, take 
+      });
+  }
+
   @Post('review-questions')
-  // @UseGuards(AuthGuard('jwt')) // Uncomment if your frontend sends the Bearer token for this call
   reviewQuestions(@Body() body: { questions: any[] }) {
     if (!body.questions || !Array.isArray(body.questions)) {
       throw new BadRequestException('A valid questions array is required');
@@ -78,7 +92,6 @@ export class ExamsController {
   }
 
   @Post('create-question')
-  // @UseGuards(AuthGuard('jwt')) 
   createQuestion(@Body() body: any) {
     if (!body || !body.questionText) {
       throw new BadRequestException('Invalid question payload');
@@ -87,9 +100,13 @@ export class ExamsController {
   }
 
   @Delete('pending-questions/:id')
-  // @UseGuards(AuthGuard('jwt'))
   deletePendingQuestion(@Param('id') id: string) {
       return this.examsService.deletePendingQuestion(id);
+  }
+
+  @Post('auto-build-db')
+  autoBuildFromDb(@Body() body: any) {
+      return this.examsService.autoBuildFromDb(body);
   }
 
   // --- GENERIC ROUTES (MUST BE AT THE BOTTOM) ---

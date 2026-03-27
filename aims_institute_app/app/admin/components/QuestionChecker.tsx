@@ -1,9 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Search, Loader2, Filter, CheckCircle, ChevronLeft, ChevronRight, Edit3, Eye, Lightbulb, ToggleLeft, ToggleRight, AlertCircle, Trash2, Image as ImageIcon, X, Plus } from 'lucide-react';
-import 'katex/dist/katex.min.css';
-import Latex from 'react-latex-next';
 
 // --- DYNAMIC CSV AVAILABILITY MAP ---
 const UPLOADED_CSVS: Record<string, string[]> = {
@@ -13,14 +11,114 @@ const UPLOADED_CSVS: Record<string, string[]> = {
     "NEET": ["Physics", "Chemistry", "Biology"] 
 };
 
-const LatexRenderer = ({ content }: { content: string }) => {
-    if (!content) return null;
-    return (
-        <div className="latex-container text-slate-800 font-medium">
-            <Latex>{content}</Latex>
-        </div>
-    );
+// ==========================================
+// ✨ THE ULTIMATE ROBUST LATEX RENDERER ✨
+// ==========================================
+declare global {
+  interface Window {
+    katex: any;
+    renderMathInElement: any;
+    scriptLoadingPromises: { [key: string]: Promise<void> | undefined } | undefined;
+  }
+}
+
+export const LatexRenderer = ({ content, className = "" }: { content: string, className?: string }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!window.scriptLoadingPromises) window.scriptLoadingPromises = {};
+
+    const loadScript = (src: string, id: string): Promise<void> => {
+      if (window.scriptLoadingPromises![src]) return window.scriptLoadingPromises![src]!;
+      if (document.getElementById(id)) return Promise.resolve();
+
+      const promise = new Promise<void>((resolve, reject) => {
+        const script = document.createElement("script");
+        script.id = id;
+        script.src = src;
+        script.crossOrigin = "anonymous";
+        script.onload = () => resolve();
+        script.onerror = () => reject();
+        document.head.appendChild(script);
+      });
+      window.scriptLoadingPromises![src] = promise;
+      return promise;
+    };
+
+    const initKatex = async () => {
+      if (!document.getElementById('katex-css')) {
+        const link = document.createElement("link");
+        link.id = 'katex-css';
+        link.href = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css";
+        link.rel = "stylesheet";
+        document.head.appendChild(link);
+      }
+
+      try {
+        await loadScript("https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js", "katex-js");
+        await loadScript("https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/mhchem.min.js", "katex-mhchem");
+        await loadScript("https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js", "katex-auto-render");
+        setIsReady(true);
+      } catch (e) {
+        console.error("Failed to load KaTeX", e);
+      }
+    };
+
+    if (window.katex && window.renderMathInElement) {
+      setIsReady(true);
+    } else {
+      initKatex();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isReady || !containerRef.current || !content) return;
+
+    // 1. Sanitize string and fix newlines
+    let safeContent = String(content).replace(/\\n/g, '\n');
+    
+    // 2. Smart Auto-Wrap: Detect if math commands exist but NO delimiters are present
+    const hasMath = /\\ce\{|\\sqrt|\\frac|\\mu|\\alpha|\\beta|\\gamma|\\theta|\\pi|\\sum|\\int/.test(safeContent);
+    const hasDelimiters = /\$|\\\[|\\\(/.test(safeContent);
+    
+    if (hasMath && !hasDelimiters) {
+        safeContent = `\\(${safeContent}\\)`;
+    }
+
+    // 3. Inject raw text
+    containerRef.current.innerHTML = safeContent;
+
+    // 4. Let the official auto-render safely parse the DOM
+    if (window.renderMathInElement) {
+        window.renderMathInElement(containerRef.current, {
+            delimiters: [
+                { left: '$$', right: '$$', display: true },
+                { left: '\\[', right: '\\]', display: true },
+                { left: '$', right: '$', display: false },
+                { left: '\\(', right: '\\)', display: false }
+            ],
+            throwOnError: false,
+            errorColor: '#cc0000',
+            strict: false,
+            trust: true
+        });
+    }
+  }, [content, isReady]);
+
+  if (!content) return null;
+
+  return (
+    <div 
+      ref={containerRef} 
+      className={`latex-container text-slate-800 font-medium overflow-x-auto custom-scrollbar ${className}`}
+    >
+      {!isReady && <span>{content}</span>}
+    </div>
+  );
 };
+
 
 // ==========================================
 // 1. CREATE NEW QUESTION CARD COMPONENT
@@ -477,7 +575,7 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
                     
                     {!isEditing && isQImageValid && (
                         <div className="mb-4 max-h-62.5 w-full border border-slate-200 rounded-xl bg-slate-50 overflow-auto custom-scrollbar flex justify-center p-3">
-                            <img src={qImageState} className="max-h-full w-auto object-contain" alt="Question Graphic"/>
+                            <img src={qImageState} className="max-w-full h-auto object-contain" alt="Question Graphic"/>
                         </div>
                     )}
 

@@ -6,7 +6,7 @@ import {
   ArrowLeft, Loader2, UserPlus, Activity, Cpu, ChevronRight, ChevronLeft, Menu, Home,
   FileBarChart, Clock, CheckCircle, Video, Plus, Bell, Trash2, Search, X,
   AlertTriangle, User, Cake, Copy, Lock, LayoutGrid, DollarSign, TrendingUp, TrendingDown,
-  AlertCircle, BarChart3
+  AlertCircle, BarChart3, Image as ImageIcon
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -17,6 +17,7 @@ import AccountsPanel from './components/AccountsPanel';
 import BatchesPanel from './components/BatchesPanel';
 import StudentDirectoryPanel from './components/StudentDirectoryPanel';
 import ContentPanel from './components/ContentPanel';
+import CarouselPanel from './components/CarouselPanel'; // ✨ NEW CAROUSEL PANEL IMPORTED
 
 const LOGO_PATH = '/logo.png'; 
 
@@ -80,6 +81,7 @@ const DashboardHome = ({
     dueInstallments: any[],
     pendingEnquiries: any[]
 }) => {
+    // ✨ ADDED CAROUSEL TO NAV ITEMS
     const navItems = [
         { id: 'users', label: 'Admissions', icon: UserPlus, color: 'text-blue-600', border: 'border-blue-200', bg: 'hover:bg-blue-50', count: metrics.admissions > 0 ? `+${metrics.admissions}` : null },
         { id: 'accounts', label: 'Finance', icon: Wallet, color: 'text-emerald-600', border: 'border-emerald-200', bg: 'hover:bg-emerald-50', count: metrics.fees > 0 ? `₹${(metrics.fees/1000).toFixed(1)}k` : null },
@@ -88,6 +90,7 @@ const DashboardHome = ({
         { id: 'directory', label: 'Directory', icon: Users, color: 'text-slate-600', border: 'border-slate-200', bg: 'hover:bg-slate-50', count: null },
         { id: 'academics', label: 'Academics', icon: GraduationCap, color: 'text-indigo-600', border: 'border-indigo-200', bg: 'hover:bg-indigo-50', count: null },
         { id: 'content', label: 'Content', icon: BookOpen, color: 'text-pink-600', border: 'border-pink-200', bg: 'hover:bg-pink-50', count: null },
+        { id: 'carousel', label: 'Website Carousel', icon: ImageIcon, color: 'text-teal-600', border: 'border-teal-200', bg: 'hover:bg-teal-50', count: null },
     ];
 
     return (
@@ -97,7 +100,8 @@ const DashboardHome = ({
                 <h1 className="text-3xl font-black text-slate-800 mb-1">Overview</h1>
                 <p className="text-slate-500 text-sm mb-8">Welcome back. Here is what's happening at the institute today.</p>
                 
-                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-4">
+                {/* ✨ UPDATED GRID TO md:grid-cols-4 lg:grid-cols-8 FOR 8 ITEMS */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-8 gap-4">
                     {navItems.map((item) => (
                         <button 
                             key={item.id} 
@@ -107,7 +111,7 @@ const DashboardHome = ({
                             <div className={`mb-3 ${item.color}`}>
                                 <item.icon size={28} strokeWidth={1.5} />
                             </div>
-                            <span className="font-bold text-slate-700 text-[10px] uppercase tracking-widest group-hover:text-slate-900">{item.label}</span>
+                            <span className="font-bold text-slate-700 text-[10px] uppercase tracking-widest text-center group-hover:text-slate-900">{item.label}</span>
                             
                             {/* Notification Badge */}
                             {item.count && (
@@ -380,7 +384,6 @@ export default function DirectorPage() {
           // 2. Action Items
           setPendingEnquiries(enqs.filter((e: any) => e.status === 'PENDING').slice(0, 10));
 
-          // 🚨 CRITICAL FIX: Smart Accounting for Pending Dues
           // 🚨 CRITICAL FIX: Smart Accounting for Pending Dues (Strict 3-Day Window)
           const pendingDues: any[] = [];
           sts.forEach((s: any) => {
@@ -489,7 +492,8 @@ export default function DirectorPage() {
                  {!isSidebarCollapsed && "Dashboard"}
              </button>
              
-             {['users', 'batches', 'accounts', 'enquiries', 'directory', 'academics', 'content'].map(tab => (
+             {/* ✨ ADDED 'carousel' TO THE SIDEBAR MAPPING ARRAY */}
+             {['users', 'batches', 'accounts', 'enquiries', 'directory', 'academics', 'content', 'carousel'].map(tab => (
                  <button key={tab} onClick={() => setActiveTab(tab)} 
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${activeTab === tab ? 'bg-[#c1121f] text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`}
                  >
@@ -500,6 +504,7 @@ export default function DirectorPage() {
                     {tab === 'directory' && <Users size={18}/>}
                     {tab === 'academics' && <GraduationCap size={18}/>}
                     {tab === 'content' && <BookOpen size={18}/>}
+                    {tab === 'carousel' && <ImageIcon size={18}/>}
                     {!isSidebarCollapsed && <span className="capitalize">{tab}</span>}
                  </button>
              ))}
@@ -526,6 +531,9 @@ export default function DirectorPage() {
            {activeTab === 'batches' && <BatchesPanel onRefresh={refreshData} />}
            {activeTab === 'directory' && <StudentDirectoryPanel students={students} batches={batches} onRefresh={refreshData} />}
            {activeTab === 'content' && <ContentPanel batches={batches} students={students} />}
+           
+           {/* ✨ NEW CAROUSEL PANEL INTEGRATION */}
+           {activeTab === 'carousel' && <CarouselPanel />}
 
            {/* --- INLINE TABS (ENQUIRIES) --- */}
            {activeTab === 'enquiries' && (

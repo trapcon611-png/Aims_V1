@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { User, Lock, ArrowRight, Shield, Settings, Image as ImageIcon, Sparkles } from 'lucide-react';
@@ -14,6 +14,32 @@ export default function RootLoginPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+
+  // ✨ CAROUSEL STATE
+  const [carouselImages, setCarouselImages] = useState<any[]>([]);
+  const [isLoadingCarousel, setIsLoadingCarousel] = useState(true);
+
+  // ✨ FETCH CAROUSEL IMAGES ON MOUNT
+  useEffect(() => {
+    const fetchCarousel = async () => {
+      try {
+        let API_URL = process.env.NEXT_PUBLIC_API_URL;
+        if (!API_URL || API_URL.includes('localhost')) {
+            API_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001';
+        }
+        const res = await fetch(`${API_URL}/carousel`);
+        if (res.ok) {
+            const data = await res.json();
+            setCarouselImages(data);
+        }
+      } catch (e) {
+        console.error("Failed to load carousel", e);
+      } finally {
+        setIsLoadingCarousel(false);
+      }
+    };
+    fetchCarousel();
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,9 +74,106 @@ export default function RootLoginPage() {
     blob: activeRole === 'student' ? 'bg-blue-400' : 'bg-purple-400'
   };
 
+  // =========================================
+  // ✨ FLAWLESS INFINITE MASONRY LOGIC ✨
+  // =========================================
+  
+  // 1. Fallback Images if Database is empty
+  const fallbackImages = [
+    "https://images.unsplash.com/photo-1600607686527-6fb886090705?w=800&auto=format&fit=crop&q=60",
+    "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=800&auto=format&fit=crop&q=60",
+    "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&auto=format&fit=crop&q=60",
+    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=60",
+    "https://images.unsplash.com/photo-1621600411688-4be93cd68504?w=800&auto=format&fit=crop&q=60",
+    "https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?w=800&auto=format&fit=crop&q=60",
+    "https://images.unsplash.com/photo-1707343843437-caacff5cfa74?w=800&auto=format&fit=crop&q=60",
+    "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800&auto=format&fit=crop&q=60",
+    "https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=800&auto=format&fit=crop&q=60"
+  ];
+
+  let displayImages = carouselImages.length > 0 
+    ? carouselImages.map(img => img.imageUrl) 
+    : fallbackImages;
+
+  // ✨ FIX: Guarantee we have enough images to span across all 3 columns evenly
+  // (Prevents blank columns if user uploads only 1 or 2 images)
+  while (displayImages.length > 0 && displayImages.length < 9) {
+      displayImages = [...displayImages, ...displayImages];
+  }
+
+  // 2. Split into 3 Columns
+  const rawCol1: string[] = [], rawCol2: string[] = [], rawCol3: string[] = [];
+  displayImages.forEach((img, index) => {
+      if (index % 3 === 0) rawCol1.push(img);
+      else if (index % 3 === 1) rawCol2.push(img);
+      else rawCol3.push(img);
+  });
+
+  // 3. ✨ FIX: MASSIVE INFLATION ARRAYS
+  // We duplicate the contents until there are at least 24 images per column.
+  // This guarantees the block is taller than ANY 4k monitor, preventing the track from ending early.
+  const inflateArray = (arr: string[], targetLength: number = 24) => {
+      if (arr.length === 0) return [];
+      let result = [...arr];
+      while (result.length < targetLength) {
+          result = [...result, ...arr];
+      }
+      return result;
+  };
+
+  const baseCol1 = inflateArray(rawCol1);
+  const baseCol2 = inflateArray(rawCol2);
+  const baseCol3 = inflateArray(rawCol3);
+
+  // A reusable Image Card component to keep the JSX clean
+  const GalleryCard = ({ img }: { img: string }) => (
+      <a className="relative block overflow-hidden group rounded-2xl bg-slate-200 shadow-xl border border-slate-200/50 cursor-pointer">
+          <img src={img} alt="Gallery" className="w-full h-auto block transition-transform duration-700 group-hover:scale-110" />
+          <div className="absolute inset-0 flex flex-col justify-end p-4 overlay-bg opacity-0 transition-opacity duration-300" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 100%)' }}>
+              <div className="overlay-content opacity-0 translate-y-4 transition-all duration-300">
+                  <ImageIcon className="text-white w-5 h-5" />
+              </div>
+          </div>
+      </a>
+  );
+
   return (
     <div className="min-h-screen bg-slate-50 flex text-slate-800 font-sans relative overflow-hidden">
       
+      {/* ✨ MATHEMATICALLY PERFECT ANIMATION STYLES ✨ */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        /* 0.75rem accounts for EXACTLY half of the 1.5rem (gap-6) between the two blocks.
+           This mathematical alignment guarantees a 100% invisible reset snap.
+        */
+        @keyframes scroll-up {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(calc(-50% - 0.75rem)); }
+        }
+        @keyframes scroll-down {
+            0% { transform: translateY(calc(-50% - 0.75rem)); }
+            100% { transform: translateY(0); }
+        }
+        .animate-scroll-up {
+            animation: scroll-up 120s linear infinite;
+            will-change: transform;
+        }
+        .animate-scroll-down {
+            animation: scroll-down 120s linear infinite;
+            will-change: transform;
+        }
+        .scroll-column:hover .animate-scroll-up,
+        .scroll-column:hover .animate-scroll-down {
+            animation-play-state: paused;
+        }
+        .group:hover .overlay-bg {
+            opacity: 1 !important;
+        }
+        .group:hover .overlay-content {
+            opacity: 1 !important;
+            transform: translateY(0) scale(1) !important;
+        }
+      `}} />
+
       {/* Background Ambient Blur Blobs */}
       <div className={`absolute top-[-10%] left-[-10%] w-[40vw] h-[40vw] rounded-full mix-blend-multiply filter blur-[100px] opacity-20 transition-colors duration-1000 animate-pulse ${theme.blob} pointer-events-none`}></div>
       <div className={`absolute bottom-[-10%] right-[40%] w-[30vw] h-[30vw] rounded-full mix-blend-multiply filter blur-[100px] opacity-20 transition-colors duration-1000 animate-pulse ${activeRole === 'student' ? 'bg-cyan-300' : 'bg-pink-300'} pointer-events-none`}></div>
@@ -61,7 +184,6 @@ export default function RootLoginPage() {
         {/* Central Logo Header */}
         <div className="w-full max-w-md mb-10 flex flex-col items-center">
           <div className="relative w-64 h-20 mb-4">
-            {/* MAKE SURE you have a file named mainpage.png in your public folder! */}
             <Image 
               src="/mainpage.png" 
               alt="AIMS Institute" 
@@ -199,36 +321,72 @@ export default function RootLoginPage() {
         </div>
       </div>
 
-      {/* Right Column - Sleek Dynamic Image Showcase Container */}
-      <div className="hidden lg:flex lg:w-1/2 p-6 pl-0 relative z-10">
-        <div className="w-full h-full bg-slate-900 rounded-[2.5rem] relative overflow-hidden shadow-2xl group">
-          
-          <img
-            src="https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=2070&auto=format&fit=crop"
-            alt="Institute Campus"
-            className="w-full h-full object-cover opacity-80 transition-transform duration-[10s] group-hover:scale-110 ease-out"
-          />
-          
-          {/* Sophisticated Gradient Overlays */}
-          <div className="absolute inset-0 bg-gradient-to-tr from-slate-950/90 via-slate-900/40 to-transparent pointer-events-none"></div>
-          <div className="absolute inset-0 bg-blue-900/10 mix-blend-overlay pointer-events-none"></div>
+      {/* ✨ FLAWLESS FREE FLOWING MASONRY SHOWCASE ✨ */}
+      <div className="hidden lg:block lg:w-1/2 relative z-10 min-h-screen overflow-hidden flex-1">
+        
+        {/* Masonry Container */}
+        <div 
+          className="absolute inset-0 py-4 px-4 lg:pr-12 lg:pl-4" 
+          style={{
+            // ✨ FIX: Strict pixel fading. No more massive dead zones on tall screens!
+            maskImage: 'linear-gradient(to bottom, transparent 0px, black 100px, black calc(100% - 100px), transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to bottom, transparent 0px, black 100px, black calc(100% - 100px), transparent 100%)'
+          }}
+        >
+          {isLoadingCarousel ? (
+             <div className="w-full h-full flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-slate-300 border-t-blue-500 rounded-full animate-spin"></div>
+             </div>
+          ) : (
+              <div className="grid grid-cols-3 gap-6 h-full overflow-hidden">
+                  
+                  {/* Column 1 (Scrolls UP - Slowed and Synced) */}
+                  <div className="scroll-column h-full min-w-0 relative">
+                     {/* The moving track */}
+                     <div className="animate-scroll-up flex flex-col gap-6">
+                        {/* Block 1 */}
+                        <div className="flex flex-col gap-6 shrink-0">
+                           {baseCol1.map((img, i) => <GalleryCard key={`c1-a-${i}`} img={img} />)}
+                        </div>
+                        {/* Block 2 (Identical Clone for seamless illusion) */}
+                        <div className="flex flex-col gap-6 shrink-0" aria-hidden="true">
+                           {baseCol1.map((img, i) => <GalleryCard key={`c1-b-${i}`} img={img} />)}
+                        </div>
+                     </div>
+                  </div>
 
-          {/* Top Badge */}
-          <div className="absolute top-8 left-8 bg-white/10 backdrop-blur-md px-4 py-2 rounded-full border border-white/20 flex items-center space-x-2">
-            <Sparkles className="h-4 w-4 text-amber-300" />
-            <p className="text-xs font-bold text-white tracking-wide uppercase">Campus Updates</p>
-          </div>
-          
-          {/* Glassmorphism Text Container */}
-          <div className="absolute bottom-8 left-8 right-8 bg-white/10 backdrop-blur-xl border border-white/20 p-8 rounded-3xl">
-            <h2 className="text-3xl font-bold text-white mb-2 leading-tight">
-              Shaping the future of education, <br/> one student at a time.
-            </h2>
-            <p className="text-white/70 font-medium max-w-lg">
-              Stay connected with the latest events, achievements, and notices directly from the director's desk.
-            </p>
-          </div>
+                  {/* Column 2 (Scrolls DOWN - Opposite Direction, Synced) */}
+                  <div className="scroll-column h-full min-w-0 relative">
+                     {/* The moving track */}
+                     <div className="animate-scroll-down flex flex-col gap-6">
+                        {/* Block 1 */}
+                        <div className="flex flex-col gap-6 shrink-0">
+                           {baseCol2.map((img, i) => <GalleryCard key={`c2-a-${i}`} img={img} />)}
+                        </div>
+                        {/* Block 2 (Identical Clone for seamless illusion) */}
+                        <div className="flex flex-col gap-6 shrink-0" aria-hidden="true">
+                           {baseCol2.map((img, i) => <GalleryCard key={`c2-b-${i}`} img={img} />)}
+                        </div>
+                     </div>
+                  </div>
 
+                  {/* Column 3 (Scrolls UP - Synced) */}
+                  <div className="scroll-column h-full min-w-0 relative">
+                     {/* The moving track */}
+                     <div className="animate-scroll-up flex flex-col gap-6">
+                        {/* Block 1 */}
+                        <div className="flex flex-col gap-6 shrink-0">
+                           {baseCol3.map((img, i) => <GalleryCard key={`c3-a-${i}`} img={img} />)}
+                        </div>
+                        {/* Block 2 (Identical Clone for seamless illusion) */}
+                        <div className="flex flex-col gap-6 shrink-0" aria-hidden="true">
+                           {baseCol3.map((img, i) => <GalleryCard key={`c3-b-${i}`} img={img} />)}
+                        </div>
+                     </div>
+                  </div>
+
+              </div>
+          )}
         </div>
       </div>
 
