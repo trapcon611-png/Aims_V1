@@ -327,7 +327,6 @@ export class ErpService {
     }
 
     // 2. Save DB Record
-    // Cast to 'any' to avoid schema mismatch if Prisma Client isn't regenerated yet
     const notice = await this.prisma.notice.create({ 
         data: { 
             title: data.title, 
@@ -371,7 +370,6 @@ export class ErpService {
 
   // --- STUDENT DIRECTORY (Hyper-Optimized Server-Side Pagination) ---
   async getStudentDirectory(page: number = 1, limit: number = 20, search: string = '', batchFilter: string = '') {
-    // 1. Build the dynamic search query
     const whereClause: any = {};
 
     if (search) {
@@ -379,7 +377,6 @@ export class ErpService {
             { fullName: { contains: search, mode: 'insensitive' } },
             { user: { username: { contains: search, mode: 'insensitive' } } },
             { parent: { user: { username: { contains: search, mode: 'insensitive' } } } },
-            // Only search mobile if it is NOT masked
             { parent: { AND: [ { mobile: { contains: search } }, { isMobileVisible: true } ] } }
         ];
     }
@@ -388,10 +385,8 @@ export class ErpService {
         whereClause.batch = { name: batchFilter };
     }
 
-    // 2. Fetch total count for pagination math
     const totalRecords = await this.prisma.studentProfile.count({ where: whereClause });
 
-    // 3. Fetch ONLY the requested page of students
     const students = await this.prisma.studentProfile.findMany({ 
         where: whereClause,
         include: { 
@@ -405,7 +400,6 @@ export class ErpService {
         take: limit
     });
 
-    // 4. Map the data exactly as the frontend expects it
     const formattedStudents = students.map((s: any) => {
       const paid = s.feesPaid ? s.feesPaid.reduce((sum: number, r: any) => sum + r.amount, 0) : 0;
       const effectiveTotal = Math.max(0, (s.feeAgreed || 0) - (s.waiveOff || 0));
@@ -441,7 +435,7 @@ export class ErpService {
   
   async getStudents() { return this.getStudentDirectory(); }
 
-  // 🚨 NEW: Delete Student Action
+  // 🚨 CRITICAL FIX: MANUAL CASCADE DELETE
   async deleteStudent(studentProfileId: string) {
       const student = await this.prisma.studentProfile.findUnique({ 
           where: { id: studentProfileId },
@@ -449,11 +443,40 @@ export class ErpService {
       });
       
       if (!student) throw new NotFoundException('Student not found');
+      
+      const userId = student.userId;
 
-      // Deleting the base User record will automatically Cascade Delete their 
-      // StudentProfile, Fees, Attendance, and Test Attempts (if Schema was updated!)
-      await this.prisma.user.delete({ where: { id: student.userId } });
-      return { success: true, message: 'Student and all related records deleted' };
+      // Wrap everything in a transaction to perform a Manual Cascade Delete
+      // This prevents the Foreign Key Constraint 500 error!
+      await this.prisma.$transaction(async (tx) => {
+          
+          // 1. Delete Answers associated with this student's exam attempts
+          const attempts = await tx.testAttempt.findMany({ where: { userId }, select: { id: true } });
+          const attemptIds = attempts.map(a => a.id);
+          if (attemptIds.length > 0) {
+              await tx.answer.deleteMany({ where: { attemptId: { in: attemptIds } } });
+          }
+
+          // 2. Delete the Test Attempts
+          await tx.testAttempt.deleteMany({ where: { userId } });
+
+          // 3. Delete Fee Records
+          await tx.feeRecord.deleteMany({ where: { studentId: studentProfileId } });
+
+          // 4. Delete Attendance
+          await tx.attendance.deleteMany({ where: { studentId: studentProfileId } });
+
+          // 5. Delete Push Subscriptions
+          await tx.pushSubscription.deleteMany({ where: { userId } });
+
+          // 6. Delete the Student Profile
+          await tx.studentProfile.delete({ where: { id: studentProfileId } });
+
+          // 7. Finally, Delete the root User account
+          await tx.user.delete({ where: { id: userId } });
+      });
+
+      return { success: true, message: 'Student and all related records successfully deleted' };
   }
 
   // 🚨 CRITICAL FIX: The Admission Route now throws ConflictExceptions!
@@ -476,10 +499,7 @@ export class ErpService {
     const schedule = input.installmentSchedule || [];
     
     if (schedule.length > 0) {
-        // Calculate the sum of all installments coming from the frontend
         const sumOfInstallments = schedule.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
-        
-        // If the math doesn't perfectly match, REJECT the admission!
         if (sumOfInstallments !== totalFee) {
             throw new BadRequestException(`Financial Tampering Detected: Installments sum (₹${sumOfInstallments}) does not match the Total Fee (₹${totalFee}).`);
         }
@@ -563,7 +583,6 @@ export class ErpService {
     let previousScore: number | null = null;
 
     return attempts.map((a, index) => { 
-        // If the score is lower than the previous guy, the rank drops to their actual position
         if (previousScore !== null && a.totalScore < previousScore) {
             currentRank = index + 1;
         }
