@@ -276,7 +276,8 @@ export class ExamsService {
       const dbSourceExam = examType === 'NEET' ? 'MHT-CET' : examType;
       
       const whereClause: any = {
-          difficulty: { in: ['easy', 'medium', 'hard'] } 
+          // Fixed: Use safe array matching instead of 'not mode insensitive'
+          difficulty: { in: ['easy', 'medium', 'hard'] }
       };
       
       if (examType && examType !== 'Any') {
@@ -310,6 +311,7 @@ export class ExamsService {
   async getPendingQuestions(filters: any) {
       const { examType, subject, topic, searchQuery, showOnlyWithSolutions, skip = 0, take = 5 } = filters;
       
+      // Fixed: Use direct string match
       const whereClause: any = { difficulty: 'pending' };
       
       if (examType) whereClause.examType = examType === 'NEET' ? 'MHT-CET' : examType;
@@ -337,14 +339,17 @@ export class ExamsService {
       return { questions, total };
   }
 
-  // ✨ NEW: FETCH APPROVED QUESTIONS (For Manual Editor)
   async getApprovedQuestions(filters: any) {
-      const { examType, subject, topic, searchQuery, skip = 0, take = 20 } = filters;
+      const { examType, subject, topic, searchQuery, difficulty, skip = 0, take = 20 } = filters;
       
-      // STRICTLY ONLY EASY, MEDIUM, HARD
-      const whereClause: any = { 
-          difficulty: { in: ['easy', 'medium', 'hard'] } 
-      };
+      const whereClause: any = {};
+      
+      // Fixed: Safe string/array matching instead of 'mode insensitive'
+      if (difficulty && difficulty !== '') {
+          whereClause.difficulty = difficulty.toLowerCase();
+      } else {
+          whereClause.difficulty = { in: ['easy', 'medium', 'hard'] };
+      }
       
       if (examType && examType !== 'Any') {
           whereClause.examType = examType === 'NEET' ? 'MHT-CET' : examType;
@@ -358,7 +363,7 @@ export class ExamsService {
               where: whereClause,
               skip: Number(skip),
               take: Number(take),
-              orderBy: { createdAt: 'desc' } // Newest approved questions first
+              orderBy: { createdAt: 'desc' }
           }),
           this.prisma.questionBank.count({ where: whereClause })
       ]);
@@ -424,8 +429,9 @@ export class ExamsService {
       for (const req of blueprint) {
           if (req.count <= 0) continue;
 
+          // Fixed: Safe string matching
           const whereClause: any = {
-              difficulty: req.difficulty,
+              difficulty: req.difficulty.toLowerCase(),
               subject: { equals: req.subject, mode: 'insensitive' }
           };
 

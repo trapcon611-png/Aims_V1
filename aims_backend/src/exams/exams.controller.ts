@@ -67,19 +67,20 @@ export class ExamsController {
       });
   }
 
-  // ✨ NEW: FETCH APPROVED QUESTIONS (Paginated for Manual Editor)
+  // ✨ CRITICAL FIX: Ensure 'difficulty' is extracted from the URL Query
   @Get('approved-questions')
   getApprovedQuestions(
       @Query('examType') examType: string,
       @Query('subject') subject: string,
       @Query('topic') topic: string,
       @Query('searchQuery') searchQuery: string,
+      @Query('difficulty') difficulty: string, // <-- We must catch the frontend filter here
       @Query('page') page: string,
   ) {
-      const take = 20; // 20 items per page for faster manual selection
+      const take = 20; 
       const skip = (Number(page || 1) - 1) * take;
       return this.examsService.getApprovedQuestions({ 
-          examType, subject, topic, searchQuery, skip, take 
+          examType, subject, topic, searchQuery, difficulty, skip, take 
       });
   }
 
