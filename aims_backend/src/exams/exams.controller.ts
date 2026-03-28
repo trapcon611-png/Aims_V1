@@ -67,14 +67,13 @@ export class ExamsController {
       });
   }
 
-  // ✨ CRITICAL FIX: Ensure 'difficulty' is extracted from the URL Query
   @Get('approved-questions')
   getApprovedQuestions(
       @Query('examType') examType: string,
       @Query('subject') subject: string,
       @Query('topic') topic: string,
       @Query('searchQuery') searchQuery: string,
-      @Query('difficulty') difficulty: string, // <-- We must catch the frontend filter here
+      @Query('difficulty') difficulty: string,
       @Query('page') page: string,
   ) {
       const take = 20; 

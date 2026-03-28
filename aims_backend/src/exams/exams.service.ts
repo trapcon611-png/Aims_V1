@@ -5,6 +5,32 @@ import { PrismaService } from '../prisma/prisma.service';
 export class ExamsService {
   constructor(private prisma: PrismaService) {}
 
+  // ==========================================
+  // ✨ HELPER: Robust Exam Type & CSV Mapper
+  // Ensures NEET always routes to MHT_CET and 
+  // matches exact CSV strings like 'JEE_Advanced'
+  // ==========================================
+  private getExamTypeFilter(frontendType: string): any {
+    if (!frontendType || frontendType === 'Any' || frontendType === 'undefined' || frontendType === 'null') {
+        return undefined;
+    }
+    
+    const lower = frontendType.toLowerCase();
+    
+    if (lower.includes('advanced')) {
+        return { in: ['JEE Advanced', 'JEE_advanced', 'JEE_Advanced', 'jee_advanced'] };
+    }
+    if (lower.includes('main')) {
+        return { in: ['JEE Main', 'JEE_main', 'JEE_Main', 'jee_main'] };
+    }
+    if (lower.includes('mht') || lower.includes('cet') || lower.includes('neet')) {
+        // Automatically route NEET to MHT_CET db pool
+        return { in: ['MHT-CET', 'MHT_CET', 'MHTCET', 'mht_cet'] };
+    }
+    
+    return frontendType;
+  }
+
   async findAll() {
     return this.prisma.exam.findMany({
       where: { isPublished: true },
@@ -213,6 +239,7 @@ export class ExamsService {
                 physics,
                 chemistry,
                 maths,
+                biology,
                 correctCount: correct,
                 wrongCount: wrong,
                 skippedCount: skipped
@@ -255,15 +282,23 @@ export class ExamsService {
       return { count: result.count };
   }
 
+  // --- QUESTION BANK DYNAMIC QUERIES ---
+
   async getPendingTopics(examType: string, subject: string) {
-      const dbSourceExam = examType === 'NEET' ? 'MHT-CET' : examType;
+      const typeFilter = this.getExamTypeFilter(examType);
+      
+      const whereClause: any = { 
+          difficulty: 'pending', 
+          subject: { equals: subject, mode: 'insensitive' } 
+      };
+
+      if (typeFilter) {
+          whereClause.examType = typeFilter;
+      }
+
       const topics = await this.prisma.questionBank.groupBy({
           by: ['topic'],
-          where: { 
-              difficulty: 'pending', 
-              examType: dbSourceExam, 
-              subject: { equals: subject, mode: 'insensitive' } 
-          },
+          where: whereClause,
           _count: { id: true }
       });
       
@@ -273,15 +308,13 @@ export class ExamsService {
   }
 
   async getAvailableTopics(examType: string) {
-      const dbSourceExam = examType === 'NEET' ? 'MHT-CET' : examType;
-      
       const whereClause: any = {
-          // Fixed: Use safe array matching instead of 'not mode insensitive'
-          difficulty: { in: ['easy', 'medium', 'hard'] }
+          difficulty: { not: 'pending' }
       };
       
-      if (examType && examType !== 'Any') {
-          whereClause.examType = dbSourceExam;
+      const typeFilter = this.getExamTypeFilter(examType);
+      if (typeFilter) {
+          whereClause.examType = typeFilter;
       }
 
       const topics = await this.prisma.questionBank.groupBy({
@@ -311,12 +344,15 @@ export class ExamsService {
   async getPendingQuestions(filters: any) {
       const { examType, subject, topic, searchQuery, showOnlyWithSolutions, skip = 0, take = 5 } = filters;
       
-      // Fixed: Use direct string match
       const whereClause: any = { difficulty: 'pending' };
       
-      if (examType) whereClause.examType = examType === 'NEET' ? 'MHT-CET' : examType;
+      const typeFilter = this.getExamTypeFilter(examType);
+      if (typeFilter) {
+          whereClause.examType = typeFilter;
+      }
+      
       if (subject) whereClause.subject = { equals: subject, mode: 'insensitive' };
-      if (topic) whereClause.topic = topic;
+      if (topic) whereClause.topic = { contains: topic, mode: 'insensitive' }; // Safe topic string match
       if (searchQuery) whereClause.questionText = { contains: searchQuery, mode: 'insensitive' };
       
       if (showOnlyWithSolutions === 'true') {
@@ -344,18 +380,19 @@ export class ExamsService {
       
       const whereClause: any = {};
       
-      // Fixed: Safe string/array matching instead of 'mode insensitive'
       if (difficulty && difficulty !== '') {
-          whereClause.difficulty = difficulty.toLowerCase();
+          whereClause.difficulty = { equals: difficulty, mode: 'insensitive' };
       } else {
-          whereClause.difficulty = { in: ['easy', 'medium', 'hard'] };
+          whereClause.difficulty = { not: 'pending' };
       }
       
-      if (examType && examType !== 'Any') {
-          whereClause.examType = examType === 'NEET' ? 'MHT-CET' : examType;
+      const typeFilter = this.getExamTypeFilter(examType);
+      if (typeFilter) {
+          whereClause.examType = typeFilter;
       }
+      
       if (subject) whereClause.subject = { equals: subject, mode: 'insensitive' };
-      if (topic) whereClause.topic = topic;
+      if (topic) whereClause.topic = { contains: topic, mode: 'insensitive' };
       if (searchQuery) whereClause.questionText = { contains: searchQuery, mode: 'insensitive' };
 
       const [questions, total] = await Promise.all([
@@ -383,7 +420,8 @@ export class ExamsService {
         correctOption: q.correctOption,
         difficulty: q.difficulty,
         topic: q.topic,                 
-        type: q.type
+        type: q.type,
+        examType: q.examType // Save exact exam type (e.g., MHT_CET) directly from payload
       }
     }));
     
@@ -429,14 +467,14 @@ export class ExamsService {
       for (const req of blueprint) {
           if (req.count <= 0) continue;
 
-          // Fixed: Safe string matching
           const whereClause: any = {
-              difficulty: req.difficulty.toLowerCase(),
+              difficulty: { equals: req.difficulty, mode: 'insensitive' },
               subject: { equals: req.subject, mode: 'insensitive' }
           };
 
-          if (sourceDb && sourceDb !== 'Any') {
-              whereClause.examType = sourceDb === 'NEET' ? 'MHT-CET' : sourceDb;
+          const typeFilter = this.getExamTypeFilter(sourceDb || 'Any');
+          if (typeFilter) {
+              whereClause.examType = typeFilter;
           }
 
           if (topics && topics.length > 0) {
