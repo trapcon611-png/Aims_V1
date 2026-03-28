@@ -3,12 +3,22 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Search, Loader2, Filter, CheckCircle, ChevronLeft, ChevronRight, Edit3, Eye, Lightbulb, ToggleLeft, ToggleRight, AlertCircle, Trash2, Image as ImageIcon, X, Plus } from 'lucide-react';
 
-// --- DYNAMIC CSV AVAILABILITY MAP ---
+// --- DYNAMIC CSV AVAILABILITY MAP (Fixed for NEET/MHT-CET overlap) ---
 const UPLOADED_CSVS: Record<string, string[]> = {
-    "JEE Advanced": ["Physics", "Chemistry"],
-    "JEE Main": ["Physics"],
-    "MHT-CET": ["Physics", "Chemistry", "Biology"],
-    "NEET": ["Physics", "Chemistry", "Biology"] 
+    "JEE Advanced": ["Physics", "Chemistry", "Mathematics"],
+    "JEE Main": ["Physics", "Chemistry", "Mathematics"],
+    "MHT-CET": ["Physics", "Chemistry", "Mathematics", "Biology"],
+    "NEET": ["Physics", "Chemistry", "Biology"] // NEET uses MHT_CET db, but UI strictly hides Maths
+};
+
+// --- DB STRING MAPPER ---
+// Translates pretty UI names into exact CSV folder/DB names
+const getDbExamType = (uiType: string) => {
+    if (uiType === 'JEE Advanced') return 'JEE_Advanced';
+    if (uiType === 'JEE Main') return 'JEE_Main';
+    if (uiType === 'MHT-CET') return 'MHT_CET';
+    if (uiType === 'NEET') return 'MHT_CET'; // Route NEET directly to MHT_CET pool
+    return uiType;
 };
 
 // ==========================================
@@ -76,10 +86,8 @@ export const LatexRenderer = ({ content, className = "" }: { content: string, cl
   useEffect(() => {
     if (!isReady || !containerRef.current || !content) return;
 
-    // 1. Sanitize string and fix newlines
     let safeContent = String(content).replace(/\\n/g, '\n');
     
-    // 2. Smart Auto-Wrap: Detect if math commands exist but NO delimiters are present
     const hasMath = /\\ce\{|\\sqrt|\\frac|\\mu|\\alpha|\\beta|\\gamma|\\theta|\\pi|\\sum|\\int/.test(safeContent);
     const hasDelimiters = /\$|\\\[|\\\(/.test(safeContent);
     
@@ -87,10 +95,8 @@ export const LatexRenderer = ({ content, className = "" }: { content: string, cl
         safeContent = `\\(${safeContent}\\)`;
     }
 
-    // 3. Inject raw text
     containerRef.current.innerHTML = safeContent;
 
-    // 4. Let the official auto-render safely parse the DOM
     if (window.renderMathInElement) {
         window.renderMathInElement(containerRef.current, {
             delimiters: [
@@ -193,7 +199,7 @@ const CreateQuestionCard = ({ defaultExamType, defaultSubject, defaultTopic, onC
         }
 
         const payload = {
-            examType,
+            examType: getDbExamType(examType), // Save exact CSV format
             subject,
             topic,
             type: qType,
@@ -371,7 +377,7 @@ const CreateQuestionCard = ({ defaultExamType, defaultSubject, defaultTopic, onC
 // ==========================================
 // 2. STANDARD QUESTION CARD COMPONENT
 // ==========================================
-const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApproving, isSavingDraft, showToast }: any) => {
+const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApproving, isSavingDraft, showToast, examTypeUiSelection }: any) => {
     const parsedTopic = q.topic?.trim() || 'Uncategorized';
     const [selectedTopic, setSelectedTopic] = useState(defaultTopic || parsedTopic);
     const [isEditing, setIsEditing] = useState(false);
@@ -464,7 +470,8 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
             options: qOptsState,
             correctOption: correctOption,
             topic: selectedTopic,
-            type: hasOptions ? 'MCQ' : 'NUMERICAL'
+            type: hasOptions ? 'MCQ' : 'NUMERICAL',
+            examType: q.examType || getDbExamType(examTypeUiSelection) // CRITICAL: preserve DB formatting
         };
         onSaveDraft(updatedQuestion, selectedTopic);
     };
@@ -483,7 +490,8 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
             options: qOptsState,
             correctOption: correctOption,
             topic: selectedTopic,
-            type: hasOptions ? 'MCQ' : 'NUMERICAL'
+            type: hasOptions ? 'MCQ' : 'NUMERICAL',
+            examType: q.examType || getDbExamType(examTypeUiSelection) // CRITICAL: preserve DB formatting
         };
 
         onApprove(updatedQuestion, difficulty, selectedTopic);
@@ -788,7 +796,6 @@ export default function QuestionChecker() {
     
     const [isCreatingNew, setIsCreatingNew] = useState(false);
 
-    // Initial constants
     const availableExams = Object.keys(UPLOADED_CSVS);
 
     const [examType, setExamType] = useState(availableExams[0]);
@@ -825,7 +832,8 @@ export default function QuestionChecker() {
                 API_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001';
             }
             try {
-                const res = await fetch(`${API_URL}/exams/pending-topics?examType=${encodeURIComponent(examType)}&subject=${encodeURIComponent(subject)}`);
+                const dbExamType = getDbExamType(examType);
+                const res = await fetch(`${API_URL}/exams/pending-topics?examType=${encodeURIComponent(dbExamType)}&subject=${encodeURIComponent(subject)}`);
                 if (res.ok) {
                     const data = await res.json();
                     setAvailableTopicsWithCount(data);
@@ -846,14 +854,16 @@ export default function QuestionChecker() {
                 API_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001';
             }
             
-            const params = new URLSearchParams({
-                examType,
-                subject,
-                topic,
-                searchQuery: query,
-                showOnlyWithSolutions: String(showOnlyWithSolutions),
-                page: String(currentPage)
-            });
+            // Fix: Build params cleanly without appending empty strings
+            const params = new URLSearchParams();
+            params.append('examType', getDbExamType(examType));
+            params.append('subject', subject);
+            
+            if (topic) params.append('topic', topic);
+            if (query) params.append('searchQuery', query);
+            
+            params.append('showOnlyWithSolutions', String(showOnlyWithSolutions));
+            params.append('page', String(currentPage));
 
             try {
                 const res = await fetch(`${API_URL}/exams/pending-questions?${params.toString()}`);
@@ -913,20 +923,6 @@ export default function QuestionChecker() {
     const handleSaveDraft = async (question: any, finalTopic: string) => {
         setSavingDraftId(question.id);
         try {
-            const payload = {
-                id: question.id,
-                questionText: question.questionText,
-                questionImage: question.questionImage,
-                solutionImage: question.solutionImage,
-                explanation: question.explanation,
-                options: question.options,
-                correctOption: question.correctOption,
-                difficulty: 'pending', 
-                topic: finalTopic,
-                type: question.type,
-                examType: examType 
-            };
-
             let API_URL = process.env.NEXT_PUBLIC_API_URL;
             if (!API_URL || API_URL.includes('localhost')) {
                 API_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001';
@@ -935,12 +931,12 @@ export default function QuestionChecker() {
             const res = await fetch(`${API_URL}/exams/review-questions`, { 
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ questions: [payload] }) 
+                body: JSON.stringify({ questions: [question] }) 
             });
 
             if (!res.ok) throw new Error("Failed to save to database");
 
-            setPendingQuestions(prev => prev.map(q => q.id === question.id ? { ...q, ...payload } : q));
+            setPendingQuestions(prev => prev.map(q => q.id === question.id ? { ...q, ...question } : q));
             showToast(`Draft successfully saved!`, "success");
             
         } catch (e) {
@@ -954,20 +950,6 @@ export default function QuestionChecker() {
     const handleApprove = async (question: any, difficulty: string, finalTopic: string) => {
         setApprovingId(question.id);
         try {
-            const payload = {
-                id: question.id,
-                questionText: question.questionText,
-                questionImage: question.questionImage,
-                solutionImage: question.solutionImage,
-                explanation: question.explanation,
-                options: question.options,
-                correctOption: question.correctOption,
-                difficulty: difficulty.toLowerCase(),
-                topic: finalTopic,
-                type: question.type,
-                examType: examType 
-            };
-
             let API_URL = process.env.NEXT_PUBLIC_API_URL;
             if (!API_URL || API_URL.includes('localhost')) {
                 API_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001';
@@ -976,7 +958,7 @@ export default function QuestionChecker() {
             const res = await fetch(`${API_URL}/exams/review-questions`, { 
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ questions: [payload] }) 
+                body: JSON.stringify({ questions: [question] }) 
             });
 
             if (!res.ok) throw new Error("Failed to save to database");
@@ -1150,6 +1132,7 @@ export default function QuestionChecker() {
                                         isApproving={approvingId === q.id}
                                         isSavingDraft={savingDraftId === q.id}
                                         showToast={showToast}
+                                        examTypeUiSelection={examType}
                                     />
                                 ))
                             )}
