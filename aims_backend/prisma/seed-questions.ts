@@ -39,17 +39,18 @@ async function processFile(filePath: string, examType: string, fallbackSubject: 
     return new Promise<void>((resolve, reject) => {
         const questionsToInsert: any[] = [];
         let skippedCount = 0;
-        let rowCount = 0; // ✨ FIX #4: We will count the rows
+        let rowCount = 0; 
         
         // Grab a base time so we can perfectly increment it
         const baseTime = Date.now(); 
 
         console.log(`\n📄 Processing: [${examType}] - (${path.basename(filePath)})`);
+        console.log(`   -> Forcing Subject to: ${fallbackSubject}`); // Log what we are forcing it to
 
         fs.createReadStream(filePath)
             .pipe(csv())
             .on('data', (row: any) => {
-                rowCount++; // Increment row counter
+                rowCount++; 
                 const qTextRaw = cleanStr(row.question_text);
                 if (!qTextRaw) return;
 
@@ -79,14 +80,18 @@ async function processFile(filePath: string, examType: string, fallbackSubject: 
                 let dbCorrectOpt = cleanStr(row.correct_answer)?.toLowerCase() || 'pending';
                 if (!['a', 'b', 'c', 'd'].includes(dbCorrectOpt)) dbCorrectOpt = 'pending';
                 
-                // ✨ FIX #4: Force the creation time to increase by 1000 milliseconds (1 second) per row!
+                // Force the creation time to increase by 1000 milliseconds (1 second) per row!
                 // This guarantees the database strictly respects the original CSV Top-to-Bottom order.
                 const sequentialTime = new Date(baseTime + (rowCount * 1000));
 
                 questionsToInsert.push({
                     createdById: teacherId,
                     examType: examType,
-                    subject: cleanStr(row.subject) ? row.subject.charAt(0).toUpperCase() + row.subject.slice(1).toLowerCase() : fallbackSubject,
+                    
+                    // 🚀 CRITICAL FIX: We completely ignore `row.subject` because your CSV data is dirty.
+                    // We FORCE the subject based purely on the file name!
+                    subject: fallbackSubject, 
+                    
                     topic: cleanStr(row.topic_name) || 'Uncategorized',
                     questionText: qTextRaw,
                     questionImage: mainImage,
@@ -98,7 +103,7 @@ async function processFile(filePath: string, examType: string, fallbackSubject: 
                     type: cleanStr(row.type) === 'numerical' ? 'NUMERICAL' : 'MCQ',
                     marks: 4,
                     negative: -1,
-                    createdAt: sequentialTime // <-- Inserting perfect order here
+                    createdAt: sequentialTime
                 });
             })
             .on('end', async () => {
