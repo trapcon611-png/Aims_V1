@@ -172,7 +172,12 @@ export default function ExamManager({ batches, onRefresh }: ExamManagerProps) {
       if (mode !== 'EDITOR') return;
 
       const fetchTopics = async () => {
-          let API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+          // ✨ SMART RESOLVER: Dynamically adapts to VPS IP Address
+          let API_URL = process.env.NEXT_PUBLIC_API_URL;
+          if (!API_URL || API_URL.includes('localhost')) {
+              API_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001';
+          }
+
           try {
               const token = localStorage.getItem('aims_token') || localStorage.getItem('admin_token') || '';
               const res = await fetch(`${API_URL}/exams/available-topics?examType=${encodeURIComponent(sourceDb)}`, {
@@ -194,7 +199,12 @@ export default function ExamManager({ batches, onRefresh }: ExamManagerProps) {
       const fetchQs = async () => {
           setEditorLoading(true);
           try {
-              let API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+              // ✨ SMART RESOLVER: Guarantees VPS fetch won't crash to localhost
+              let API_URL = process.env.NEXT_PUBLIC_API_URL;
+              if (!API_URL || API_URL.includes('localhost')) {
+                  API_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001';
+              }
+              
               const token = localStorage.getItem('aims_token') || localStorage.getItem('admin_token') || '';
               
               const params = new URLSearchParams();
@@ -207,11 +217,19 @@ export default function ExamManager({ batches, onRefresh }: ExamManagerProps) {
               const res = await fetch(`${API_URL}/exams/approved-questions?${params.toString()}`, {
                   headers: { 'Authorization': `Bearer ${token}` }
               });
-              const data = await res.json();
-              setApprovedQs(data.questions);
-              setEditorTotalPages(Math.ceil(data.total / 20) || 1);
+              
+              if (res.ok) {
+                  const data = await res.json();
+                  // Safety mapping to prevent map crashes
+                  setApprovedQs(Array.isArray(data.questions) ? data.questions : []);
+                  setEditorTotalPages(Math.ceil((data.total || 0) / 20) || 1);
+              } else {
+                  console.error("Backend Error: Failed to fetch approved questions");
+                  setApprovedQs([]);
+              }
           } catch (e) {
               console.error("Failed to load questions", e);
+              setApprovedQs([]);
           } finally {
               setEditorLoading(false);
           }
@@ -226,7 +244,12 @@ export default function ExamManager({ batches, onRefresh }: ExamManagerProps) {
       setAddedQIds(prev => new Set(prev).add(qId));
 
       try {
-          let API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+          // ✨ SMART RESOLVER
+          let API_URL = process.env.NEXT_PUBLIC_API_URL;
+          if (!API_URL || API_URL.includes('localhost')) {
+              API_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001';
+          }
+
           const token = localStorage.getItem('aims_token') || localStorage.getItem('admin_token') || '';
           
           const res = await fetch(`${API_URL}/exams/questions`, {
