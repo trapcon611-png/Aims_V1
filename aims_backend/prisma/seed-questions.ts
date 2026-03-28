@@ -6,7 +6,7 @@ const csv = require('csv-parser');
 const prisma = new PrismaClient();
 
 const cleanStr = (val: any) => {
-    if (!val || String(val).trim().toLowerCase() === 'nan') return null;
+    if (!val || String(val).trim().toLowerCase() === 'nan') return '';
     return String(val).trim();
 };
 
@@ -16,8 +16,6 @@ const formatImage = (val: any) => {
     if (str.startsWith('http') || str.startsWith('data:image')) return str;
     return `data:image/png;base64,${str}`;
 };
-
-const normalizeForCompare = (text: string) => text ? text.replace(/\s+/g, '').toLowerCase() : '';
 
 const getSubjectFromFileName = (filename: string) => {
     const lower = filename.toLowerCase();
@@ -35,38 +33,29 @@ const formatExamType = (folderName: string) => {
     return folderName;
 };
 
-async function processFile(filePath: string, examType: string, fallbackSubject: string, teacherId: string, approvedMap: Map<string, boolean>) {
+async function processFile(filePath: string, examType: string, fallbackSubject: string, teacherId: string) {
     return new Promise<void>((resolve, reject) => {
         const questionsToInsert: any[] = [];
-        let skippedCount = 0;
         let rowCount = 0; 
         
-        // Grab a base time so we can perfectly increment it
         const baseTime = Date.now(); 
 
-        console.log(`\n📄 Processing: [${examType}] - (${path.basename(filePath)})`);
-        console.log(`   -> Forcing Subject to: ${fallbackSubject}`); // Log what we are forcing it to
+        console.log(`📄 Processing: [${examType}] - ${path.basename(filePath)} (Forced Subject: ${fallbackSubject})`);
 
         fs.createReadStream(filePath)
             .pipe(csv())
             .on('data', (row: any) => {
                 rowCount++; 
-                const qTextRaw = cleanStr(row.question_text);
-                if (!qTextRaw) return;
-
-                const normalizedQText = normalizeForCompare(qTextRaw) + `_${examType}`;
-
-                // Skip if already approved
-                if (approvedMap.has(normalizedQText)) {
-                    skippedCount++;
-                    return;
-                }
+                
+                // We no longer skip rows. If it's empty, we give it a space so Prisma doesn't crash.
+                let qTextRaw = cleanStr(row.question_text);
+                if (!qTextRaw) qTextRaw = " "; 
 
                 const parsedOptions = {
-                    a: cleanStr(row.option_a) || '',
-                    b: cleanStr(row.option_b) || '',
-                    c: cleanStr(row.option_c) || '',
-                    d: cleanStr(row.option_d) || '',
+                    a: cleanStr(row.option_a),
+                    b: cleanStr(row.option_b),
+                    c: cleanStr(row.option_c),
+                    d: cleanStr(row.option_d),
                     img_a: formatImage(row.option_image_a),
                     img_b: formatImage(row.option_image_b),
                     img_c: formatImage(row.option_image_c),
@@ -77,21 +66,15 @@ async function processFile(filePath: string, examType: string, fallbackSubject: 
                 const solImage = formatImage(row.hint_image) || formatImage(row.solution_images);
                 const solText = cleanStr(row.solution);
                 
-                let dbCorrectOpt = cleanStr(row.correct_answer)?.toLowerCase() || 'pending';
+                let dbCorrectOpt = cleanStr(row.correct_answer).toLowerCase();
                 if (!['a', 'b', 'c', 'd'].includes(dbCorrectOpt)) dbCorrectOpt = 'pending';
                 
-                // Force the creation time to increase by 1000 milliseconds (1 second) per row!
-                // This guarantees the database strictly respects the original CSV Top-to-Bottom order.
                 const sequentialTime = new Date(baseTime + (rowCount * 1000));
 
                 questionsToInsert.push({
                     createdById: teacherId,
                     examType: examType,
-                    
-                    // 🚀 CRITICAL FIX: We completely ignore `row.subject` because your CSV data is dirty.
-                    // We FORCE the subject based purely on the file name!
-                    subject: fallbackSubject, 
-                    
+                    subject: fallbackSubject, // FORCED from filename, completely ignoring CSV data
                     topic: cleanStr(row.topic_name) || 'Uncategorized',
                     questionText: qTextRaw,
                     questionImage: mainImage,
@@ -113,12 +96,8 @@ async function processFile(filePath: string, examType: string, fallbackSubject: 
                         const chunk = questionsToInsert.slice(i, i + chunkSize);
                         await prisma.questionBank.createMany({ data: chunk, skipDuplicates: true });
                     }
-                    console.log(`✅ Successfully imported ${questionsToInsert.length} fresh questions in PERFECT ORDER!`);
+                    console.log(`✅ Imported ${questionsToInsert.length} rows.`);
                 }
-                if (skippedCount > 0) {
-                    console.log(`🛡️ Skipped ${skippedCount} approved questions.`);
-                }
-                
                 resolve();
             })
             .on('error', reject);
@@ -138,17 +117,12 @@ async function main() {
     let systemTeacher = await prisma.teacherProfile.findFirst({ where: { userId: systemUser.id } });
     if (!systemTeacher) systemTeacher = await prisma.teacherProfile.create({ data: { userId: systemUser.id, fullName: 'System Auto-Importer' } });
 
-    console.log('⏳ Securing previously approved questions...');
-    const approvedDbQuestions = await prisma.questionBank.findMany({ 
-        where: { difficulty: { not: 'pending' } },
-        select: { questionText: true, examType: true } 
+    // 🚀 NUCLEAR WIPE: Delete ALL pending questions regardless of exam type to clear out old ghost data
+    console.log('\n🧹 NUCLEAR WIPE: Deleting ALL pending questions from the database to clear old ghost data...');
+    const deleted = await prisma.questionBank.deleteMany({
+        where: { difficulty: 'pending' }
     });
-    
-    const approvedMap = new Map();
-    approvedDbQuestions.forEach(q => {
-        const safeExam = q.examType || 'General';
-        approvedMap.set(normalizeForCompare(q.questionText) + `_${safeExam}`, true);
-    });
+    console.log(`🗑️ Cleared ${deleted.count} old corrupted pending questions.`);
 
     const folders = fs.readdirSync(csvBaseDir);
     for (const folder of folders) {
@@ -156,22 +130,15 @@ async function main() {
         if (fs.statSync(folderPath).isDirectory()) {
             const examType = formatExamType(folder);
             
-            console.log(`\n🧹 Wiping old 'pending' questions for ${examType}...`);
-            const deleted = await prisma.questionBank.deleteMany({
-                where: { examType: examType, difficulty: 'pending' }
-            });
-            console.log(`🗑️ Cleared ${deleted.count} old pending questions.`);
-
             const files = fs.readdirSync(folderPath).filter(f => f.endsWith('.csv'));
-            
             for (const file of files) {
                 const subject = getSubjectFromFileName(file);
-                await processFile(path.join(folderPath, file), examType, subject, systemTeacher.id, approvedMap);
+                await processFile(path.join(folderPath, file), examType, subject, systemTeacher.id);
             }
         }
     }
 
-    console.log('\n🎉 ALL FOLDERS PROCESSED AND SYNCED SUCCESSFULLY!');
+    console.log('\n🎉 ALL CSVs PROCESSED AND SYNCED SUCCESSFULLY!');
     await prisma.$disconnect();
 }
 
