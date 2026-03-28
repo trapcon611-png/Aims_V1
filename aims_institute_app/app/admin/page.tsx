@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   BarChart2, ClipboardCheck, Users, Activity, LogOut, ChevronLeft, ChevronRight, 
   Clock, FileText, Printer, Trash2, X, BrainCircuit, Edit3, FileQuestion, Layers, 
-  GraduationCap, Search, AlertCircle, Loader2, ArrowLeft, FileSearch, CheckCircle, RefreshCw, Settings, Plus, CheckSquare, Square
+  GraduationCap, Search, AlertCircle, Loader2, ArrowLeft, FileSearch, CheckCircle, RefreshCw, Settings, Plus, CheckSquare, Square, Eye, EyeOff
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -16,67 +16,12 @@ import ExamManager from './components/ExamManager';
 import AttendancePanel from './components/AttendancePanel';
 import ResultsAnalytics from './components/ResultsAnalytics';
 
-const LOGO_PATH = '/logo.png';
+const LOGO_PATH = '/whitelogo.png';
 
 // --- SHARED TYPES ---
 interface Question { id: string; questionText: string; questionImage?: string | null; solutionImage?: string | null; subject: string; topic: string | null; difficulty: 'EASY' | 'MEDIUM' | 'HARD'; marks: number; options: any; correctOption: string; tags?: string[]; type?: string; }
 interface Exam { id: string; title: string; batchId?: string; batchName?: string; subject?: string; totalMarks: number; durationMin: number; scheduledAt: string; status: 'DRAFT' | 'PUBLISHED' | 'COMPLETED'; examType?: string; questions?: Question[]; tags?: string[]; }
 interface Batch { id: string; name: string; }
-
-// --- COMPREHENSIVE SYLLABUS (MATCHING CHECKER EXACTLY) ---
-const SYLLABUS = {
-    // PHYSICS
-    "Physics 11": [
-        "Physical World and Measurement", "Kinematics", "Laws of Motion", "Work, Energy, and Power", 
-        "Rotational Motion", "Gravitation", "Properties of Solids and Liquids", "Thermodynamics", 
-        "Kinetic Theory of Gases", "Oscillations and Waves", "Mechanics"
-    ],
-    "Physics 12": [
-        "Electrostatics", "Current Electricity", "Magnetic Effects of Current and Magnetism", 
-        "EMI and AC", "Optics", "Modern Physics", "Electronic Devices", "Communication Systems",
-        "Electrodynamics & Optics"
-    ],
-    // CHEMISTRY
-    "Chemistry 11": [
-        "Some Basic Concepts of Chemistry", "Structure of Atom", "Classification of Elements and Periodicity", 
-        "Chemical Bonding and Molecular Structure", "States of Matter", "Chemical Thermodynamics", 
-        "Equilibrium", "Redox Reactions", "Hydrogen", "s-Block Elements", "p-Block Elements", 
-        "Organic Chemistry: Basic Principles", "Hydrocarbons", "Environmental Chemistry"
-    ],
-    "Chemistry 12": [
-        "Solid State", "Solutions", "Electrochemistry", "Chemical Kinetics", "Surface Chemistry", 
-        "Metallurgy", "d- and f-Block Elements", "Coordination Compounds", 
-        "Haloalkanes and Haloarenes", "Alcohols, Phenols and Ethers", "Aldehydes, Ketones and Carboxylic Acids", 
-        "Amines", "Biomolecules", "Polymers", "Chemistry in Everyday Life"
-    ],
-    // MATHEMATICS
-    "Mathematics 11": [
-        "Sets, Relations, and Functions", "Trigonometry", "Complex Numbers and Quadratic Equations", 
-        "Linear Inequalities", "Permutations and Combinations", "Binomial Theorem", "Sequence and Series", 
-        "Straight Lines", "Conic Sections", "Introduction to 3D Geometry", "Limits and Derivatives", 
-        "Statistics and Probability"
-    ],
-    "Mathematics 12": [
-        "Inverse Trigonometric Functions", "Matrices and Determinants", "Continuity and Differentiability", 
-        "Applications of Derivatives", "Integrals", "Application of Integrals", "Differential Equations", 
-        "Vectors and 3D Geometry", "Probability"
-    ],
-    // BIOLOGY
-    "Biology 11": [
-        "Diversity in Living World & Ecology", "Biological classification", "Plant Kingdom", "Animal Kingdom",
-        "Morphology of Flowering Plants", "Anatomy of Flowering Plants", "Structural Organisation in Animals",
-        "Cell Structure & Function", "Cell theory", "organelles", "biomolecules", "mitosis", "meiosis", "Cell Cycle",
-        "Transport in Plants", "Mineral Nutrition", "Photosynthesis", "Respiration in Plants", "Plant Growth and Development", "Plant Physiology",
-        "Digestion and Absorption", "Breathing and Exchange of Gases", "Body Fluids and Circulation", "Excretory Products", "Locomotion and Movement", "Neural Control and Coordination", "Chemical Coordination", "Human Physiology"
-    ],
-    "Biology 12": [
-        "Reproduction", "Sexual reproduction in plants", "Human reproductive system", "Reproductive Health",
-        "Genetics & Evolution", "Mendelian inheritance", "DNA structure", "replication", "Evolution theories", "Molecular Basis of Inheritance",
-        "Human Health and Disease", "Strategies for Enhancement in Food Production", "Microbes in Human Welfare",
-        "Biotechnology: Principles and Processes", "Biotechnology and its Applications",
-        "Organisms and Populations", "Ecosystem", "Biodiversity and Conservation", "Environmental Issues"
-    ]
-};
 
 // --- HELPER FUNCTIONS ---
 const getQuestionType = (q: any) => { 
@@ -184,36 +129,84 @@ const AdminLogin = ({ onLogin }: { onLogin: (data: any) => void }) => {
     const [creds, setCreds] = useState({ username: '', password: '' }); 
     const [error, setError] = useState(''); 
     const [loading, setLoading] = useState(false); 
-    const handleLogin = async (e: React.FormEvent) => { e.preventDefault(); setLoading(true); setError(''); try { const data = await adminApi.login(creds.username, creds.password); if (data.user.role !== 'TEACHER' && data.user.role !== 'SUPER_ADMIN') throw new Error("Access Denied: Academic Staff Only"); onLogin(data); } catch (err: any) { setError(err.message || 'Login failed'); } finally { setLoading(false); } }; 
+    const [showPassword, setShowPassword] = useState(false);
+
+    const handleLogin = async (e: React.FormEvent) => { 
+        e.preventDefault(); 
+        setLoading(true); 
+        setError(''); 
+        try { 
+            const data = await adminApi.login(creds.username, creds.password); 
+            if (data.user.role !== 'TEACHER' && data.user.role !== 'SUPER_ADMIN') throw new Error("Access Denied: Academic Staff Only"); 
+            onLogin(data); 
+        } catch (err: any) { 
+            setError(err.message || 'Login failed'); 
+        } finally { 
+            setLoading(false); 
+        } 
+    }; 
+
     return ( 
         <div className="min-h-screen w-full flex flex-col justify-center items-center bg-slate-50 font-sans relative transition-colors duration-500 py-10 px-4"> 
             <AdminBackground /> 
-            <div className="relative z-10 w-full max-w-md"> 
-                <div className="bg-linear-to-br from-amber-600 to-orange-700 backdrop-blur-xl border border-orange-500/30 rounded-3xl shadow-2xl overflow-hidden ring-1 ring-white/20"> 
-                    <div className="p-10 text-center border-b border-orange-500/30"> 
-                        <div className="relative w-24 h-24 mx-auto mb-4 bg-white rounded-full shadow-[0_0_20px_rgba(255,255,255,0.2)] ring-4 ring-white/20"> 
-                            <div className="relative w-full h-full bg-white rounded-full overflow-hidden"> <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain" unoptimized /> </div> 
-                        </div> 
-                        <h3 className="text-2xl font-bold text-white tracking-tight">Academic Admin</h3> 
-                        <p className="text-orange-100 text-xs mt-2 font-mono uppercase tracking-widest flex items-center justify-center gap-2"> <BrainCircuit size={14} className="text-white"/> Staff Portal </p> 
+            <div className="relative z-10 w-full max-w-sm bg-gradient-to-br from-amber-600 to-orange-700 backdrop-blur-xl border border-orange-500/30 rounded-3xl shadow-2xl p-8"> 
+                <div className="text-center mb-6"> 
+                    <div className="relative h-14 w-48 mx-auto mb-4"> 
+                        <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain object-center" unoptimized /> 
                     </div> 
-                    <form onSubmit={handleLogin} className="p-10 space-y-6"> 
-                        {error && <div className="p-3 bg-red-100/90 border border-red-200 rounded-xl flex items-center gap-3 text-red-700 text-xs font-bold"><AlertCircle size={16} /> {error}</div>} 
-                        <div className="space-y-1.5"> 
-                            <label className="text-xs font-bold text-orange-100 uppercase tracking-wider ml-1">Staff ID</label> 
-                            <input type="text" className="w-full p-4 bg-orange-900/30 border border-orange-400/30 rounded-xl text-white text-lg focus:outline-none focus:ring-2 focus:ring-white/50 transition-all font-mono placeholder:text-orange-200/50" value={creds.username} onChange={(e) => setCreds({...creds, username: e.target.value})} placeholder="FACULTY-ID"/> 
-                        </div> 
-                        <div className="space-y-1.5"> 
-                            <label className="text-xs font-bold text-orange-100 uppercase tracking-wider ml-1">Password</label> 
-                            <input type="password" className="w-full p-4 bg-orange-900/30 border border-orange-400/30 rounded-xl text-white text-lg focus:outline-none focus:ring-2 focus:ring-white/50 transition-all font-mono placeholder:text-orange-200/50" value={creds.password} onChange={(e) => setCreds({...creds, password: e.target.value})} placeholder="••••••••"/> 
-                        </div> 
-                        <button disabled={loading} className="w-full bg-white hover:bg-orange-50 text-orange-700 py-4 rounded-xl font-bold text-lg uppercase tracking-wider shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2 mt-4 active:scale-95"> {loading ? <Loader2 className="animate-spin" size={18} /> : <>Access Dashboard <ChevronRight size={16} /></>} </button> 
-                        <div className="text-center pt-4 border-t border-orange-500/30"> 
-                            <Link href="/" className="text-xs text-orange-200 hover:text-white transition-colors flex items-center justify-center gap-1"><ArrowLeft size={12}/> Return to Portal Hub</Link> 
-                        </div> 
-                    </form> 
+                    <h3 className="text-2xl font-bold text-white tracking-tight">Academic Admin</h3> 
+                    <p className="text-orange-100 text-xs mt-1 font-mono uppercase tracking-widest flex items-center justify-center gap-2"> 
+                        <BrainCircuit size={12} className="animate-pulse"/> Staff Portal 
+                    </p> 
+                </div> 
+
+                <form onSubmit={handleLogin} className="space-y-4"> 
+                    <div className="space-y-1"> 
+                        <label className="text-xs font-bold text-orange-200 uppercase tracking-wider ml-1">Staff ID</label> 
+                        <input 
+                            type="text" 
+                            className="w-full p-4 bg-orange-950/30 border border-orange-500/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/50 transition-all font-mono placeholder:text-orange-300/50" 
+                            value={creds.username} 
+                            onChange={(e) => setCreds({...creds, username: e.target.value})} 
+                            placeholder="FACULTY-ID"
+                        /> 
+                    </div> 
+                    <div className="space-y-1"> 
+                        <label className="text-xs font-bold text-orange-200 uppercase tracking-wider ml-1">Password</label> 
+                        <div className="relative">
+                            <input 
+                                type={showPassword ? "text" : "password"} 
+                                className="w-full p-4 bg-orange-950/30 border border-orange-500/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/50 transition-all font-mono placeholder:text-orange-300/50 pr-12" 
+                                value={creds.password} 
+                                onChange={(e) => setCreds({...creds, password: e.target.value})} 
+                                placeholder="••••••••"
+                            /> 
+                            <button 
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-4 top-1/2 -translate-y-1/2 text-orange-200 hover:text-white transition-colors"
+                            >
+                                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
+                        </div>
+                    </div> 
+                    {error && <div className="p-3 bg-red-950/50 border border-red-500/50 rounded-lg flex items-center gap-2 text-red-200 text-xs font-bold"><AlertCircle size={14} /> {error}</div>} 
+                    
+                    <button 
+                        disabled={loading} 
+                        className="w-full bg-white hover:bg-slate-100 text-orange-900 py-4 rounded-xl font-bold uppercase tracking-wider shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2 mt-2"
+                    > 
+                        {loading ? <Loader2 className="animate-spin" size={18} /> : <>Access Dashboard <ChevronRight size={18} /></>} 
+                    </button> 
+                </form>
+
+                <div className="text-center mt-6 border-t border-orange-500/30 pt-4"> 
+                    <Link href="/" className="text-xs text-orange-200 hover:text-white transition-colors flex items-center justify-center gap-1">
+                        <ArrowLeft size={12}/> Return to Portal Hub
+                    </Link> 
                 </div> 
             </div> 
+            <p className="absolute bottom-4 text-[10px] text-slate-400 font-mono z-10">SECURED CONNECTION • AIMS DEVELOPERS</p>
         </div> 
     ); 
 };
@@ -425,28 +418,24 @@ const QuestionSelectorModal = ({
     // Derived Logic for Syllabus Filtering
     const examLevel = exam.tags && exam.tags.length > 0 ? exam.tags[0] : 'JEE_MAINS';
     
-    // STRICT TOPIC FILTERING based on Exam Level
+    // 🔥 DYNAMIC TOPIC EXTRACTION: Automatically reads whatever topics exist in your database
     const availableTopics = useMemo(() => {
-        let allowedSyllabusKeys = Object.keys(SYLLABUS);
+        const topics = new Set<string>();
         
-        if (examLevel === '11TH') {
-            allowedSyllabusKeys = allowedSyllabusKeys.filter(k => k.includes('11'));
-        } else if (examLevel === '12TH') {
-            allowedSyllabusKeys = allowedSyllabusKeys.filter(k => k.includes('12'));
-        }
-
-        if (searchSubject) {
-             const subjectKey = searchSubject === 'Math' ? 'Mathematics' : searchSubject;
-             allowedSyllabusKeys = allowedSyllabusKeys.filter(k => k.toLowerCase().includes(subjectKey.toLowerCase()));
-        }
-        
-        let topics: string[] = [];
-        allowedSyllabusKeys.forEach(k => {
-            // @ts-ignore
-            if (SYLLABUS[k]) topics = [...topics, ...SYLLABUS[k]];
+        repoQuestions.forEach(q => {
+            // If a subject is selected, only grab topics mapped to that subject
+            if (searchSubject) {
+                const subjectKey = searchSubject === 'Math' ? 'Mathematics' : searchSubject;
+                if ((q.subject || '').toLowerCase().includes(subjectKey.toLowerCase())) {
+                    if (q.topic && q.topic !== 'Uncategorized') topics.add(q.topic);
+                }
+            } else {
+                if (q.topic && q.topic !== 'Uncategorized') topics.add(q.topic);
+            }
         });
-        return [...new Set(topics)].sort();
-    }, [searchSubject, examLevel]);
+        
+        return Array.from(topics).sort();
+    }, [searchSubject, repoQuestions]);
 
     useEffect(() => {
         const fetchQuestions = async () => {
@@ -486,18 +475,8 @@ const QuestionSelectorModal = ({
             });
         }
 
-        if (examLevel !== 'JEE_MAINS') {
-            const allowedTopicSet = new Set(availableTopics.map(t => t.toLowerCase().replace(/[^a-z0-9]/g, '')));
-            
-            filtered = filtered.filter(q => {
-                if (!q.topic || q.topic === 'General') return true; 
-                const current = q.topic.toLowerCase().replace(/[^a-z0-9]/g, '');
-                return allowedTopicSet.has(current);
-            });
-        }
-
         return filtered;
-    }, [repoQuestions, searchQuery, searchSubject, searchDifficulty, searchTopic, examLevel, availableTopics]);
+    }, [repoQuestions, searchQuery, searchSubject, searchDifficulty, searchTopic]);
 
     useEffect(() => {
         setSearchPage(1);
@@ -869,10 +848,9 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
       <aside className={`bg-slate-900 border-r border-slate-800 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-64'} shadow-lg relative z-20`}>
         <div className={`p-6 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
           {!isSidebarCollapsed && (
-            <div className="flex items-center gap-2">
-              <div className="relative w-12 h-12 bg-white rounded-full shadow-md"><div className="relative w-full h-full bg-white rounded-full overflow-hidden"><Image src={LOGO_PATH} alt="Logo" fill className="object-contain " unoptimized /></div></div>
-              <div><h2 className="text-lg font-bold text-white leading-none">AIMS</h2><p className="text-[9px] text-amber-500 font-bold uppercase">Academic</p></div>
-            </div>
+             <div className="relative h-10 w-40">
+                <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain object-left" unoptimized/>
+             </div>
           )}
           <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400">{isSidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}</button>
         </div>

@@ -19,8 +19,6 @@ import StudentDirectoryPanel from './components/StudentDirectoryPanel';
 import ContentPanel from './components/ContentPanel';
 import CarouselPanel from './components/CarouselPanel'; // ✨ NEW CAROUSEL PANEL IMPORTED
 
-const LOGO_PATH = '/logo.png'; 
-
 // --- TYPES ---
 interface Batch { id: string; name: string; startYear: string; strength: number; fee: number; }
 interface StudentRecord {
@@ -271,7 +269,9 @@ const DirectorLogin = ({ onUnlock }: { onUnlock: () => void }) => {
       <DirectorBackground />
       <div className="relative z-10 w-full max-w-sm bg-gradient-to-br from-red-900 to-red-800 backdrop-blur-xl border border-red-700/50 rounded-3xl shadow-2xl p-8">
          <div className="text-center mb-6">
-             <div className="relative w-20 h-20 mx-auto mb-4 bg-white rounded-full p-2 shadow-lg"><Image src={LOGO_PATH} alt="Logo" fill className="object-contain" unoptimized/></div>
+             <div className="relative h-14 w-48 mx-auto mb-4">
+                <Image src="/whitelogo.png" alt="AIMS Logo" fill className="object-contain object-center" unoptimized/>
+             </div>
              <h3 className="text-2xl font-bold text-white">ERP Console</h3>
              <p className="text-red-200 text-xs mt-1 font-mono uppercase tracking-widest flex items-center justify-center gap-2"><Activity size={12} className="animate-pulse"/> System Online</p>
          </div>
@@ -479,9 +479,9 @@ export default function DirectorPage() {
        <aside className={`bg-slate-900 border-r border-slate-800 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-64'} shadow-lg relative z-20`}>
           <div className="p-6 flex items-center justify-between">
              {!isSidebarCollapsed && (
-                 <div className="flex items-center gap-2">
-                    <div className="relative w-8 h-8 bg-white rounded-full p-1"><Image src={LOGO_PATH} alt="Logo" fill className="object-contain" unoptimized/></div>
-                    <div><h2 className="text-white font-bold text-lg leading-none">AIMS</h2><p className="text-[10px] text-[#c1121f] font-bold uppercase">ERP</p></div>
+                 <div className="relative h-10 w-40">
+                    {/* ✨ RECTANGULAR WHITE LOGO APPLIED HERE */}
+                    <Image src="/whitelogo.png" alt="AIMS Logo" fill className="object-contain object-left" unoptimized/>
                  </div>
              )}
              <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="text-slate-400 hover:text-white"><Menu size={20}/></button>

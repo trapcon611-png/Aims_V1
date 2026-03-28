@@ -3,21 +3,20 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Search, Loader2, Filter, CheckCircle, ChevronLeft, ChevronRight, Edit3, Eye, Lightbulb, ToggleLeft, ToggleRight, AlertCircle, Trash2, Image as ImageIcon, X, Plus } from 'lucide-react';
 
-// --- DYNAMIC CSV AVAILABILITY MAP (Fixed for NEET/MHT-CET overlap) ---
+// --- DYNAMIC CSV AVAILABILITY MAP ---
 const UPLOADED_CSVS: Record<string, string[]> = {
     "JEE Advanced": ["Physics", "Chemistry", "Mathematics"],
     "JEE Main": ["Physics", "Chemistry", "Mathematics"],
     "MHT-CET": ["Physics", "Chemistry", "Mathematics", "Biology"],
-    "NEET": ["Physics", "Chemistry", "Biology"] // NEET uses MHT_CET db, but UI strictly hides Maths
+    "NEET": ["Physics", "Chemistry", "Biology"] 
 };
 
 // --- DB STRING MAPPER ---
-// Translates pretty UI names into exact CSV folder/DB names
 const getDbExamType = (uiType: string) => {
     if (uiType === 'JEE Advanced') return 'JEE_Advanced';
     if (uiType === 'JEE Main') return 'JEE_Main';
     if (uiType === 'MHT-CET') return 'MHT_CET';
-    if (uiType === 'NEET') return 'MHT_CET'; // Route NEET directly to MHT_CET pool
+    if (uiType === 'NEET') return 'MHT_CET'; 
     return uiType;
 };
 
@@ -199,7 +198,7 @@ const CreateQuestionCard = ({ defaultExamType, defaultSubject, defaultTopic, onC
         }
 
         const payload = {
-            examType: getDbExamType(examType), // Save exact CSV format
+            examType: getDbExamType(examType),
             subject,
             topic,
             type: qType,
@@ -234,7 +233,7 @@ const CreateQuestionCard = ({ defaultExamType, defaultSubject, defaultTopic, onC
                     <div className="flex items-center gap-2 bg-rose-100/50 px-3 py-1.5 rounded-lg border border-rose-200">
                         <span className="text-[10px] font-bold text-rose-600 uppercase">Type:</span>
                         <select value={qType} onChange={e => { setQType(e.target.value); setCorrectOption('pending'); }} className="bg-transparent text-xs font-bold text-rose-900 outline-none cursor-pointer">
-                            <option value="MCQ">MCQ</option>
+                            <option value="MCQ">MCQ (4 Options)</option>
                             <option value="NUMERICAL">Numerical</option>
                         </select>
                     </div>
@@ -401,17 +400,22 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
         };
     }, [q.options]);
 
+    // Initial deduction of question type
     const hasTextOptions = !!(qOpts.a || qOpts.b || qOpts.c || qOpts.d);
     const hasImageOptions = !!(qOpts.img_a || qOpts.img_b || qOpts.img_c || qOpts.img_d);
-    const hasOptions = hasTextOptions || hasImageOptions || q.type === 'MCQ';
+    const hasAnyOptions = hasTextOptions || hasImageOptions || q.type === 'MCQ';
+    
+    const initialType = q.type === 'NUMERICAL' || (!hasAnyOptions && q.correctOption && q.correctOption !== 'pending' && !['a','b','c','d'].includes(String(q.correctOption).toLowerCase())) ? 'NUMERICAL' : 'MCQ';
+    
+    const [qTypeState, setQTypeState] = useState(initialType);
 
     const initialCorrect = useMemo(() => {
         if (!q.correctOption || q.correctOption === 'pending') return 'pending';
-        if (!hasOptions) return q.correctOption; 
+        if (initialType === 'NUMERICAL') return q.correctOption; 
 
         let val = String(q.correctOption).toLowerCase().trim();
         return ['a', 'b', 'c', 'd'].includes(val) ? val : 'pending';
-    }, [q.correctOption, hasOptions]);
+    }, [q.correctOption, initialType]);
 
     const [correctOption, setCorrectOption] = useState(initialCorrect);
     const [qText, setQText] = useState(q.questionText || '');
@@ -467,18 +471,18 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
             questionImage: qImageState,
             solutionImage: solImageState,
             explanation: solTextState,
-            options: qOptsState,
+            options: qTypeState === 'MCQ' ? qOptsState : {},
             correctOption: correctOption,
             topic: selectedTopic,
-            type: hasOptions ? 'MCQ' : 'NUMERICAL',
-            examType: q.examType || getDbExamType(examTypeUiSelection) // CRITICAL: preserve DB formatting
+            type: qTypeState,
+            examType: q.examType || getDbExamType(examTypeUiSelection)
         };
         onSaveDraft(updatedQuestion, selectedTopic);
     };
 
     const handleApproveClick = (difficulty: string) => {
         if (correctOption === 'pending' || String(correctOption).trim() === '') {
-            return showToast(hasOptions ? 'Please select correct Option!' : 'Please enter numerical answer!', 'error');
+            return showToast(qTypeState === 'MCQ' ? 'Please select correct Option!' : 'Please enter numerical answer!', 'error');
         }
         
         const updatedQuestion = {
@@ -487,11 +491,11 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
             questionImage: qImageState,
             solutionImage: solImageState,
             explanation: solTextState,
-            options: qOptsState,
+            options: qTypeState === 'MCQ' ? qOptsState : {},
             correctOption: correctOption,
             topic: selectedTopic,
-            type: hasOptions ? 'MCQ' : 'NUMERICAL',
-            examType: q.examType || getDbExamType(examTypeUiSelection) // CRITICAL: preserve DB formatting
+            type: qTypeState,
+            examType: q.examType || getDbExamType(examTypeUiSelection) 
         };
 
         onApprove(updatedQuestion, difficulty, selectedTopic);
@@ -504,8 +508,8 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
                     <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-bold uppercase text-slate-600">
                         {q.subject || 'Physics'}
                     </span>
-                    <span className={`px-2 py-0.5 border rounded text-[10px] font-bold uppercase ${hasOptions ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>
-                        {hasOptions ? 'MCQ' : 'Numerical'}
+                    <span className={`px-2 py-0.5 border rounded text-[10px] font-bold uppercase ${qTypeState === 'MCQ' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>
+                        {qTypeState === 'MCQ' ? 'MCQ' : 'Numerical'}
                     </span>
                     <span className="px-2 py-0.5 bg-blue-50 border border-blue-200 rounded text-[10px] font-bold uppercase text-blue-700">
                         DB: {q.examType || 'General'}
@@ -587,7 +591,28 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
                         </div>
                     )}
 
-                    {hasOptions ? (
+                    {isEditing && (
+                        <div className="mb-4 flex flex-wrap items-center gap-3 bg-blue-50/50 p-3 rounded-xl border border-blue-100">
+                            <span className="text-xs font-bold text-blue-700 uppercase">Set Question Type:</span>
+                            <select 
+                                value={qTypeState} 
+                                onChange={e => {
+                                    setQTypeState(e.target.value);
+                                    if (e.target.value === 'NUMERICAL') {
+                                        setCorrectOption('');
+                                    } else {
+                                        setCorrectOption('pending');
+                                    }
+                                }}
+                                className="bg-white border border-blue-200 rounded-lg px-3 py-1.5 text-xs font-bold text-blue-900 outline-none focus:border-blue-500 shadow-sm cursor-pointer"
+                            >
+                                <option value="MCQ">Multiple Choice (4 Options)</option>
+                                <option value="NUMERICAL">Numerical Answer</option>
+                            </select>
+                        </div>
+                    )}
+
+                    {qTypeState === 'MCQ' ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                             {optKeys.map((key) => {
                                 const isCorrect = correctOption === key;
@@ -823,7 +848,6 @@ export default function QuestionChecker() {
         setTimeout(() => setToast(null), 4000);
     };
 
-    // 1. Fetch Dynamic Topics Server-Side
     useEffect(() => {
         if (!examType || !subject) return;
         const fetchTopics = async () => {
@@ -843,7 +867,6 @@ export default function QuestionChecker() {
         fetchTopics();
     }, [examType, subject]);
 
-    // 2. Fetch exactly 5 Questions Server-Side
     useEffect(() => {
         if (!examType || !subject) return;
         
@@ -854,7 +877,6 @@ export default function QuestionChecker() {
                 API_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001';
             }
             
-            // Fix: Build params cleanly without appending empty strings
             const params = new URLSearchParams();
             params.append('examType', getDbExamType(examType));
             params.append('subject', subject);
