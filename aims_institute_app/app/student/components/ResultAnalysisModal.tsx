@@ -9,7 +9,7 @@ import { LatexRenderer, ContentRenderer } from './LatexRenderer';
 interface QuestionMetric {
     id: number;
     status: 'CORRECT' | 'WRONG' | 'SKIPPED';
-    timeSpent: number; // seconds
+    timeSpent: number;
     subject: string;
     questionText: string;
     questionImage?: string;
@@ -22,7 +22,6 @@ interface QuestionMetric {
     solutionImage?: string;
 }
 
-// --- HELPER FUNCTIONS FOR OPTIONS ---
 const getQuestionType = (q: any) => { 
     const qType = q.type || q.question_type || ''; 
     if (qType.toUpperCase() === 'INTEGER' || qType.toUpperCase() === 'NUMERICAL') return 'INTEGER'; 
@@ -80,21 +79,19 @@ const normalizeOptions = (q: any) => {
     });
 };
 
-// --- VISUAL OPTIONS COMPONENT ---
 const OptionsDisplay = ({ q, selectedOption }: { q: any, selectedOption?: string }) => {
     const isMCQ = getQuestionType(q) === 'MCQ';
     const normOptions = normalizeOptions(q);
 
     if (!isMCQ || normOptions.length === 0) return null;
 
-    // Splits comma-separated answers for accurate multi-correct rendering
     const correctVals = String(q.correctOption || q.correct_answer || '').toLowerCase().split(',');
     const selectedVals = String(selectedOption || '').toLowerCase().split(',');
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
             {normOptions.map((opt, idx) => {
-                const label = String.fromCharCode(97 + idx); // a, b, c, d
+                const label = String.fromCharCode(97 + idx); 
                 
                 const isCorrect = correctVals.includes(label) || correctVals.includes(String(idx + 1));
                 const isSelected = selectedVals.includes(label) || selectedVals.includes(String(idx + 1));
@@ -140,15 +137,20 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
       return questions.filter(q => q.subject === activeSubject);
   }, [questions, activeSubject]);
 
+  // ✨ FIX: Safe stat calculation prevents infinite loading loop
   const stats = useMemo(() => {
       const subset = filteredQuestions;
-      if (subset.length === 0) return null;
+      
+      if (!subset || subset.length === 0) {
+          return { totalTime: 0, avgTime: 0, slowestQ: null, fastestCorrect: null, accuracy: 0 };
+      }
 
-      const totalTime = subset.reduce((acc, q) => acc + q.timeSpent, 0);
-      const slowest = subset.reduce((prev, curr) => (prev.timeSpent > curr.timeSpent) ? prev : curr);
+      const totalTime = subset.reduce((acc, q) => acc + (q.timeSpent || 0), 0);
+      const slowest = subset.reduce((prev, curr) => ((prev.timeSpent || 0) > (curr.timeSpent || 0)) ? prev : curr, subset[0]);
+      
       const correctOnes = subset.filter(q => q.status === 'CORRECT');
       const fastest = correctOnes.length > 0 
-          ? correctOnes.reduce((prev, curr) => (prev.timeSpent < curr.timeSpent) ? prev : curr)
+          ? correctOnes.reduce((prev, curr) => ((prev.timeSpent || 0) < (curr.timeSpent || 0)) ? prev : curr, correctOnes[0])
           : null;
 
       return {
@@ -161,12 +163,13 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
   }, [filteredQuestions]);
 
   const formatTime = (sec: number) => {
+      if (!sec) return '0m 0s';
       const m = Math.floor(sec / 60);
       const s = sec % 60;
       return `${m}m ${s}s`;
   };
 
-  if (!stats) {
+  if (!result || !result.analytics) {
       return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
               <div className="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center">
@@ -236,8 +239,10 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
                             <Clock size={18}/>
                             <span className="text-xs font-bold uppercase">Longest Time</span>
                         </div>
-                        <div className="text-2xl font-black text-slate-800">{formatTime(stats.slowestQ.timeSpent)}</div>
-                        <p className="text-xs text-slate-500 mt-1">Spent on <span className="font-bold">Q.{stats.slowestQ.id}</span></p>
+                        <div className="text-2xl font-black text-slate-800">
+                            {stats.slowestQ ? formatTime(stats.slowestQ.timeSpent) : 'N/A'}
+                        </div>
+                        {stats.slowestQ && <p className="text-xs text-slate-500 mt-1">Spent on <span className="font-bold">Q.{stats.slowestQ.id}</span></p>}
                     </div>
 
                     {/* Fastest Correct */}
@@ -275,6 +280,11 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
+                        {filteredQuestions.length === 0 && (
+                            <tr>
+                                <td colSpan={4} className="p-8 text-center text-slate-400 italic">No questions found for this exam attempt.</td>
+                            </tr>
+                        )}
                         {filteredQuestions.map((q) => {
                             const validQImage = typeof q.questionImage === 'string' && q.questionImage.length > 5 && q.questionImage !== 'null' ? q.questionImage : null;
 

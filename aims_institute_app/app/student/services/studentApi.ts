@@ -1,11 +1,7 @@
 // --- SMART API RESOLVER ---
 const getApiUrl = () => {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-      return process.env.NEXT_PUBLIC_API_URL;
-  }
-  if (typeof window !== 'undefined') {
-      return `${window.location.protocol}//${window.location.hostname}:3001`;
-  }
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  if (typeof window !== 'undefined') return `${window.location.protocol}//${window.location.hostname}:3001`;
   return 'http://localhost:3001';
 };
 
@@ -49,13 +45,11 @@ export const studentApi = {
     }
     const data = await res.json();
     
-    // 🚨 STRICT ROLE GUARD
     if (data.user && data.user.role !== 'STUDENT') {
         throw new Error('Invalid Credentials: Not a student account.');
     }
     
     data.token = data.access_token || data.token || data.accessToken;
-    
     return data;
   },
 
@@ -69,10 +63,10 @@ export const studentApi = {
     } catch (e) { return null; }
   },
 
-  // --- EXAM LIST ---
+  // ✨ FIX: Routed to official Backend '/exams' controller
   async getExams(token: string) {
     try {
-      const res = await fetchWithAuth(`${API_URL}/student/exams`, {
+      const res = await fetchWithAuth(`${API_URL}/exams`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) return [];
@@ -81,10 +75,10 @@ export const studentApi = {
     } catch (e) { return []; }
   },
 
-  // --- RESULT ANALYTICS (CRITICAL UPDATE FOR SOLUTIONS) ---
+  // ✨ FIX: Routed to official Backend '/exams/my-attempts' controller
   async getResults(token: string) {
     try {
-      const res = await fetchWithAuth(`${API_URL}/student/results`, {
+      const res = await fetchWithAuth(`${API_URL}/exams/my-attempts`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -94,7 +88,7 @@ export const studentApi = {
       if (!Array.isArray(attempts)) return [];
       
       return attempts.map((attempt: any) => {
-        // 1. Get the master list of questions
+        // Correct extraction using answers mapped to their nested question objects
         const questionsList = attempt.answers?.map((a: any) => a.question).filter(Boolean) || [];
         
         const answersMap = new Map();
@@ -138,7 +132,6 @@ export const studentApi = {
                 correctOption: question.correctOption, 
                 marks: marksAwarded,
                 
-                // ✨ GRAB EXPLANATION EITHER FROM QUESTION OR RELATION
                 explanation: question.questionBank?.explanation || question.explanation || question.solution, 
                 solutionImage: question.solutionImage
             };
@@ -148,7 +141,7 @@ export const studentApi = {
             id: attempt.id,
             examId: attempt.examId, 
             examTitle: attempt.exam?.title || 'Unknown Exam',
-            examType: attempt.exam?.examType || 'JEE Main',
+            examType: attempt.exam?.tags?.[0] || attempt.exam?.examType || 'JEE Main',
             score: attempt.totalScore || 0,
             totalMarks: attempt.exam?.totalMarks || 0,
             rank: attempt.rank || '-', 
@@ -164,7 +157,7 @@ export const studentApi = {
     }
   },
   
-  // --- STUDY MATERIAL ---
+  // --- STUDY MATERIAL & NOTICES ---
   async getResources(token: string) {
      try {
       const res = await fetchWithAuth(`${API_URL}/student/resources`, {
@@ -175,7 +168,6 @@ export const studentApi = {
     } catch (e) { return []; } 
   },
 
-  // --- NOTICES ---
   async getNotices(token: string) {
     try {
       const res = await fetchWithAuth(`${API_URL}/student/notices`, {
@@ -187,8 +179,9 @@ export const studentApi = {
   },
 
   // --- EXAM TAKING ENGINE ---
+  // ✨ FIX: Routed to official Backend '/exams/:id/attempt'
   async startAttempt(examId: string, token: string) {
-    const res = await fetchWithAuth(`${API_URL}/student/exam/${examId}/attempt`, {
+    const res = await fetchWithAuth(`${API_URL}/exams/${examId}/attempt`, {
         method: 'POST',
         headers: { 
             'Authorization': `Bearer ${token}`,
@@ -205,8 +198,9 @@ export const studentApi = {
     return await res.json();
   },
 
-  async submitExam(examId: string, answers: any[], token: string) {
-      const res = await fetchWithAuth(`${API_URL}/student/exam/${examId}/submit`, {
+  // ✨ FIX: Routed to official Backend '/exams/:id/submit'
+  async submitAttempt(examId: string, answers: any[], token: string) {
+      const res = await fetchWithAuth(`${API_URL}/exams/${examId}/submit`, {
           method: 'POST',
           headers: { 
               'Authorization': `Bearer ${token}`,
