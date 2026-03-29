@@ -18,6 +18,7 @@ const fetchWithAuth = async (url: string, options: any = {}) => {
       localStorage.removeItem('parent_token');
       localStorage.removeItem('admin_token');
       localStorage.removeItem('director_session');
+      localStorage.removeItem('aims_token');
       
       alert('Session Expired: Your security token is invalid or has expired. Please log in again.');
       window.location.reload(); // ✅ THE FIX: Reloads the current page instead of kicking to root
@@ -85,10 +86,11 @@ export const adminApi = {
   async getInternalQuestions() {
     const token = this.getToken();
     try {
-        const res = await fetchWithAuth(`${API_URL}/erp/questions`, { headers: { 'Authorization': `Bearer ${token}` } });
+        // Pulls from the updated backend repository endpoint to ensure formatting is consistent
+        const res = await fetchWithAuth(`${API_URL}/exams/approved-questions`, { headers: { 'Authorization': `Bearer ${token}` } });
         if (!res.ok) return [];
         const data = await res.json();
-        return Array.isArray(data) ? data : (data.data || []); 
+        return data.questions || (Array.isArray(data) ? data : (data.data || [])); 
     } catch (e) { return []; }
   },
 
@@ -162,7 +164,7 @@ export const adminApi = {
   // --- EXAM MANAGEMENT ---
   async createExam(data: any) {
     const token = this.getToken();
-    const res = await fetchWithAuth(`${API_URL}/erp/exams`, {
+    const res = await fetchWithAuth(`${API_URL}/admin/exams`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(data)
@@ -172,24 +174,44 @@ export const adminApi = {
   },
   
   async importQuestionsToExam(examId: string, questions: any[]) {
-     const token = this.getToken();
-     const res = await fetchWithAuth(`${API_URL}/erp/exams/${examId}/import`, {
-       method: 'POST',
-       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-       body: JSON.stringify({ questions })
-     });
-     
-     if (!res.ok) {
-         const err = await res.json().catch(() => ({}));
-         throw new Error(err.message || 'Failed to save imported questions to DB');
-     }
-     return await res.json();
+      const token = this.getToken();
+      
+      // Ensures all custom types and topics pass safely to the Next.js API Route
+      const payload = {
+          questions: questions.map(q => ({
+              questionText: q.questionText,
+              questionImage: q.questionImage,
+              solutionImage: q.solutionImage,
+              explanation: q.explanation,
+              subject: q.subject,
+              topic: q.topic,
+              type: q.type,
+              difficulty: q.difficulty,
+              options: q.options,
+              correctOption: q.correctOption,
+              marks: q.marks || 4,
+              negative: q.negative || -1
+          }))
+      };
+
+      // Calls the Next.js App Router endpoint directly (port 3000)
+      const res = await fetchWithAuth(`/student/exam/${examId}/import-questions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
+      
+      if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.message || 'Failed to save imported questions to DB');
+      }
+      return await res.json();
   },
 
   async getExams() {
     const token = this.getToken();
     try { 
-        const res = await fetchWithAuth(`${API_URL}/erp/exams`, { headers: { 'Authorization': `Bearer ${token}` } }); 
+        const res = await fetchWithAuth(`${API_URL}/exams`, { headers: { 'Authorization': `Bearer ${token}` } }); 
         if (!res.ok) return []; 
         return await res.json(); 
     } catch (e) { return []; }
@@ -197,23 +219,37 @@ export const adminApi = {
 
   async deleteExam(id: string) {
     const token = this.getToken();
-    const res = await fetchWithAuth(`${API_URL}/erp/exams/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+    const res = await fetchWithAuth(`${API_URL}/admin/exams/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
     if (!res.ok) throw new Error('Failed to delete exam'); 
     return await res.json();
   },
 
   async getExamById(id: string) {
     const token = this.getToken();
-    const res = await fetchWithAuth(`${API_URL}/erp/exams/${id}`, { headers: { 'Authorization': `Bearer ${token}` } });
+    const res = await fetchWithAuth(`${API_URL}/exams/${id}`, { headers: { 'Authorization': `Bearer ${token}` } });
     if (!res.ok) throw new Error('Failed to fetch exam details'); 
     return await res.json();
+  },
+
+  // ✨ NEW: Rename Topic Endpoint
+  async renameTopic(examType: string, subject: string, oldTopic: string, newTopic: string) {
+      const res = await fetchWithAuth(`${API_URL}/exams/rename-topic`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` },
+          body: JSON.stringify({ examType, subject, oldTopic, newTopic })
+      });
+      if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.message || "Failed to rename topic");
+      }
+      return await res.json();
   },
 
   // --- MISC & STATS ---
   async getBatches() { 
       const token = this.getToken(); 
       try { 
-          const res = await fetchWithAuth(`${API_URL}/erp/batches`, { headers: { 'Authorization': `Bearer ${token}` } }); 
+          const res = await fetchWithAuth(`${API_URL}/batches`, { headers: { 'Authorization': `Bearer ${token}` } }); 
           if (!res.ok) return []; 
           return await res.json(); 
       } catch (e) { return []; } 
@@ -222,26 +258,43 @@ export const adminApi = {
   async getStudents() { 
       const token = this.getToken(); 
       try { 
-          const res = await fetchWithAuth(`${API_URL}/erp/students`, { headers: { 'Authorization': `Bearer ${token}` } }); 
+          const res = await fetchWithAuth(`${API_URL}/students`, { headers: { 'Authorization': `Bearer ${token}` } }); 
           if(!res.ok) return []; 
           return await res.json(); 
       } catch(e) { return []; } 
   },
 
   async getStats(exams: any[] = [], questions: any[] = [], studentCount: number = 0) { 
-      return { totalExams: exams.length, activeStudents: studentCount, questionBanks: questions.length, avgAttendance: 88 }; 
+      let completedExams = 0;
+      let upcomingExams = 0;
+      const now = new Date();
+      
+      exams.forEach(e => {
+          const scheduled = new Date(e.scheduledAt);
+          if (scheduled > now) upcomingExams++;
+          else completedExams++;
+      });
+
+      return { 
+          totalExams: exams.length, 
+          activeStudents: studentCount, 
+          questionBanks: questions.length, 
+          avgAttendance: 88,
+          examsConducted: completedExams,
+          upcomingExams: upcomingExams
+      }; 
   }, 
 
   async getExamAnalytics(examId: string) { 
       const token = this.getToken(); 
-      const res = await fetchWithAuth(`${API_URL}/erp/academics/results?examId=${examId}`, { headers: { 'Authorization': `Bearer ${token}` } }); 
+      const res = await fetchWithAuth(`${API_URL}/exams/${examId}/analytics`, { headers: { 'Authorization': `Bearer ${token}` } }); 
       if (!res.ok) return []; 
       return await res.json(); 
   },
 
   async markAttendance(data: any) { 
       const token = this.getToken(); 
-      const res = await fetchWithAuth(`${API_URL}/erp/attendance`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(data) }); 
+      const res = await fetchWithAuth(`${API_URL}/attendance/mark`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(data) }); 
       if (!res.ok) throw new Error('Attendance failed'); 
       return await res.json(); 
   },
@@ -249,7 +302,7 @@ export const adminApi = {
   async getStudentsByBatch(batchId: string) { 
       const token = this.getToken(); 
       try { 
-          const res = await fetchWithAuth(`${API_URL}/erp/students`, { headers: { 'Authorization': `Bearer ${token}` } }); 
+          const res = await fetchWithAuth(`${API_URL}/students`, { headers: { 'Authorization': `Bearer ${token}` } }); 
           if(!res.ok) return []; 
           const all = await res.json(); 
           return all.filter((s:any) => s.batchId === batchId || s.batch?.id === batchId); 
@@ -258,8 +311,8 @@ export const adminApi = {
 
   async getStudentAttempts(studentId: string) {
       const token = this.getToken();
-      const res = await fetchWithAuth(`${API_URL}/erp/attempts/${studentId}`, { headers: { 'Authorization': `Bearer ${token}` } });
-      if (!res.ok) throw new Error('Failed'); 
+      const res = await fetchWithAuth(`${API_URL}/exams/student-attempts?studentId=${studentId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (!res.ok) throw new Error('Failed to get student attempts'); 
       return await res.json();
   }
 };

@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Search, Loader2, Filter, CheckCircle, ChevronLeft, ChevronRight, Edit3, Eye, Lightbulb, ToggleLeft, ToggleRight, AlertCircle, Trash2, Image as ImageIcon, X, Plus, Square, CheckSquare } from 'lucide-react';
+import { adminApi } from '../services/adminApi';
 
 // --- DYNAMIC CSV AVAILABILITY MAP ---
 const UPLOADED_CSVS: Record<string, string[]> = {
@@ -11,13 +12,12 @@ const UPLOADED_CSVS: Record<string, string[]> = {
     "NEET": ["Physics", "Chemistry", "Biology"] 
 };
 
-// --- DB STRING MAPPER (SOLVES NEET ROUTING) ---
+// --- DB STRING MAPPER ---
 const getDbExamType = (uiType: string, subject: string) => {
     if (uiType === 'JEE Advanced') return 'JEE_Advanced';
     if (uiType === 'JEE Main') return 'JEE_Main';
     if (uiType === 'MHT-CET') return 'MHT_CET';
     if (uiType === 'NEET') {
-        // Route NEET Biology to Mains, and Physics/Chem to CET
         if (subject.toLowerCase() === 'biology') return 'JEE_Main';
         return 'MHT_CET'; 
     }
@@ -150,8 +150,6 @@ const CreateQuestionCard = ({ defaultExamType, defaultSubject, defaultTopic, onC
     });
 
     const optKeys = ['a', 'b', 'c', 'd'] as const;
-    
-    // ✨ MULTI-CORRECT LOGIC FOR JEE ADVANCED
     const isMultiCorrect = examType === 'JEE Advanced' && qType === 'MCQ';
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, key: string) => {
@@ -430,7 +428,6 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
         };
     }, [q.options]);
 
-    // Initial deduction of question type
     const hasTextOptions = !!(qOpts.a || qOpts.b || qOpts.c || qOpts.d);
     const hasImageOptions = !!(qOpts.img_a || qOpts.img_b || qOpts.img_c || qOpts.img_d);
     const hasAnyOptions = hasTextOptions || hasImageOptions || q.type === 'MCQ';
@@ -438,17 +435,12 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
     const initialType = q.type === 'NUMERICAL' || (!hasAnyOptions && q.correctOption && q.correctOption !== 'pending' && !['a','b','c','d'].includes(String(q.correctOption).toLowerCase())) ? 'NUMERICAL' : 'MCQ';
     
     const [qTypeState, setQTypeState] = useState(initialType);
-    
-    // ✨ MULTI-CORRECT LOGIC FOR JEE ADVANCED
     const isMultiCorrect = examTypeUiSelection === 'JEE Advanced' && qTypeState === 'MCQ';
 
     const initialCorrect = useMemo(() => {
         if (!q.correctOption || q.correctOption === 'pending') return 'pending';
         if (initialType === 'NUMERICAL') return q.correctOption; 
-        
-        // If it's multi-correct from the DB, return it as-is (e.g. "a,c")
         if (String(q.correctOption).includes(',')) return String(q.correctOption).toLowerCase();
-
         let val = String(q.correctOption).toLowerCase().trim();
         return ['a', 'b', 'c', 'd'].includes(val) ? val : 'pending';
     }, [q.correctOption, initialType]);
@@ -461,7 +453,6 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
     const [solImageState, setSolImageState] = useState(q.solutionImage || null);
     const [solTextState, setSolTextState] = useState(q.explanation || '');
 
-    // ✨ THIS MAGICALLY SYNCS THE CARD TOPIC IF THE MASTER FILTER CHANGES
     useEffect(() => {
         if (defaultTopic) setSelectedTopic(defaultTopic);
     }, [defaultTopic]);
@@ -526,7 +517,7 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
             correctOption: correctOption,
             topic: selectedTopic,
             type: qTypeState,
-            examType: q.examType || getDbExamType(examTypeUiSelection, q.subject) // Maintain correct routing
+            examType: q.examType || getDbExamType(examTypeUiSelection, q.subject) 
         };
         onSaveDraft(updatedQuestion, selectedTopic);
     };
@@ -874,6 +865,9 @@ export default function QuestionChecker() {
     const [toast, setToast] = useState<{message: string, type: 'error' | 'success'} | null>(null);
     
     const [isCreatingNew, setIsCreatingNew] = useState(false);
+    
+    // ✨ STATE FOR RENAME MODAL
+    const [renamingTopic, setRenamingTopic] = useState<{old: string, new: string} | null>(null);
 
     const availableExams = Object.keys(UPLOADED_CSVS);
 
@@ -902,25 +896,25 @@ export default function QuestionChecker() {
         setTimeout(() => setToast(null), 4000);
     };
 
-    useEffect(() => {
+    const fetchTopics = useCallback(async () => {
         if (!examType || !subject) return;
-        const fetchTopics = async () => {
-            let API_URL = process.env.NEXT_PUBLIC_API_URL;
-            if (!API_URL || API_URL.includes('localhost')) {
-                API_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001';
+        let API_URL = process.env.NEXT_PUBLIC_API_URL;
+        if (!API_URL || API_URL.includes('localhost')) {
+            API_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001';
+        }
+        try {
+            const dbExamType = getDbExamType(examType, subject);
+            const res = await fetch(`${API_URL}/exams/pending-topics?examType=${encodeURIComponent(dbExamType)}&subject=${encodeURIComponent(subject)}`);
+            if (res.ok) {
+                const data = await res.json();
+                setAvailableTopicsWithCount(data);
             }
-            try {
-                // Pass BOTH examType and Subject to cleanly route NEET
-                const dbExamType = getDbExamType(examType, subject);
-                const res = await fetch(`${API_URL}/exams/pending-topics?examType=${encodeURIComponent(dbExamType)}&subject=${encodeURIComponent(subject)}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    setAvailableTopicsWithCount(data);
-                }
-            } catch (e) { console.error("Failed to load topics", e); }
-        };
-        fetchTopics();
+        } catch (e) { console.error("Failed to load topics", e); }
     }, [examType, subject]);
+
+    useEffect(() => {
+        fetchTopics();
+    }, [fetchTopics]);
 
     useEffect(() => {
         if (!examType || !subject) return;
@@ -933,8 +927,6 @@ export default function QuestionChecker() {
             }
             
             const params = new URLSearchParams();
-            
-            // Pass BOTH examType and Subject to cleanly route NEET
             params.append('examType', getDbExamType(examType, subject));
             params.append('subject', subject);
             
@@ -974,6 +966,25 @@ export default function QuestionChecker() {
         setSubject(newSub);
         setTopic('');
         setCurrentPage(1);
+    };
+
+    // ✨ RENAME LOGIC
+    const handleRenameTopic = async () => {
+        if (!renamingTopic || !renamingTopic.new.trim()) return;
+        setLoading(true);
+        try {
+            const dbExamType = getDbExamType(examType, subject);
+            const res = await adminApi.renameTopic(dbExamType, subject, renamingTopic.old, renamingTopic.new.trim());
+            showToast(`Successfully renamed ${res.count} questions to ${renamingTopic.new.trim()}!`, "success");
+            setTopic(renamingTopic.new.trim());
+            setRenamingTopic(null);
+            fetchTopics(); // Refresh the datalist dropdown
+        } catch (e) {
+            console.error(e);
+            showToast("Failed to rename topic.", "error");
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleDelete = async (id: string) => {
@@ -1017,7 +1028,7 @@ export default function QuestionChecker() {
 
             setPendingQuestions(prev => prev.map(q => q.id === question.id ? { ...q, ...question } : q));
             showToast(`Draft successfully saved!`, "success");
-            
+            fetchTopics(); // Update topic counters
         } catch (e) {
             console.error(e);
             showToast("Failed to save draft to database.", "error");
@@ -1049,6 +1060,7 @@ export default function QuestionChecker() {
             if (pendingQuestions.length === 1 && currentPage > 1) {
                 setCurrentPage(prev => prev - 1);
             }
+            fetchTopics(); // Update topic counters
         } catch (e) {
             console.error(e);
             showToast("Failed to save question to database.", "error");
@@ -1072,24 +1084,23 @@ export default function QuestionChecker() {
 
             if (!res.ok) throw new Error("Failed to create in database");
 
-            if (payload.difficulty === 'pending') {
-                showToast(`New question saved as a Draft!`, "success");
-            } else {
-                showToast(`Brand new question successfully created as ${payload.difficulty}!`, "success");
-            }
+            if (payload.difficulty === 'pending') showToast(`New question saved as a Draft!`, "success");
+            else showToast(`Brand new question successfully created as ${payload.difficulty}!`, "success");
             
             setIsCreatingNew(false);
-            
-            // Re-fetch page 1 to see the new creation instantly
             setTopic('');
             setQuery('');
             setCurrentPage(1);
+            fetchTopics(); // Update topic counters
             
         } catch (e) {
             console.error(e);
             showToast("Failed to create question.", "error");
         }
     };
+
+    // ✨ Check if currently typed topic exists in the dropdown to show the Edit button
+    const isTopicExactMatch = availableTopicsWithCount.some((t: any) => t.name === topic);
 
     return (
         <div className="flex flex-col gap-5 font-sans min-h-[85vh] relative">
@@ -1098,6 +1109,39 @@ export default function QuestionChecker() {
                 <div className={`fixed bottom-6 right-6 px-5 py-3 rounded-xl shadow-2xl font-bold text-sm z-50 flex items-center gap-2 transition-all animate-in slide-in-from-bottom-5 ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
                     {toast.type === 'error' ? <AlertCircle size={18} /> : <CheckCircle size={18} />}
                     {toast.message}
+                </div>
+            )}
+
+            {/* ✨ RENAME MODAL */}
+            {renamingTopic && (
+                <div className="fixed inset-0 z-110 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95">
+                        <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                            <h3 className="font-bold text-slate-800 flex items-center gap-2"><Edit3 size={16} className="text-amber-500"/> Rename Topic</h3>
+                            <button onClick={() => setRenamingTopic(null)} className="text-slate-400 hover:text-red-500 transition"><X size={18}/></button>
+                        </div>
+                        <div className="p-6">
+                            <p className="text-xs text-slate-500 mb-4">This will immediately update the topic name for <strong className="text-slate-800">all</strong> pending questions in this subject.</p>
+                            <div className="mb-4">
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Current Name</label>
+                                <input type="text" value={renamingTopic.old} disabled className="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-500 text-sm font-medium cursor-not-allowed" />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-blue-600 uppercase tracking-wider mb-1">New Name</label>
+                                <input type="text" value={renamingTopic.new} onChange={e => setRenamingTopic({...renamingTopic, new: e.target.value})} className="w-full p-2.5 bg-white border border-blue-200 rounded-lg text-slate-800 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition" autoFocus placeholder="Enter correct topic name..." />
+                            </div>
+                            <div className="mt-6 flex justify-end gap-3">
+                                <button onClick={() => setRenamingTopic(null)} className="px-4 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm hover:bg-slate-200 transition">Cancel</button>
+                                <button 
+                                    onClick={handleRenameTopic} 
+                                    disabled={loading || !renamingTopic.new.trim() || renamingTopic.new.trim() === renamingTopic.old} 
+                                    className="px-4 py-2 bg-blue-600 text-white font-bold rounded-xl text-sm hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-2"
+                                >
+                                    {loading ? <Loader2 size={16} className="animate-spin"/> : 'Save Changes'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -1117,7 +1161,7 @@ export default function QuestionChecker() {
                     </button>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                     <div className="md:col-span-2">
                         <label className={labelStyle}>Exam Type</label>
                         <select className={inputStyle} value={examType} onChange={e => handleExamChange(e.target.value)}>
@@ -1132,19 +1176,32 @@ export default function QuestionChecker() {
                         </select>
                     </div>
 
-                    {/* ✨ EDITABLE TOPIC FILTER: Uses Datalist so you can type the correct spelling */}
+                    {/* ✨ EDITABLE TOPIC FILTER WITH RENAME BUTTON */}
                     <div className="md:col-span-3">
                         <label className={labelStyle}>Topic / Chapter</label>
-                        <input 
-                            list="topic-options"
-                            className={inputStyle} 
-                            value={topic} 
-                            onChange={e => { setTopic(e.target.value); setCurrentPage(1); }} 
-                            placeholder="Type to search or edit..."
-                        />
-                        <datalist id="topic-options">
-                            {availableTopicsWithCount.map((t: any) => <option key={t.name} value={t.name}>{t.name} ({t.count})</option>)}
-                        </datalist>
+                        <div className="flex gap-2">
+                            <div className="relative flex-1">
+                                <input 
+                                    list="topic-options"
+                                    className={inputStyle} 
+                                    value={topic} 
+                                    onChange={e => { setTopic(e.target.value); setCurrentPage(1); }} 
+                                    placeholder="Type to search or select..."
+                                />
+                                <datalist id="topic-options">
+                                    {availableTopicsWithCount.map((t: any) => <option key={t.name} value={t.name}>{t.name} ({t.count})</option>)}
+                                </datalist>
+                            </div>
+                            {isTopicExactMatch && (
+                                <button 
+                                    onClick={() => setRenamingTopic({ old: topic, new: topic })}
+                                    className="px-3.5 py-2.5 bg-slate-50 hover:bg-amber-50 border border-slate-200 hover:border-amber-300 text-slate-400 hover:text-amber-600 rounded-xl transition shadow-sm shrink-0"
+                                    title="Rename this Topic"
+                                >
+                                    <Edit3 size={16} />
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     <div className="md:col-span-4 relative">

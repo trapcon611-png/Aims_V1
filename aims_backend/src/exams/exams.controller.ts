@@ -109,6 +109,16 @@ export class ExamsController {
       return this.examsService.autoBuildFromDb(body);
   }
 
+  // ✨ NEW RENAME TOPIC ROUTE
+  @Post('rename-topic')
+  @UseGuards(AuthGuard('jwt'))
+  renameTopic(@Body() body: { examType: string; subject: string; oldTopic: string; newTopic: string }) {
+      if (!body.oldTopic || !body.newTopic) {
+          throw new BadRequestException('Old and new topic names are required');
+      }
+      return this.examsService.renameTopic(body.examType, body.subject, body.oldTopic, body.newTopic);
+  }
+
   // --- GENERIC ROUTES (MUST BE AT THE BOTTOM) ---
 
   @Get(':id')

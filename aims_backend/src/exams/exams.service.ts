@@ -43,7 +43,6 @@ export class ExamsService {
     });
   }
 
-  // ✨ ERRORS 2353 & 1005 FIXED HERE (Clean Relational Select)
   async getMyAttempts(userId: string) {
     return this.prisma.testAttempt.findMany({
       where: { 
@@ -57,19 +56,11 @@ export class ExamsService {
         answers: {
           include: {
             question: {
-              select: { 
-                  subject: true, 
-                  difficulty: true,
-                  questionText: true,
-                  questionImage: true,
-                  solutionImage: true,
-                  correctOption: true,
-                  options: true,
-                  type: true, // Needed for MCQ vs Numerical check
+              include: {
                   questionBank: {
-                      select: { explanation: true } // Extracted safely from the original bank
+                      select: { explanation: true } 
                   }
-              } 
+              }
             }
           }
         }
@@ -140,7 +131,7 @@ export class ExamsService {
       subject: q.subject,
       marks: q.marks,
       negative: q.negative,
-      type: q.type, // Make sure student panel knows if it's numerical
+      type: q.type, 
       tags: [] 
     }));
 
@@ -264,7 +255,6 @@ export class ExamsService {
 
       if (sourceQuestions.length === 0) return { count: 0 };
 
-      // ✨ FIX: Guarantee that Topic and Type are mapped over during manual exam build!
       const examQuestionsData = sourceQuestions.map(q => ({
           examId,
           questionBankId: q.id,
@@ -439,6 +429,31 @@ export class ExamsService {
       count: updates.length,
       message: `Successfully reviewed ${updates.length} questions.`
     };
+  }
+
+  // ✨ NEW RENAME TOPIC BULK FUNCTION
+  async renameTopic(examType: string, subject: string, oldTopic: string, newTopic: string) {
+      const typeFilter = this.getExamTypeFilter(examType);
+      
+      const whereClause: any = { 
+          subject: { equals: subject, mode: 'insensitive' },
+          topic: oldTopic
+      };
+
+      if (typeFilter) {
+          whereClause.examType = typeFilter;
+      }
+
+      const result = await this.prisma.questionBank.updateMany({
+          where: whereClause,
+          data: { topic: newTopic }
+      });
+
+      return { 
+          success: true, 
+          count: result.count,
+          message: `Renamed ${result.count} questions to ${newTopic}`
+      };
   }
 
   async createQuestionFromAdmin(data: any) {
