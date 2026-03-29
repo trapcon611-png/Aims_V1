@@ -45,6 +45,7 @@ export const studentApi = {
     }
     const data = await res.json();
     
+    // 🚨 STRICT ROLE GUARD
     if (data.user && data.user.role !== 'STUDENT') {
         throw new Error('Invalid Credentials: Not a student account.');
     }
@@ -63,7 +64,7 @@ export const studentApi = {
     } catch (e) { return null; }
   },
 
-  // ✨ FIX: Routed to official Backend '/exams' controller
+  // ✨ Routed to official Backend '/exams' controller
   async getExams(token: string) {
     try {
       const res = await fetchWithAuth(`${API_URL}/exams`, {
@@ -75,7 +76,7 @@ export const studentApi = {
     } catch (e) { return []; }
   },
 
-  // ✨ FIX: Routed to official Backend '/exams/my-attempts' controller
+  // ✨ Routed to official Backend '/exams/my-attempts' controller
   async getResults(token: string) {
     try {
       const res = await fetchWithAuth(`${API_URL}/exams/my-attempts`, {
@@ -88,7 +89,6 @@ export const studentApi = {
       if (!Array.isArray(attempts)) return [];
       
       return attempts.map((attempt: any) => {
-        // Correct extraction using answers mapped to their nested question objects
         const questionsList = attempt.answers?.map((a: any) => a.question).filter(Boolean) || [];
         
         const answersMap = new Map();
@@ -179,7 +179,6 @@ export const studentApi = {
   },
 
   // --- EXAM TAKING ENGINE ---
-  // ✨ FIX: Routed to official Backend '/exams/:id/attempt'
   async startAttempt(examId: string, token: string) {
     const res = await fetchWithAuth(`${API_URL}/exams/${examId}/attempt`, {
         method: 'POST',
@@ -198,8 +197,8 @@ export const studentApi = {
     return await res.json();
   },
 
-  // ✨ FIX: Routed to official Backend '/exams/:id/submit'
-  async submitAttempt(examId: string, answers: any[], token: string) {
+  // ✨ FIX: Renamed back to "submitExam" so the Next.js compiler is happy!
+  async submitExam(examId: string, answers: any[], token: string) {
       const res = await fetchWithAuth(`${API_URL}/exams/${examId}/submit`, {
           method: 'POST',
           headers: { 
