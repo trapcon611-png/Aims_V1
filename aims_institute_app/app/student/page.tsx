@@ -14,7 +14,7 @@ import ResultsPanel from './components/ResultsPanel';
 import ResourcesPanel from './components/ResourcesPanel';
 import { studentApi } from './services/studentApi';
 
-const LOGO_PATH = '/mainpage.png'; // Rectangular Dashboard Logo
+const LOGO_PATH = '/whitelogo.png'; // Rectangular Dashboard Logo
 
 export default function StudentPage() {
   const router = useRouter(); 
@@ -202,13 +202,11 @@ export default function StudentPage() {
       <aside className={`fixed inset-y-0 left-0 z-50 bg-[#0B1121] border-r border-slate-800/80 transform transition-all duration-300 ease-in-out lg:static lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} ${isSidebarCollapsed ? 'w-24' : 'w-64'}`}>
         <div className="h-full flex flex-col p-4 relative">
           
-          <div className="flex items-center justify-between mb-8">
-            <div className={`flex items-center w-full ${isSidebarCollapsed ? 'justify-center' : 'gap-3 px-2'}`}>
-               <div className={`relative ${isSidebarCollapsed ? 'w-12 h-12' : 'w-32 h-10'} shrink-0 transition-all duration-300`}>
-                    {/* ✨ RECTANGULAR MAINPAGE LOGO IMPLEMENTED */}
-                    <Image src={LOGO_PATH} alt="Logo" fill className={`object-contain ${isSidebarCollapsed ? 'object-center' : 'object-left'}`} unoptimized />
-               </div>
-            </div>
+          {/* ✨ LOGO PERFECTLY CENTERED */}
+          <div className="flex items-center justify-center mb-8 mt-2">
+             <div className={`relative ${isSidebarCollapsed ? 'w-12 h-12' : 'w-40 h-14'} shrink-0 transition-all duration-300`}>
+                  <Image src={LOGO_PATH} alt="Logo" fill className="object-contain object-center" unoptimized />
+             </div>
           </div>
 
            <button 
