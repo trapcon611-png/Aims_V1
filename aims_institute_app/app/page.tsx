@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { User, Lock, ArrowRight, Shield, Settings, Image as ImageIcon, Sparkles } from 'lucide-react';
+import { User, Lock, ArrowRight, Shield, Settings, Image as ImageIcon, Sparkles, Eye, EyeOff } from 'lucide-react';
 import { loginStudent } from './student/services/studentApi';
 import { loginParent } from './parent/services/parentApi';
 
@@ -13,6 +13,7 @@ export default function RootLoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false); // ✨ Password Toggle State
   const router = useRouter();
 
   // ✨ CAROUSEL STATE
@@ -95,8 +96,6 @@ export default function RootLoginPage() {
     ? carouselImages.map(img => img.imageUrl) 
     : fallbackImages;
 
-  // ✨ FIX: Guarantee we have enough images to span across all 3 columns evenly
-  // (Prevents blank columns if user uploads only 1 or 2 images)
   while (displayImages.length > 0 && displayImages.length < 9) {
       displayImages = [...displayImages, ...displayImages];
   }
@@ -110,8 +109,6 @@ export default function RootLoginPage() {
   });
 
   // 3. ✨ FIX: MASSIVE INFLATION ARRAYS
-  // We duplicate the contents until there are at least 24 images per column.
-  // This guarantees the block is taller than ANY 4k monitor, preventing the track from ending early.
   const inflateArray = (arr: string[], targetLength: number = 24) => {
       if (arr.length === 0) return [];
       let result = [...arr];
@@ -125,7 +122,6 @@ export default function RootLoginPage() {
   const baseCol2 = inflateArray(rawCol2);
   const baseCol3 = inflateArray(rawCol3);
 
-  // A reusable Image Card component to keep the JSX clean
   const GalleryCard = ({ img }: { img: string }) => (
       <a className="relative block overflow-hidden group rounded-2xl bg-slate-200 shadow-xl border border-slate-200/50 cursor-pointer">
           <img src={img} alt="Gallery" className="w-full h-auto block transition-transform duration-700 group-hover:scale-110" />
@@ -142,9 +138,6 @@ export default function RootLoginPage() {
       
       {/* ✨ MATHEMATICALLY PERFECT ANIMATION STYLES ✨ */}
       <style dangerouslySetInnerHTML={{ __html: `
-        /* 0.75rem accounts for EXACTLY half of the 1.5rem (gap-6) between the two blocks.
-           This mathematical alignment guarantees a 100% invisible reset snap.
-        */
         @keyframes scroll-up {
             0% { transform: translateY(0); }
             100% { transform: translateY(calc(-50% - 0.75rem)); }
@@ -202,7 +195,6 @@ export default function RootLoginPage() {
           
           {/* Animated Toggle Switch */}
           <div className="flex bg-slate-100/80 p-1.5 rounded-2xl mb-8 relative border border-slate-200/50">
-            {/* The sliding active pill */}
             <div 
               className={`absolute top-1.5 bottom-1.5 w-[calc(50%-6px)] bg-white rounded-xl shadow-sm border border-slate-200 transition-all duration-500 ease-spring ${activeRole === 'student' ? 'left-1.5' : 'left-[calc(50%+1.5px)]'}`}
             ></div>
@@ -253,14 +245,22 @@ export default function RootLoginPage() {
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <Lock className="h-5 w-5 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
                 </div>
+                {/* ✨ Eye Toggle Added Here */}
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className={`w-full pl-11 pr-4 py-3.5 bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl outline-none ring-4 ring-transparent transition-all placeholder-slate-400 font-medium ${theme.focus}`}
+                  className={`w-full pl-11 pr-12 py-3.5 bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl outline-none ring-4 ring-transparent transition-all placeholder-slate-400 font-medium ${theme.focus}`}
                   placeholder="••••••••"
                   required
                 />
+                <button 
+                    type="button" 
+                    onClick={() => setShowPassword(!showPassword)} 
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors focus:outline-none"
+                >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
             </div>
 
@@ -328,7 +328,6 @@ export default function RootLoginPage() {
         <div 
           className="absolute inset-0 py-4 px-4 lg:pr-12 lg:pl-4" 
           style={{
-            // ✨ FIX: Strict pixel fading. No more massive dead zones on tall screens!
             maskImage: 'linear-gradient(to bottom, transparent 0px, black 100px, black calc(100% - 100px), transparent 100%)',
             WebkitMaskImage: 'linear-gradient(to bottom, transparent 0px, black 100px, black calc(100% - 100px), transparent 100%)'
           }}
@@ -342,7 +341,6 @@ export default function RootLoginPage() {
                   
                   {/* Column 1 (Scrolls UP - Slowed and Synced) */}
                   <div className="scroll-column h-full min-w-0 relative">
-                     {/* The moving track */}
                      <div className="animate-scroll-up flex flex-col gap-6">
                         {/* Block 1 */}
                         <div className="flex flex-col gap-6 shrink-0">
@@ -357,7 +355,6 @@ export default function RootLoginPage() {
 
                   {/* Column 2 (Scrolls DOWN - Opposite Direction, Synced) */}
                   <div className="scroll-column h-full min-w-0 relative">
-                     {/* The moving track */}
                      <div className="animate-scroll-down flex flex-col gap-6">
                         {/* Block 1 */}
                         <div className="flex flex-col gap-6 shrink-0">
@@ -372,7 +369,6 @@ export default function RootLoginPage() {
 
                   {/* Column 3 (Scrolls UP - Synced) */}
                   <div className="scroll-column h-full min-w-0 relative">
-                     {/* The moving track */}
                      <div className="animate-scroll-up flex flex-col gap-6">
                         {/* Block 1 */}
                         <div className="flex flex-col gap-6 shrink-0">

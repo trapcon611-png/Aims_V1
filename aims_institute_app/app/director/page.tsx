@@ -6,7 +6,7 @@ import {
   ArrowLeft, Loader2, UserPlus, Activity, Cpu, ChevronRight, ChevronLeft, Menu, Home,
   FileBarChart, Clock, CheckCircle, Video, Plus, Bell, Trash2, Search, X,
   AlertTriangle, User, Cake, Copy, Lock, LayoutGrid, DollarSign, TrendingUp, TrendingDown,
-  AlertCircle, BarChart3, Image as ImageIcon
+  AlertCircle, BarChart3, Image as ImageIcon, Eye, EyeOff
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -242,6 +242,7 @@ const DirectorLogin = ({ onUnlock }: { onUnlock: () => void }) => {
   const [creds, setCreds] = useState({ id: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   
   const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true); setError('');
@@ -269,9 +270,7 @@ const DirectorLogin = ({ onUnlock }: { onUnlock: () => void }) => {
       <DirectorBackground />
       <div className="relative z-10 w-full max-w-sm bg-gradient-to-br from-red-900 to-red-800 backdrop-blur-xl border border-red-700/50 rounded-3xl shadow-2xl p-8">
          <div className="text-center mb-6">
-             <div className="relative h-14 w-48 mx-auto mb-4">
-                <Image src="/whitelogo.png" alt="AIMS Logo" fill className="object-contain object-center" unoptimized/>
-             </div>
+             <div className="relative w-20 h-20 mx-auto mb-4 bg-white rounded-full p-2 shadow-lg"><Image src="/logo.png" alt="Logo" fill className="object-contain" unoptimized/></div>
              <h3 className="text-2xl font-bold text-white">ERP Console</h3>
              <p className="text-red-200 text-xs mt-1 font-mono uppercase tracking-widest flex items-center justify-center gap-2"><Activity size={12} className="animate-pulse"/> System Online</p>
          </div>
@@ -282,7 +281,16 @@ const DirectorLogin = ({ onUnlock }: { onUnlock: () => void }) => {
              </div>
              <div className="space-y-1">
                 <label className="text-xs font-bold text-red-200 uppercase tracking-wider ml-1">Password</label>
-                <input type="password" className="w-full p-4 bg-red-950/30 border border-red-700/50 rounded-xl text-white placeholder:text-red-300/50 outline-none focus:ring-2 focus:ring-white/30 transition" placeholder="••••••••" value={creds.password} onChange={e => setCreds({...creds, password: e.target.value})}/>
+                <div className="relative">
+                    <input type={showPassword ? "text" : "password"} className="w-full p-4 bg-red-950/30 border border-red-700/50 rounded-xl text-white placeholder:text-red-300/50 outline-none focus:ring-2 focus:ring-white/30 transition pr-12" placeholder="••••••••" value={creds.password} onChange={e => setCreds({...creds, password: e.target.value})}/>
+                    <button 
+                        type="button" 
+                        onClick={() => setShowPassword(!showPassword)} 
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-red-200 hover:text-white transition-colors focus:outline-none"
+                    >
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                </div>
              </div>
              {error && <div className="p-3 bg-red-950/50 border border-red-500/50 rounded-lg text-red-200 text-xs font-bold flex items-center gap-2"><AlertTriangle size={14}/> {error}</div>}
              <button disabled={loading} className="w-full bg-white text-red-900 py-4 rounded-xl font-bold uppercase shadow-lg flex justify-center items-center gap-2 hover:bg-slate-100 transition">{loading ? <Loader2 className="animate-spin" size={18}/> : <>Unlock ERP <Cpu size={18}/></>}</button>
@@ -479,9 +487,9 @@ export default function DirectorPage() {
        <aside className={`bg-slate-900 border-r border-slate-800 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-64'} shadow-lg relative z-20`}>
           <div className="p-6 flex items-center justify-between">
              {!isSidebarCollapsed && (
-                 <div className="relative h-10 w-40">
-                    {/* ✨ RECTANGULAR WHITE LOGO APPLIED HERE */}
-                    <Image src="/whitelogo.png" alt="AIMS Logo" fill className="object-contain object-left" unoptimized/>
+                 <div className="flex items-center gap-2">
+                    <div className="relative w-8 h-8 bg-white rounded-full p-1"><Image src={'/logo.png'} alt="Logo" fill className="object-contain" unoptimized/></div>
+                    <div><h2 className="text-white font-bold text-lg leading-none">AIMS</h2><p className="text-[10px] text-[#c1121f] font-bold uppercase">ERP</p></div>
                  </div>
              )}
              <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="text-slate-400 hover:text-white"><Menu size={20}/></button>

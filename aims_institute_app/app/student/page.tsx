@@ -6,46 +6,39 @@ import {
   ChevronRight, ChevronLeft, Bell, Loader2, Menu
 } from 'lucide-react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation'; // ADDED: Next.js Router
+import { useRouter } from 'next/navigation';
 
-// Internal Components
 import DashboardHome from './components/DashboardHome';
 import ExamListPanel from './components/ExamListPanel';
 import ResultsPanel from './components/ResultsPanel';
 import ResourcesPanel from './components/ResourcesPanel';
 import { studentApi } from './services/studentApi';
 
-const LOGO_PATH = '/logo.png'; 
+const LOGO_PATH = '/mainpage.png'; // Rectangular Dashboard Logo
 
-// --- MAIN CONTROLLER ---
 export default function StudentPage() {
-  const router = useRouter(); // ADDED: Initialize router
+  const router = useRouter(); 
 
   const [user, setUser] = useState<any>(null);
   const [token, setToken] = useState<string>('');
   const [loading, setLoading] = useState(true);
   
-  // UI States
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showGreeting, setShowGreeting] = useState(false);
 
-  // Data States
   const [profile, setProfile] = useState<any>(null);
   const [exams, setExams] = useState<any[]>([]);
   const [results, setResults] = useState<any[]>([]);
   const [resources, setResources] = useState<any[]>([]);
   const [notices, setNotices] = useState<any[]>([]);
 
-  // 1. Auth Initialization (UPDATED for Unified Login)
   useEffect(() => {
-    // Check for new aims_token OR legacy tokens
     const t = localStorage.getItem('aims_token') || localStorage.getItem('student_token') || localStorage.getItem('accessToken');
     const u = localStorage.getItem('student_user');
     
     if (!t) {
-      // If no token, kick back to root login
       router.push('/');
       return;
     }
@@ -61,23 +54,21 @@ export default function StudentPage() {
         setLoading(false);
       }
     } else {
-      // If logged in via new Root Page, 'student_user' might be missing. Fetch it using the token.
       studentApi.getProfile(t).then(profileData => {
         if (profileData) {
           setUser(profileData);
           localStorage.setItem('student_user', JSON.stringify(profileData));
         } else {
-          setUser({ username: 'Student' }); // Safe fallback
+          setUser({ username: 'Student' }); 
         }
         setLoading(false);
       }).catch(() => {
-        setUser({ username: 'Student' }); // Safe fallback
+        setUser({ username: 'Student' }); 
         setLoading(false);
       });
     }
   }, [router]);
 
-  // Show Greeting once when user is loaded
   useEffect(() => {
     if (user) {
         setShowGreeting(true);
@@ -86,7 +77,6 @@ export default function StudentPage() {
     }
   }, [user]);
 
-  // 2. Data Fetching Logic
   const refreshData = useCallback(async () => {
     if (!token) return;
     try {
@@ -106,7 +96,6 @@ export default function StudentPage() {
     }
   }, [token]);
 
-  // 3. Trigger Fetch on Auth Load
   useEffect(() => {
     if (token) {
       refreshData();
@@ -114,7 +103,6 @@ export default function StudentPage() {
     }
   }, [token, refreshData, user]);
 
-  // --- Push Notification Setup (Client Side) ---
   useEffect(() => {
     if (token && 'serviceWorker' in navigator && 'PushManager' in window) {
       navigator.serviceWorker.register('/sw.js')
@@ -152,21 +140,18 @@ export default function StudentPage() {
     }
   }, [token]);
 
-  // (REMOVED handleLogin here, as auth is now handled at root)
-
   const handleLogout = () => {
-    localStorage.removeItem('aims_token'); // Clear new token
+    localStorage.removeItem('aims_token'); 
     localStorage.removeItem('student_token');
     localStorage.removeItem('student_user');
     localStorage.removeItem('accessToken');
     setUser(null);
     setToken('');
-    router.push('/'); // Redirect to root
+    router.push('/'); 
   };
 
   if (loading || !user) return <div className="h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-blue-600" size={32}/></div>;
 
-  // --- SAFE TIMEZONE WRAPPER ---
   const safeExams = exams.map(e => {
     let safeDateStr = e.scheduledAt;
     if (typeof safeDateStr === 'string' && !safeDateStr.endsWith('Z') && !safeDateStr.includes('+') && safeDateStr.includes('T')) {
@@ -175,7 +160,6 @@ export default function StudentPage() {
     return { ...e, scheduledAt: safeDateStr };
   });
 
-  // 🚨 CRITICAL QA FIX: Computed Stats (Hyper-Accurate Math)
   let totalPercentageSum = 0;
   let validResultsCount = 0;
 
@@ -219,16 +203,11 @@ export default function StudentPage() {
         <div className="h-full flex flex-col p-4 relative">
           
           <div className="flex items-center justify-between mb-8">
-            <div className={`flex items-center gap-3 ${isSidebarCollapsed ? 'mx-auto' : ''}`}>
-               <div className="relative w-10 h-10 bg-white rounded-full flex items-center justify-center p-2 shadow-lg shadow-blue-900/20 shrink-0">
-                    <Image src={LOGO_PATH} alt="Logo" fill className="object-contain" unoptimized />
+            <div className={`flex items-center w-full ${isSidebarCollapsed ? 'justify-center' : 'gap-3 px-2'}`}>
+               <div className={`relative ${isSidebarCollapsed ? 'w-12 h-12' : 'w-32 h-10'} shrink-0 transition-all duration-300`}>
+                    {/* ✨ RECTANGULAR MAINPAGE LOGO IMPLEMENTED */}
+                    <Image src={LOGO_PATH} alt="Logo" fill className={`object-contain ${isSidebarCollapsed ? 'object-center' : 'object-left'}`} unoptimized />
                </div>
-               {!isSidebarCollapsed && (
-                   <div className="min-w-0">
-                       <h1 className="text-lg font-black text-white tracking-tight leading-none truncate">AIMS</h1>
-                       <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mt-0.5 truncate">Student</p>
-                   </div>
-               )}
             </div>
           </div>
 
@@ -293,7 +272,6 @@ export default function StudentPage() {
                         <span className="text-sm font-bold text-slate-800 leading-none group-hover:text-blue-600 transition-colors">{profile?.name || user?.username}</span>
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{profile?.batch || 'Student'}</span>
                      </div>
-                     {/* QA FIX: Tailwind syntax updated to bg-linear-to-br */}
                      <div className="w-10 h-10 rounded-xl bg-linear-to-br from-blue-600 to-indigo-700 border border-blue-400/50 flex items-center justify-center text-white font-black shadow-sm text-sm transform group-hover:scale-105 transition-transform">
                         {user?.username?.charAt(0).toUpperCase() || 'S'}
                      </div>

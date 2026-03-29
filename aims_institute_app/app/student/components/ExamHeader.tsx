@@ -2,7 +2,7 @@
 import React from 'react';
 import { Clock, Menu, FileText } from 'lucide-react';
 
-const LOGO_PATH = '/logo.png';
+const LOGO_PATH = '/whitelogo.png'; // White Exam Engine Logo
 
 export default function ExamHeader({ 
     title, 
@@ -25,27 +25,27 @@ export default function ExamHeader({
     };
 
     return (
-        <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6 z-50 shadow-sm select-none">
+        <header className="fixed top-0 left-0 right-0 h-16 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 md:px-6 z-50 shadow-md select-none">
             <div className="flex items-center gap-3">
-                <img src={LOGO_PATH} alt="Logo" className="h-8 w-auto" />
-                <div className="hidden md:block">
-                    <h1 className="text-sm font-black text-slate-800 uppercase tracking-tight">{title}</h1>
+                <img src={LOGO_PATH} alt="Logo" className="h-9 w-auto object-contain" />
+                <div className="hidden md:block ml-3 pl-4 border-l border-slate-700">
+                    <h1 className="text-sm font-black text-white uppercase tracking-tight">{title}</h1>
                     <p className="text-[10px] text-slate-400 font-bold tracking-widest">ID: {attemptId?.slice(0, 8)}</p>
                 </div>
             </div>
             <div className="flex items-center gap-4">
-                <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full font-mono font-bold text-lg border transition-colors ${timeLeft < 300 ? 'bg-red-50 text-red-600 border-red-200 animate-pulse' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full font-mono font-bold text-lg border transition-colors ${timeLeft < 300 ? 'bg-red-900/50 text-red-400 border-red-500/50 animate-pulse' : 'bg-slate-800 text-slate-200 border-slate-700'}`}>
                     <Clock size={18}/> {formatTime(timeLeft)}
                 </div>
                 
                 <button 
                     onClick={onOpenQuestionPaper}
-                    className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition text-sm font-bold"
+                    className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-800 text-slate-300 border border-slate-700 rounded-lg hover:bg-slate-700 hover:text-white transition text-sm font-bold"
                 >
                     <FileText size={18}/> <span className="hidden lg:inline">Question Paper</span>
                 </button>
 
-                <button onClick={onToggleSidebar} className="md:hidden p-2 bg-slate-100 rounded-lg text-slate-600 hover:bg-slate-200 transition">
+                <button onClick={onToggleSidebar} className="md:hidden p-2 bg-slate-800 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 transition">
                     <Menu size={20}/>
                 </button>
             </div>

@@ -6,9 +6,7 @@ export class ExamsService {
   constructor(private prisma: PrismaService) {}
 
   // ==========================================
-  // ✨ HELPER: Robust Exam Type & CSV Mapper
-  // Ensures NEET always routes to MHT_CET and 
-  // matches exact CSV strings like 'JEE_Advanced'
+  // ✨ HELPER: Robust Exam Type Mapper
   // ==========================================
   private getExamTypeFilter(frontendType: string): any {
     if (!frontendType || frontendType === 'Any' || frontendType === 'undefined' || frontendType === 'null') {
@@ -24,7 +22,6 @@ export class ExamsService {
         return { in: ['JEE Main', 'JEE_main', 'JEE_Main', 'jee_main'] };
     }
     if (lower.includes('mht') || lower.includes('cet') || lower.includes('neet')) {
-        // Automatically route NEET to MHT_CET db pool
         return { in: ['MHT-CET', 'MHT_CET', 'MHTCET', 'mht_cet'] };
     }
     
@@ -46,6 +43,7 @@ export class ExamsService {
     });
   }
 
+  // ✨ ERRORS 2353 & 1005 FIXED HERE (Clean Relational Select)
   async getMyAttempts(userId: string) {
     return this.prisma.testAttempt.findMany({
       where: { 
@@ -54,7 +52,7 @@ export class ExamsService {
       },
       include: {
         exam: {
-          select: { title: true, totalMarks: true } 
+          select: { title: true, totalMarks: true, examType: true } 
         },
         answers: {
           include: {
@@ -66,7 +64,11 @@ export class ExamsService {
                   questionImage: true,
                   solutionImage: true,
                   correctOption: true,
-                  options: true 
+                  options: true,
+                  type: true, // Needed for MCQ vs Numerical check
+                  questionBank: {
+                      select: { explanation: true } // Extracted safely from the original bank
+                  }
               } 
             }
           }
@@ -138,6 +140,7 @@ export class ExamsService {
       subject: q.subject,
       marks: q.marks,
       negative: q.negative,
+      type: q.type, // Make sure student panel knows if it's numerical
       tags: [] 
     }));
 
@@ -146,7 +149,8 @@ export class ExamsService {
       exam: { 
           title: exam.title, 
           duration: exam.durationMin, 
-          totalMarks: exam.totalMarks 
+          totalMarks: exam.totalMarks,
+          examType: exam.examType 
       },
       questions: sanitizedQuestions,
       serverTime: new Date(),
@@ -260,6 +264,7 @@ export class ExamsService {
 
       if (sourceQuestions.length === 0) return { count: 0 };
 
+      // ✨ FIX: Guarantee that Topic and Type are mapped over during manual exam build!
       const examQuestionsData = sourceQuestions.map(q => ({
           examId,
           questionBankId: q.id,
@@ -269,6 +274,8 @@ export class ExamsService {
           options: q.options || {},
           correctOption: q.correctOption,
           subject: q.subject,
+          topic: q.topic,
+          type: q.type,
           difficulty: q.difficulty,
           marks: q.marks,
           negative: q.negative,
@@ -352,7 +359,7 @@ export class ExamsService {
       }
       
       if (subject) whereClause.subject = { equals: subject, mode: 'insensitive' };
-      if (topic) whereClause.topic = { contains: topic, mode: 'insensitive' }; // Safe topic string match
+      if (topic) whereClause.topic = { contains: topic, mode: 'insensitive' };
       if (searchQuery) whereClause.questionText = { contains: searchQuery, mode: 'insensitive' };
       
       if (showOnlyWithSolutions === 'true') {
@@ -421,7 +428,7 @@ export class ExamsService {
         difficulty: q.difficulty,
         topic: q.topic,                 
         type: q.type,
-        examType: q.examType // Save exact exam type (e.g., MHT_CET) directly from payload
+        examType: q.examType 
       }
     }));
     

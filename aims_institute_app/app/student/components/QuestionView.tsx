@@ -9,6 +9,7 @@ export default function QuestionView({
     totalQuestions, 
     answer, 
     isMarked, 
+    examType,
     onAnswer, 
     onMarkReview, 
     onClear, 
@@ -20,12 +21,14 @@ export default function QuestionView({
         const type = question.type ? question.type.toUpperCase() : '';
         if (type === 'INTEGER' || type === 'NUMERICAL') return 'INTEGER';
         if (type === 'MULTIPLE') return 'MULTIPLE';
-        // Auto-detect based on options if type is missing
         if (!question.options || Object.keys(question.options).length === 0) return 'INTEGER';
-        return 'SINGLE';
+        return 'MCQ';
     };
 
     const qType = getQType();
+    // ✨ MULTI-CORRECT LOGIC
+    const isMultiCorrect = examType === 'JEE Advanced' && qType === 'MCQ';
+    
     const options = question.options || {};
     const optionKeys = Object.keys(options).sort();
     const displayKeys = optionKeys.length > 0 ? optionKeys : ['a', 'b', 'c', 'd'];
@@ -33,10 +36,11 @@ export default function QuestionView({
     // Handle Option Selection
     const handleSelect = (key: string) => {
         let newVal = key;
-        if (qType === 'MULTIPLE') {
+        
+        if (isMultiCorrect || qType === 'MULTIPLE') {
             const current = answer ? answer.split(',') : [];
             if (current.includes(key)) {
-                newVal = current.filter((k: string) => k !== key).join(',');
+                newVal = current.filter((k: string) => k !== key).sort().join(',');
             } else {
                 newVal = [...current, key].sort().join(',');
             }
@@ -46,7 +50,6 @@ export default function QuestionView({
     };
 
     const handleIntegerInput = (val: string) => {
-        // Allow numbers, negative sign, single decimal
         if (/^-?\d*\.?\d*$/.test(val)) onAnswer(val);
     };
 
@@ -58,7 +61,7 @@ export default function QuestionView({
                      <span className="text-lg font-black text-slate-400">Q.{qIndex + 1}</span>
                      <span className="px-2.5 py-1 bg-blue-100 text-blue-700 text-[10px] font-bold rounded uppercase tracking-wide">{question.subject || 'General'}</span>
                      <span className={`px-2.5 py-1 text-[10px] font-bold rounded uppercase tracking-wide ${qType === 'INTEGER' ? 'bg-purple-100 text-purple-700' : 'bg-slate-200 text-slate-600'}`}>
-                         {qType}
+                         {qType === 'MCQ' ? (isMultiCorrect ? 'MCQ (MULTI)' : 'MCQ (SINGLE)') : qType}
                      </span>
                  </div>
                  <div className="flex items-center gap-4 text-xs font-bold">
@@ -67,13 +70,12 @@ export default function QuestionView({
                  </div>
             </div>
 
-            {/* QUESTION CONTENT - Updated for Larger Images */}
+            {/* QUESTION CONTENT */}
             <div className="p-6 flex-1 overflow-y-auto custom-scrollbar">
                 <div className="text-base md:text-lg text-slate-800 font-medium leading-relaxed mb-6">
                     <LatexRenderer content={question.questionText} />
                 </div>
                 
-                {/* Image Container - Big & Scrollable if needed */}
                 {question.questionImage && (
                     <div className="w-full my-6 bg-slate-50 rounded-xl border border-slate-100 p-2 flex justify-center">
                          <div className="relative max-w-full overflow-auto">
@@ -104,7 +106,7 @@ export default function QuestionView({
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {displayKeys.map(key => {
-                            const isSelected = qType === 'MULTIPLE' 
+                            const isSelected = isMultiCorrect || qType === 'MULTIPLE'
                                 ? (answer || '').split(',').includes(key)
                                 : answer === key;
                             
@@ -115,7 +117,7 @@ export default function QuestionView({
                                     className={`cursor-pointer px-4 py-3 rounded-lg border transition-all duration-200 flex items-center gap-3 relative group ${isSelected ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-100' : 'bg-white border-slate-200 text-slate-700 hover:border-blue-300 hover:shadow-sm'}`}
                                 >
                                     <div className={`w-6 h-6 flex items-center justify-center shrink-0`}>
-                                        {qType === 'MULTIPLE' 
+                                        {isMultiCorrect || qType === 'MULTIPLE'
                                             ? (isSelected ? <CheckSquare size={20} className="text-white"/> : <Square size={20} className="text-slate-300"/>)
                                             : (isSelected ? <CheckCircle2 size={20} className="text-white"/> : <Circle size={20} className="text-slate-300"/>)
                                         }
@@ -124,7 +126,6 @@ export default function QuestionView({
                                         {key.toUpperCase()}
                                     </span>
                                     <div className={`text-sm font-medium flex-1 ${isSelected ? 'text-white' : 'text-slate-700'}`}>
-                                        {/* Render text or image option */}
                                         <ContentRenderer content={options[key]} />
                                     </div>
                                 </div>

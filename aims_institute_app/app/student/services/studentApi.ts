@@ -16,15 +16,14 @@ const fetchWithAuth = async (url: string, options: any = {}) => {
   const res = await fetch(url, options);
   if (res.status === 401) {
     if (typeof window !== 'undefined') {
-      // Clear all possible token names just to be safe
       localStorage.removeItem('student_token');
       localStorage.removeItem('parent_token');
       localStorage.removeItem('admin_token');
       localStorage.removeItem('director_session');
-      localStorage.removeItem('aims_token'); // Added the new unified token
+      localStorage.removeItem('aims_token'); 
       
       alert('Session Expired: Your security token is invalid or has expired. Please log in again.');
-      window.location.reload(); // ✅ THE FIX: Reloads the current page instead of kicking to root
+      window.location.reload(); 
     }
     throw new Error('Unauthorized');
   }
@@ -35,7 +34,6 @@ export const studentApi = {
   // --- AUTH HELPERS ---
   getToken() {
     if (typeof window === 'undefined') return '';
-    // Check possible storage keys to be safe
     return localStorage.getItem('student_token') || localStorage.getItem('accessToken') || localStorage.getItem('aims_token') || '';
   },
 
@@ -51,7 +49,11 @@ export const studentApi = {
     }
     const data = await res.json();
     
-    // --- CRITICAL 401 FIX ---
+    // 🚨 STRICT ROLE GUARD
+    if (data.user && data.user.role !== 'STUDENT') {
+        throw new Error('Invalid Credentials: Not a student account.');
+    }
+    
     data.token = data.access_token || data.token || data.accessToken;
     
     return data;
@@ -79,7 +81,7 @@ export const studentApi = {
     } catch (e) { return []; }
   },
 
-  // --- RESULT ANALYTICS (CRITICAL UPDATE) ---
+  // --- RESULT ANALYTICS (CRITICAL UPDATE FOR SOLUTIONS) ---
   async getResults(token: string) {
     try {
       const res = await fetchWithAuth(`${API_URL}/student/results`, {
@@ -92,17 +94,14 @@ export const studentApi = {
       if (!Array.isArray(attempts)) return [];
       
       return attempts.map((attempt: any) => {
-        // 1. Get the master list of questions from the exam definition
-        // This ensures we show "Skipped" questions too, not just the ones answered.
-        const questionsList = attempt.exam?.questions || [];
+        // 1. Get the master list of questions
+        const questionsList = attempt.answers?.map((a: any) => a.question).filter(Boolean) || [];
         
-        // 2. Create a Map of user answers for fast lookup
         const answersMap = new Map();
         if (Array.isArray(attempt.answers)) {
             attempt.answers.forEach((a: any) => answersMap.set(a.questionId, a));
         }
 
-        // 3. Map over QUESTIONS to build metrics
         const questionMetrics = questionsList.map((question: any, idx: number) => {
             const userAnswer = answersMap.get(question.id);
             
@@ -113,7 +112,6 @@ export const studentApi = {
 
             if (userAnswer) {
                 selectedOption = userAnswer.selectedOption;
-                // If they selected something, check if correct
                 if (selectedOption) {
                     status = userAnswer.isCorrect ? 'CORRECT' : 'WRONG';
                 }
@@ -121,7 +119,6 @@ export const studentApi = {
                 marksAwarded = userAnswer.marksAwarded || 0;
             }
 
-            // Safely parse JSON options if they come as a string
             let options = question.options;
             if (typeof options === 'string') {
                 try { options = JSON.parse(options); } catch (e) {}
@@ -131,7 +128,7 @@ export const studentApi = {
                 id: idx + 1, 
                 status: status,
                 timeSpent: timeTaken,
-                viewCount: 1, // Placeholder
+                viewCount: 1, 
                 subject: question.subject || 'General',
                 questionText: question.questionText || 'Question text not available',
                 questionImage: question.questionImage, 
@@ -139,7 +136,11 @@ export const studentApi = {
                 options: options || {},
                 selectedOption: selectedOption,
                 correctOption: question.correctOption, 
-                marks: marksAwarded
+                marks: marksAwarded,
+                
+                // ✨ GRAB EXPLANATION EITHER FROM QUESTION OR RELATION
+                explanation: question.questionBank?.explanation || question.explanation || question.solution, 
+                solutionImage: question.solutionImage
             };
         });
 
@@ -147,12 +148,13 @@ export const studentApi = {
             id: attempt.id,
             examId: attempt.examId, 
             examTitle: attempt.exam?.title || 'Unknown Exam',
+            examType: attempt.exam?.examType || 'JEE Main',
             score: attempt.totalScore || 0,
             totalMarks: attempt.exam?.totalMarks || 0,
             rank: attempt.rank || '-', 
             date: attempt.submittedAt || attempt.startedAt || new Date().toISOString(),
             analytics: {
-                questions: questionMetrics // This array is now fully populated
+                questions: questionMetrics 
             }
         };
       });
@@ -197,7 +199,6 @@ export const studentApi = {
     if (!res.ok) {
         if (res.status === 404) throw new Error("Exam not found or not active.");
         if (res.status === 403) throw new Error("Access denied.");
-        // Try to get error message from backend
         const err = await res.json().catch(() => ({}));
         throw new Error(err.message || "Failed to start exam.");
     }
@@ -219,7 +220,6 @@ export const studentApi = {
   }
 };
 
-// --- Export for new Unified Login Page (app/page.tsx) ---
 export const loginStudent = async (identifier: string, password: string) => {
   return await studentApi.login(identifier, password);
 };

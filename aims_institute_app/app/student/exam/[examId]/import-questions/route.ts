@@ -30,14 +30,13 @@ export async function POST(
         
         subject: String(q.subject || "General"),
         topic: String(q.topic || "General"),
-        type: String(q.type || "SINGLE").toUpperCase(), 
+        type: String(q.type || q.question_type || "MCQ").toUpperCase(), // Respect real payload
         difficulty: String(q.difficulty || "MEDIUM").toUpperCase(),
         
         options: q.options || {}, 
         correctOption: String(q.correctOption || "a"),
         
         marks: Number(q.marks) || 4,
-        // 🚨 QA FIX: Do not hardcode negative marks! Respect the payload.
         negative: Number(q.negative) || -1,
         orderIndex: index + 1
     }));

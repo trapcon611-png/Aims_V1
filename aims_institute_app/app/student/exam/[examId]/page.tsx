@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Loader2, AlertTriangle, CheckCircle, WifiOff, ShieldAlert, PlayCircle, Clock, Lock, LogOut } from 'lucide-react';
+import { Loader2, AlertTriangle, CheckCircle, WifiOff, PlayCircle, Clock, Lock, LogOut } from 'lucide-react';
 import { studentApi } from '../../services/studentApi';
 import ExamHeader from '../../components/ExamHeader';
 import QuestionPalette from '../../components/QuestionPalette';
@@ -9,7 +9,7 @@ import QuestionView from '../../components/QuestionView';
 
 interface ExamData {
   attemptId: string;
-  exam: { title: string; duration: number; totalMarks: number; scheduledAt: string; };
+  exam: { title: string; duration: number; totalMarks: number; scheduledAt: string; examType?: string; };
   questions: any[];
   serverTime: string;
 }
@@ -26,6 +26,7 @@ export default function ExamPage() {
   
   // Workflow States
   const [hasStarted, setHasStarted] = useState(false); 
+  const [agreed, setAgreed] = useState(false); // NTA Instructions Checkbox
   const [isOffline, setIsOffline] = useState(false);
   const [isTooEarly, setIsTooEarly] = useState(false);
   
@@ -42,8 +43,8 @@ export default function ExamPage() {
   const timeSpentRef = useRef<Record<string, number>>({});
   const lastSwitchTime = useRef<number>(Date.now());
   const examIdRef = useRef(examId);
-  const currentQIndexRef = useRef(currentQIndex); // 🚨 QA FIX: Needed for final time capture
-  const examDataRef = useRef<ExamData | null>(null); // 🚨 QA FIX: Needed for final time capture
+  const currentQIndexRef = useRef(currentQIndex); 
+  const examDataRef = useRef<ExamData | null>(null); 
 
   // Sync state to refs
   useEffect(() => { answersRef.current = answers; }, [answers]);
@@ -62,14 +63,13 @@ export default function ExamPage() {
       };
   }, []);
 
-  // --- SUBMIT FUNCTION (STABLE & MATHEMATICALLY SOUND) ---
+  // --- SUBMIT FUNCTION ---
   const handleSubmit = useCallback(async (auto = false) => {
     if(!auto && !window.confirm("Are you sure you want to submit the exam?")) return;
     
     setSubmissionStatus('SUBMITTING');
     const token = studentApi.getToken();
     
-    // 🚨 QA FIX: Capture time spent on the VERY LAST question before locking
     const currentExam = examDataRef.current;
     if (currentExam && currentExam.questions.length > 0) {
         const finalQId = currentExam.questions[currentQIndexRef.current].id;
@@ -138,14 +138,11 @@ export default function ExamPage() {
           try {
               const data = await studentApi.startAttempt(examId, token);
               
-              // --- DATA NORMALIZATION: Fix JSON Stringified Options & Broken Images ---
               if (data && data.questions) {
                   data.questions = data.questions.map((q: any) => {
-                      // 1. Fix Question Image
                       let qImageUrl = q.questionImage || q.question_images?.[0];
                       q.questionImage = typeof qImageUrl === 'string' && qImageUrl.length > 5 && qImageUrl !== 'null' ? qImageUrl : null;
 
-                      // 2. Fix Options
                       if (q.options) {
                           let rawOpts: any[] = [];
                           const sourceOpts = q.options || q.options_dict || [];
@@ -206,9 +203,7 @@ export default function ExamPage() {
                       return q;
                   });
               }
-              // --- END NORMALIZATION ---
 
-              // 1. Check Start Time
               const startTimeDate = new Date(data.exam.scheduledAt);
               const now = new Date();
               if (startTimeDate > now) {
@@ -220,7 +215,6 @@ export default function ExamPage() {
 
               setExamData(data);
 
-              // 2. Restore State
               const savedAns = localStorage.getItem(`exam_ans_${data.attemptId}`);
               if(savedAns) {
                   const parsed = JSON.parse(savedAns);
@@ -234,7 +228,6 @@ export default function ExamPage() {
               const savedTime = localStorage.getItem(`exam_time_${data.attemptId}`);
               if(savedTime) timeSpentRef.current = JSON.parse(savedTime);
 
-              // 3. Timer Setup
               let startTimestamp = parseInt(localStorage.getItem(`exam_start_${data.attemptId}`) || '0');
               if (!startTimestamp) {
                   startTimestamp = Date.now();
@@ -325,7 +318,6 @@ export default function ExamPage() {
   
   if (error) return <div className="h-screen flex flex-col items-center justify-center bg-slate-50 p-4 text-center"><AlertTriangle className="text-red-500 mb-4" size={48}/><h2 className="text-xl font-bold text-slate-800">Access Denied</h2><p className="text-red-600 mt-2">{error}</p><button onClick={() => router.push('/student')} className="mt-6 px-6 py-2 bg-slate-800 text-white rounded-lg">Return to Dashboard</button></div>;
 
-  // Too Early Screen
   if (isTooEarly) return (
       <div className="h-screen flex flex-col items-center justify-center bg-slate-50 p-4 text-center">
           <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border border-slate-200">
@@ -338,42 +330,127 @@ export default function ExamPage() {
       </div>
   );
 
-  // Completion Screen
   if (submissionStatus === 'COMPLETED') return <div className="h-screen flex flex-col items-center justify-center bg-slate-50"><CheckCircle className="text-green-500 mb-4" size={64}/><h2 className="text-2xl font-bold text-slate-800">Exam Submitted!</h2><p className="text-slate-500 mt-2">Go to the Results tab to view your score.</p><button onClick={() => router.push('/student')} className="mt-6 px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg transition">Return Home</button></div>;
 
-  // Rules Modal
+  // --- NTA STYLE INSTRUCTIONS MODAL ---
   if (!hasStarted) {
       return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-in fade-in">
-              <div className="bg-white max-w-2xl w-full rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
-                  <div className="bg-slate-50 border-b border-slate-200 p-6">
-                      <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                          <ShieldAlert className="text-blue-600"/> Exam Rules & Regulations
-                      </h2>
-                  </div>
-                  <div className="p-8 space-y-4 text-sm text-slate-600">
-                      <ul className="list-disc pl-5 space-y-2 marker:text-blue-500">
-                          <li><strong>Full Screen:</strong> Take the exam in full-screen mode to avoid distractions.</li>
-                          <li><strong>Anti-Cheating:</strong> Switching tabs is monitored. <span className="text-red-600 font-bold">3 violations will auto-submit the exam.</span></li>
-                          <li><strong>Connectivity:</strong> Ensure a stable internet connection. If disconnected, the timer will PAUSE locally, but do not close the window.</li>
-                          <li><strong>Submission:</strong> Once submitted, you cannot change your answers.</li>
-                      </ul>
-                      <div className="pt-6 border-t border-slate-100 flex justify-between items-center">
-                          <button onClick={() => router.push('/student')} className="text-slate-400 hover:text-slate-600 font-bold flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-slate-100 transition"><LogOut size={16}/> Exit</button>
-                          <button 
-                             onClick={() => setHasStarted(true)} 
-                             className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-blue-200 transition flex items-center gap-2 active:scale-95"
-                          >
-                             I Agree, Start Exam <PlayCircle size={18}/>
-                          </button>
-                      </div>
-                  </div>
-              </div>
-          </div>
+        <div className="fixed inset-0 z-50 flex flex-col bg-slate-50 font-sans">
+            {/* Top NTA Style Header */}
+            <div className="bg-slate-900 border-b border-slate-800 px-6 py-4 flex justify-between items-center shrink-0 shadow-md">
+                <div className="h-10 w-40 relative">
+                    <img src="/whitelogo.png" alt="System Logo" className="w-full h-full object-contain object-left" />
+                </div>
+                <h1 className="text-white font-bold text-lg hidden sm:block tracking-wide">
+                    {examData?.exam?.title || 'EXAMINATION INSTRUCTIONS'}
+                </h1>
+            </div>
+            
+            {/* Scrollable Content Area */}
+            <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
+                <div className="max-w-4xl mx-auto bg-white border border-slate-200 shadow-sm rounded-lg overflow-hidden">
+                    
+                    <div className="p-4 bg-blue-50 border-b border-blue-100">
+                        <h2 className="text-lg font-bold text-blue-900 text-center uppercase tracking-wider">Please read the instructions carefully</h2>
+                    </div>
+                    
+                    <div className="p-6 md:p-10 space-y-8 text-sm text-slate-700 leading-relaxed">
+                        
+                        {/* Section 1: General */}
+                        <div>
+                            <h3 className="font-bold text-base mb-3 underline text-slate-900">General Instructions:</h3>
+                            <ol className="list-decimal pl-5 space-y-3">
+                                <li>Total duration of examination is <strong className="text-slate-900">{examData?.exam?.duration || 180} minutes</strong>.</li>
+                                <li>The clock will be set at the server. The countdown timer in the top right corner of the screen will display the remaining time available for you to complete the examination. When the timer reaches zero, the examination will end by itself. You will not be required to end or submit your examination manually.</li>
+                                <li>
+                                    The Question Palette displayed on the right side of the screen will show the status of each question using one of the following symbols:
+                                    
+                                    <div className="mt-5 mb-3 space-y-4 font-medium pl-2">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-8 h-8 flex items-center justify-center border border-slate-300 bg-slate-100 rounded text-slate-500 font-bold shrink-0 shadow-sm">1</div>
+                                            <span>You have not visited the question yet.</span>
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-8 h-8 flex items-center justify-center border border-slate-300 bg-white rounded text-slate-600 font-bold shrink-0 shadow-sm">2</div>
+                                            <span>You have not answered the question.</span>
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-8 h-8 flex items-center justify-center border border-green-300 bg-green-100 text-green-700 font-bold rounded shrink-0 shadow-sm">3</div>
+                                            <span>You have answered the question.</span>
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-8 h-8 flex items-center justify-center border border-orange-300 bg-orange-100 text-orange-700 font-bold rounded shrink-0 relative shadow-sm">
+                                                4
+                                            </div>
+                                            <span>You have NOT answered the question, but have marked the question for review.</span>
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-8 h-8 flex items-center justify-center border border-orange-300 bg-orange-100 text-orange-700 font-bold rounded shrink-0 relative shadow-sm">
+                                                5
+                                                <div className="absolute top-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full -mr-1 -mt-1 border border-white"/>
+                                            </div>
+                                            <span>The question(s) "Answered and Marked for Review" will be considered for evaluation.</span>
+                                        </div>
+                                    </div>
+                                </li>
+                                <li>You can click on the arrow which appears to the left of the question palette to collapse the question palette thereby maximizing the question window. To view the question palette again, you can click on the menu icon on the right side.</li>
+                            </ol>
+                        </div>
+                        
+                        {/* Section 2: Security & Strict Rules */}
+                        <div>
+                            <h3 className="font-bold text-base mb-3 underline text-slate-900">Strict Anti-Cheating & Security:</h3>
+                            <ol className="list-decimal pl-5 space-y-3">
+                                <li><strong>Tab Switching Monitored:</strong> Navigating away from the exam window or opening other applications is strictly prohibited. <span className="text-red-600 font-bold">3 violations will result in automatic submission of the exam.</span></li>
+                                <li><strong>Full Screen:</strong> It is highly recommended to take the exam in full-screen mode to avoid accidental clicks outside the window.</li>
+                                <li><strong>Connectivity:</strong> Ensure a stable internet connection. If disconnected, the timer will PAUSE locally, but do not close the window. The system will sync your answers automatically when reconnected.</li>
+                            </ol>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+
+            {/* Footer / Declaration Checkbox */}
+            <div className="bg-white border-t border-slate-200 p-4 md:p-6 shrink-0 shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)] z-10">
+                <div className="max-w-4xl mx-auto flex flex-col gap-5">
+                    <label className="flex items-start gap-4 cursor-pointer group bg-slate-50 p-4 rounded-xl border border-slate-200 transition-colors hover:bg-blue-50/50 hover:border-blue-200">
+                        <input 
+                            type="checkbox" 
+                            className="mt-0.5 w-5 h-5 cursor-pointer accent-blue-600 border-slate-300 rounded shrink-0"
+                            checked={agreed}
+                            onChange={(e) => setAgreed(e.target.checked)}
+                        />
+                        <span className="text-[13px] md:text-sm text-slate-700 font-medium select-none group-hover:text-slate-900 leading-relaxed">
+                            I have read and understood the instructions. All computer hardware allotted to me are in proper working condition. I declare that I am not in possession of / not wearing / not carrying any prohibited gadget like mobile phone, bluetooth devices etc. /any prohibited material with me into the Examination Hall. I agree that in case of not adhering to the instructions, I shall be liable to be debarred from this Test and/or to disciplinary action.
+                        </span>
+                    </label>
+                    <div className="flex justify-between items-center border-t border-slate-100 pt-4 mt-1">
+                        <button onClick={() => router.push('/student')} className="text-slate-500 hover:text-slate-800 font-bold flex items-center gap-2 px-5 py-2.5 rounded-lg hover:bg-slate-100 transition">
+                            <LogOut size={16}/> Cancel
+                        </button>
+                        <button 
+                            onClick={() => {
+                                if (agreed) {
+                                    // Optionally request full screen upon starting (if supported by browser)
+                                    try { document.documentElement.requestFullscreen().catch(() => {}); } catch(e) {}
+                                    setHasStarted(true);
+                                }
+                            }} 
+                            disabled={!agreed}
+                            className={`px-8 py-3 rounded-xl font-bold shadow-md transition flex items-center gap-2 ${agreed ? 'bg-blue-600 hover:bg-blue-700 text-white active:scale-95 shadow-blue-200/50' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+                        >
+                            Proceed <PlayCircle size={18}/>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
       );
   }
 
   const currentQ = examData!.questions[currentQIndex];
+  const examType = examData!.exam.examType || 'JEE Main'; // ✨ Passes Exam Type down to QuestionView
 
   return (
       <div className="flex h-screen bg-slate-100 font-sans overflow-hidden select-none relative">
@@ -402,6 +479,7 @@ export default function ExamPage() {
                   totalQuestions={examData!.questions.length}
                   answer={answers[currentQ.id]}
                   isMarked={markedForReview[currentQ.id]}
+                  examType={examType} // ✨ Passed to properly render Multi-Correct
                   onAnswer={handleAnswer}
                   onMarkReview={handleReview}
                   onClear={handleClear}

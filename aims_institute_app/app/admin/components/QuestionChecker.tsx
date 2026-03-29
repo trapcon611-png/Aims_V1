@@ -1,22 +1,26 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Search, Loader2, Filter, CheckCircle, ChevronLeft, ChevronRight, Edit3, Eye, Lightbulb, ToggleLeft, ToggleRight, AlertCircle, Trash2, Image as ImageIcon, X, Plus } from 'lucide-react';
+import { Search, Loader2, Filter, CheckCircle, ChevronLeft, ChevronRight, Edit3, Eye, Lightbulb, ToggleLeft, ToggleRight, AlertCircle, Trash2, Image as ImageIcon, X, Plus, Square, CheckSquare } from 'lucide-react';
 
 // --- DYNAMIC CSV AVAILABILITY MAP ---
 const UPLOADED_CSVS: Record<string, string[]> = {
     "JEE Advanced": ["Physics", "Chemistry", "Mathematics"],
-    "JEE Main": ["Physics", "Chemistry", "Mathematics"],
+    "JEE Main": ["Physics", "Chemistry", "Mathematics", "Biology"],
     "MHT-CET": ["Physics", "Chemistry", "Mathematics", "Biology"],
     "NEET": ["Physics", "Chemistry", "Biology"] 
 };
 
-// --- DB STRING MAPPER ---
-const getDbExamType = (uiType: string) => {
+// --- DB STRING MAPPER (SOLVES NEET ROUTING) ---
+const getDbExamType = (uiType: string, subject: string) => {
     if (uiType === 'JEE Advanced') return 'JEE_Advanced';
     if (uiType === 'JEE Main') return 'JEE_Main';
     if (uiType === 'MHT-CET') return 'MHT_CET';
-    if (uiType === 'NEET') return 'MHT_CET'; 
+    if (uiType === 'NEET') {
+        // Route NEET Biology to Mains, and Physics/Chem to CET
+        if (subject.toLowerCase() === 'biology') return 'JEE_Main';
+        return 'MHT_CET'; 
+    }
     return uiType;
 };
 
@@ -146,6 +150,9 @@ const CreateQuestionCard = ({ defaultExamType, defaultSubject, defaultTopic, onC
     });
 
     const optKeys = ['a', 'b', 'c', 'd'] as const;
+    
+    // ✨ MULTI-CORRECT LOGIC FOR JEE ADVANCED
+    const isMultiCorrect = examType === 'JEE Advanced' && qType === 'MCQ';
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, key: string) => {
         const file = e.target.files?.[0];
@@ -179,6 +186,20 @@ const CreateQuestionCard = ({ defaultExamType, defaultSubject, defaultTopic, onC
 
     const removeOptionImage = (key: string) => setQOptsState((prev: any) => ({ ...prev, [`img_${key}`]: null }));
 
+    const handleToggleCorrectOption = (key: string) => {
+        if (!isMultiCorrect) {
+            setCorrectOption(key);
+        } else {
+            let current = correctOption === 'pending' || !correctOption ? [] : correctOption.split(',');
+            if (current.includes(key)) {
+                current = current.filter((k: string) => k !== key);
+            } else {
+                current.push(key);
+            }
+            setCorrectOption(current.length > 0 ? current.sort().join(',') : 'pending');
+        }
+    };
+
     const handleCreateClick = (difficulty: string) => {
         if (!qText.trim() && !qImageState) {
             return showToast("Please enter question text or upload a question image.", "error");
@@ -186,7 +207,7 @@ const CreateQuestionCard = ({ defaultExamType, defaultSubject, defaultTopic, onC
         
         if (difficulty !== 'pending') {
             if (qType === 'MCQ' && correctOption === 'pending') {
-                return showToast("Please select the correct Option (A, B, C, or D).", "error");
+                return showToast("Please select the correct Option(s).", "error");
             }
             if (qType === 'NUMERICAL' && (!correctOption || correctOption === 'pending')) {
                 return showToast("Please enter the correct numerical answer.", "error");
@@ -198,7 +219,7 @@ const CreateQuestionCard = ({ defaultExamType, defaultSubject, defaultTopic, onC
         }
 
         const payload = {
-            examType: getDbExamType(examType),
+            examType: getDbExamType(examType, subject),
             subject,
             topic,
             type: qType,
@@ -220,7 +241,7 @@ const CreateQuestionCard = ({ defaultExamType, defaultSubject, defaultTopic, onC
                 <div className="flex flex-wrap items-center gap-3">
                     <div className="flex items-center gap-2 bg-blue-100/50 px-3 py-1.5 rounded-lg border border-blue-200">
                         <span className="text-[10px] font-bold text-blue-600 uppercase">Exam:</span>
-                        <select value={examType} onChange={e => setExamType(e.target.value)} className="bg-transparent text-xs font-bold text-blue-900 outline-none cursor-pointer">
+                        <select value={examType} onChange={e => { setExamType(e.target.value); setCorrectOption('pending'); }} className="bg-transparent text-xs font-bold text-blue-900 outline-none cursor-pointer">
                             {Object.keys(UPLOADED_CSVS).map(ex => <option key={ex} value={ex}>{ex}</option>)}
                         </select>
                     </div>
@@ -233,7 +254,7 @@ const CreateQuestionCard = ({ defaultExamType, defaultSubject, defaultTopic, onC
                     <div className="flex items-center gap-2 bg-rose-100/50 px-3 py-1.5 rounded-lg border border-rose-200">
                         <span className="text-[10px] font-bold text-rose-600 uppercase">Type:</span>
                         <select value={qType} onChange={e => { setQType(e.target.value); setCorrectOption('pending'); }} className="bg-transparent text-xs font-bold text-rose-900 outline-none cursor-pointer">
-                            <option value="MCQ">MCQ (4 Options)</option>
+                            <option value="MCQ">MCQ {isMultiCorrect ? '(Multi-Correct)' : '(Single)'}</option>
                             <option value="NUMERICAL">Numerical</option>
                         </select>
                     </div>
@@ -279,14 +300,23 @@ const CreateQuestionCard = ({ defaultExamType, defaultSubject, defaultTopic, onC
                     {qType === 'MCQ' ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
                             {optKeys.map((key) => {
-                                const isCorrect = correctOption === key;
+                                const isCorrect = isMultiCorrect 
+                                    ? (correctOption !== 'pending' && correctOption.split(',').includes(key))
+                                    : correctOption === key;
+                                    
                                 const textVal = qOptsState[key];
                                 const imgVal = qOptsState[`img_${key}`];
 
                                 return (
                                     <label key={key} className={`p-3 rounded-xl border text-sm flex flex-col gap-2 transition-colors ${isCorrect ? 'bg-green-50 border-green-400 ring-1 ring-green-400 shadow-sm' : 'bg-white border-slate-200 shadow-sm'}`}>
                                         <div className="flex items-center gap-2">
-                                            <input type="radio" name="new-q-correct" checked={isCorrect} onChange={() => setCorrectOption(key)} className="cursor-pointer" />
+                                            <input 
+                                                type={isMultiCorrect ? "checkbox" : "radio"} 
+                                                name={isMultiCorrect ? `new-q-correct-${key}` : "new-q-correct"} 
+                                                checked={isCorrect} 
+                                                onChange={() => handleToggleCorrectOption(key)} 
+                                                className={`cursor-pointer w-4 h-4 text-green-600 focus:ring-green-500 ${isMultiCorrect ? 'rounded' : ''}`}
+                                            />
                                             <span className={`font-black uppercase text-xs ${isCorrect ? 'text-green-700' : 'text-slate-500'}`}>Option {key} {isCorrect && '(Correct)'}</span>
                                         </div>
                                         <input type="text" value={textVal} onChange={e => setQOptsState({...qOptsState, [key]: e.target.value})} className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 outline-none text-xs font-mono focus:border-blue-500" placeholder={`Option ${key.toUpperCase()} Text`} />
@@ -408,10 +438,16 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
     const initialType = q.type === 'NUMERICAL' || (!hasAnyOptions && q.correctOption && q.correctOption !== 'pending' && !['a','b','c','d'].includes(String(q.correctOption).toLowerCase())) ? 'NUMERICAL' : 'MCQ';
     
     const [qTypeState, setQTypeState] = useState(initialType);
+    
+    // ✨ MULTI-CORRECT LOGIC FOR JEE ADVANCED
+    const isMultiCorrect = examTypeUiSelection === 'JEE Advanced' && qTypeState === 'MCQ';
 
     const initialCorrect = useMemo(() => {
         if (!q.correctOption || q.correctOption === 'pending') return 'pending';
         if (initialType === 'NUMERICAL') return q.correctOption; 
+        
+        // If it's multi-correct from the DB, return it as-is (e.g. "a,c")
+        if (String(q.correctOption).includes(',')) return String(q.correctOption).toLowerCase();
 
         let val = String(q.correctOption).toLowerCase().trim();
         return ['a', 'b', 'c', 'd'].includes(val) ? val : 'pending';
@@ -425,6 +461,7 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
     const [solImageState, setSolImageState] = useState(q.solutionImage || null);
     const [solTextState, setSolTextState] = useState(q.explanation || '');
 
+    // ✨ THIS MAGICALLY SYNCS THE CARD TOPIC IF THE MASTER FILTER CHANGES
     useEffect(() => {
         if (defaultTopic) setSelectedTopic(defaultTopic);
     }, [defaultTopic]);
@@ -464,6 +501,20 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
 
     const removeOptionImage = (key: string) => setQOptsState(prev => ({ ...prev, [`img_${key}`]: null }));
 
+    const handleToggleCorrectOption = (key: string) => {
+        if (!isMultiCorrect) {
+            setCorrectOption(key);
+        } else {
+            let current = correctOption === 'pending' || !correctOption ? [] : correctOption.split(',');
+            if (current.includes(key)) {
+                current = current.filter((k: string) => k !== key);
+            } else {
+                current.push(key);
+            }
+            setCorrectOption(current.length > 0 ? current.sort().join(',') : 'pending');
+        }
+    };
+
     const handleSaveDraftClick = () => {
         const updatedQuestion = {
             ...q,
@@ -475,7 +526,7 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
             correctOption: correctOption,
             topic: selectedTopic,
             type: qTypeState,
-            examType: q.examType || getDbExamType(examTypeUiSelection)
+            examType: q.examType || getDbExamType(examTypeUiSelection, q.subject) // Maintain correct routing
         };
         onSaveDraft(updatedQuestion, selectedTopic);
     };
@@ -495,7 +546,7 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
             correctOption: correctOption,
             topic: selectedTopic,
             type: qTypeState,
-            examType: q.examType || getDbExamType(examTypeUiSelection) 
+            examType: q.examType || getDbExamType(examTypeUiSelection, q.subject)
         };
 
         onApprove(updatedQuestion, difficulty, selectedTopic);
@@ -509,7 +560,7 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
                         {q.subject || 'Physics'}
                     </span>
                     <span className={`px-2 py-0.5 border rounded text-[10px] font-bold uppercase ${qTypeState === 'MCQ' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>
-                        {qTypeState === 'MCQ' ? 'MCQ' : 'Numerical'}
+                        {qTypeState === 'MCQ' ? (isMultiCorrect ? 'MCQ (Multi)' : 'MCQ') : 'Numerical'}
                     </span>
                     <span className="px-2 py-0.5 bg-blue-50 border border-blue-200 rounded text-[10px] font-bold uppercase text-blue-700">
                         DB: {q.examType || 'General'}
@@ -606,7 +657,7 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
                                 }}
                                 className="bg-white border border-blue-200 rounded-lg px-3 py-1.5 text-xs font-bold text-blue-900 outline-none focus:border-blue-500 shadow-sm cursor-pointer"
                             >
-                                <option value="MCQ">Multiple Choice (4 Options)</option>
+                                <option value="MCQ">Multiple Choice {isMultiCorrect ? '(Multi-Correct)' : '(Single Option)'}</option>
                                 <option value="NUMERICAL">Numerical Answer</option>
                             </select>
                         </div>
@@ -615,7 +666,10 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
                     {qTypeState === 'MCQ' ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                             {optKeys.map((key) => {
-                                const isCorrect = correctOption === key;
+                                const isCorrect = isMultiCorrect 
+                                    ? (correctOption !== 'pending' && correctOption.split(',').includes(key))
+                                    : correctOption === key;
+                                    
                                 const textVal = qOptsState[key];
                                 const imgVal = qOptsState[`img_${key}`];
 
@@ -627,11 +681,11 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
                                         }`}
                                     >
                                         <input 
-                                            type="radio" 
-                                            name={`correct-${q.id}`} 
+                                            type={isMultiCorrect ? "checkbox" : "radio"} 
+                                            name={isMultiCorrect ? `correct-${q.id}-${key}` : `correct-${q.id}`} 
                                             checked={isCorrect} 
-                                            onChange={() => setCorrectOption(key)}
-                                            className="mt-1 shrink-0 cursor-pointer"
+                                            onChange={() => handleToggleCorrectOption(key)}
+                                            className={`mt-1 shrink-0 cursor-pointer w-4 h-4 text-green-600 focus:ring-green-500 border-slate-300 ${isMultiCorrect ? 'rounded' : ''}`}
                                         />
                                         <span className={`font-black uppercase w-5 shrink-0 pt-0.5 ${isCorrect ? 'text-green-700' : 'text-slate-400'}`}>
                                             {key}.
@@ -856,7 +910,8 @@ export default function QuestionChecker() {
                 API_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001';
             }
             try {
-                const dbExamType = getDbExamType(examType);
+                // Pass BOTH examType and Subject to cleanly route NEET
+                const dbExamType = getDbExamType(examType, subject);
                 const res = await fetch(`${API_URL}/exams/pending-topics?examType=${encodeURIComponent(dbExamType)}&subject=${encodeURIComponent(subject)}`);
                 if (res.ok) {
                     const data = await res.json();
@@ -878,7 +933,9 @@ export default function QuestionChecker() {
             }
             
             const params = new URLSearchParams();
-            params.append('examType', getDbExamType(examType));
+            
+            // Pass BOTH examType and Subject to cleanly route NEET
+            params.append('examType', getDbExamType(examType, subject));
             params.append('subject', subject);
             
             if (topic) params.append('topic', topic);
@@ -1075,12 +1132,19 @@ export default function QuestionChecker() {
                         </select>
                     </div>
 
+                    {/* ✨ EDITABLE TOPIC FILTER: Uses Datalist so you can type the correct spelling */}
                     <div className="md:col-span-3">
                         <label className={labelStyle}>Topic / Chapter</label>
-                        <select className={inputStyle} value={topic} onChange={e => { setTopic(e.target.value); setCurrentPage(1); }} disabled={availableTopicsWithCount.length === 0}>
-                            <option value="">-- All Topics --</option>
+                        <input 
+                            list="topic-options"
+                            className={inputStyle} 
+                            value={topic} 
+                            onChange={e => { setTopic(e.target.value); setCurrentPage(1); }} 
+                            placeholder="Type to search or edit..."
+                        />
+                        <datalist id="topic-options">
                             {availableTopicsWithCount.map((t: any) => <option key={t.name} value={t.name}>{t.name} ({t.count})</option>)}
-                        </select>
+                        </datalist>
                     </div>
 
                     <div className="md:col-span-4 relative">
