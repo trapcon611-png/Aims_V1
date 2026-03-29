@@ -5,41 +5,102 @@ import { PrismaService } from '../prisma/prisma.service';
 export class ExamsService {
   constructor(private prisma: PrismaService) {}
 
-  // ==========================================
-  // ✨ HELPER: Robust Exam Type Mapper
-  // ==========================================
+  // ✨ FIX 1: Enhanced Exam Type Matching (Catches "advance" without the d)
   private getExamTypeFilter(frontendType: string): any {
-    if (!frontendType || frontendType === 'Any' || frontendType === 'undefined' || frontendType === 'null') {
-        return undefined;
-    }
-    
-    const lower = frontendType.toLowerCase();
-    
-    if (lower.includes('advanced')) {
-        return { in: ['JEE Advanced', 'JEE_advanced', 'JEE_Advanced', 'jee_advanced'] };
-    }
-    if (lower.includes('main')) {
-        return { in: ['JEE Main', 'JEE_main', 'JEE_Main', 'jee_main'] };
-    }
-    if (lower.includes('mht') || lower.includes('cet') || lower.includes('neet')) {
-        return { in: ['MHT-CET', 'MHT_CET', 'MHTCET', 'mht_cet'] };
-    }
-    
-    return frontendType;
+      if (!frontendType || frontendType === 'Any' || frontendType === 'undefined' || frontendType === 'null') {
+          return undefined;
+      }
+      
+      const lower = frontendType.toLowerCase();
+      
+      if (lower.includes('advanced') || lower.includes('advance')) {
+          return { 
+              in: ['JEE_Advanced', 'JEE Advanced', 'JEE_advanced', 'jee advanced', 'advance', 'ADVANCE', 'JEE Advance'] 
+          };
+      }
+      
+      if (lower.includes('main') || lower === 'jee' || lower === 'jee_main') {
+          return { 
+              in: ['JEE_Main', 'JEE Main', 'JEE_main', 'jee main', 'JEE', 'jee', 'mains', 'MAINS'] 
+          };
+      }
+      
+      if (lower.includes('mht') || lower.includes('cet')) {
+          return { 
+              in: ['MHT_CET', 'MHT-CET', 'MHTCET', 'mht cet', 'cet', 'CET'] 
+          };
+      }
+      
+      if (lower.includes('neet')) {
+          return { 
+              in: ['NEET', 'neet'] 
+          };
+      }
+      
+      return { 
+          contains: frontendType, 
+          mode: 'insensitive' 
+      };
+  }
+
+  // ✨ FIX 2: Brand New Subject Matcher (Catches MATH vs Mathematics)
+  private getSubjectFilter(frontendSubject: string): any {
+      if (!frontendSubject || frontendSubject === 'Any' || frontendSubject === '') {
+          return undefined;
+      }
+      
+      const lower = frontendSubject.toLowerCase();
+      
+      if (lower.includes('math')) {
+          return { 
+              in: ['Math', 'MATH', 'Maths', 'Mathematics', 'mathematics', 'MATHS'] 
+          };
+      }
+      
+      if (lower.includes('phy')) {
+          return { 
+              in: ['Physics', 'PHYSICS', 'physics', 'Phy', 'PHY'] 
+          };
+      }
+      
+      if (lower.includes('chem')) {
+          return { 
+              in: ['Chemistry', 'CHEMISTRY', 'chemistry', 'Chem', 'CHEM'] 
+          };
+      }
+      
+      if (lower.includes('bio')) {
+          return { 
+              in: ['Biology', 'BIOLOGY', 'biology', 'Bio', 'BIO'] 
+          };
+      }
+      
+      return { 
+          equals: frontendSubject, 
+          mode: 'insensitive' 
+      };
   }
 
   async findAll() {
     return this.prisma.exam.findMany({
-      where: { isPublished: true },
-      orderBy: { scheduledAt: 'desc' },
-      include: { batch: true }
+      where: { 
+          isPublished: true 
+      },
+      orderBy: { 
+          scheduledAt: 'desc' 
+      },
+      include: { 
+          batch: true 
+      }
     });
   }
 
   async findOne(id: string) {
     return this.prisma.exam.findUnique({
       where: { id },
-      include: { questions: true }
+      include: { 
+          questions: true 
+      }
     });
   }
 
@@ -51,29 +112,46 @@ export class ExamsService {
       },
       include: {
         exam: {
-          select: { title: true, totalMarks: true, examType: true } 
+          select: { 
+              title: true, 
+              totalMarks: true, 
+              examType: true 
+          } 
         },
         answers: {
           include: {
             question: {
               include: {
                   questionBank: {
-                      select: { explanation: true } 
+                      select: { 
+                          explanation: true 
+                      } 
                   }
               }
             }
           }
         }
       },
-      orderBy: { submittedAt: 'desc' }
+      orderBy: { 
+          submittedAt: 'desc' 
+      }
     });
   }
 
   async getExamAnalytics(examId: string) {
     const attempts = await this.prisma.testAttempt.findMany({
-      where: { examId, status: { in: ['SUBMITTED', 'EVALUATED'] } },
-      include: { user: { include: { studentProfile: true } } },
-      orderBy: { totalScore: 'desc' }
+      where: { 
+          examId, 
+          status: { in: ['SUBMITTED', 'EVALUATED'] } 
+      },
+      include: { 
+          user: { 
+              include: { studentProfile: true } 
+          } 
+      },
+      orderBy: { 
+          totalScore: 'desc' 
+      }
     });
 
     return attempts.map((attempt, index) => ({
@@ -91,14 +169,22 @@ export class ExamsService {
   }
 
   async startAttempt(userId: string, examId: string) {
-    const userExists = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!userExists) throw new BadRequestException('User profile not found.');
+    const userExists = await this.prisma.user.findUnique({ 
+        where: { id: userId } 
+    });
+    
+    if (!userExists) {
+        throw new BadRequestException('User profile not found.');
+    }
 
     const exam = await this.prisma.exam.findUnique({
       where: { id: examId },
       include: { questions: true } 
     });
-    if (!exam) throw new NotFoundException('Exam not found');
+    
+    if (!exam) {
+        throw new NotFoundException('Exam not found');
+    }
 
     let attempt = await this.prisma.testAttempt.findFirst({
       where: { userId, examId }
@@ -111,11 +197,11 @@ export class ExamsService {
     if (!attempt) {
       try {
         attempt = await this.prisma.testAttempt.create({
-            data: {
-                userId,
-                examId,
-                status: 'IN_PROGRESS',
-                startedAt: new Date()
+            data: { 
+                userId, 
+                examId, 
+                status: 'IN_PROGRESS', 
+                startedAt: new Date() 
             }
         });
       } catch (dbError) {
@@ -124,15 +210,14 @@ export class ExamsService {
     }
 
     const sanitizedQuestions = exam.questions.map(q => ({
-      id: q.id,
-      questionText: q.questionText,
+      id: q.id, 
+      questionText: q.questionText, 
       questionImage: q.questionImage,
-      options: q.options,
-      subject: q.subject,
-      marks: q.marks,
+      options: q.options, 
+      subject: q.subject, 
+      marks: q.marks, 
       negative: q.negative,
-      type: q.type, 
-      tags: [] 
+      type: q.type
     }));
 
     return {
@@ -141,7 +226,7 @@ export class ExamsService {
           title: exam.title, 
           duration: exam.durationMin, 
           totalMarks: exam.totalMarks,
-          examType: exam.examType 
+          examType: exam.examType || 'JEE Main' 
       },
       questions: sanitizedQuestions,
       serverTime: new Date(),
@@ -150,20 +235,31 @@ export class ExamsService {
   }
 
   async submitAttempt(userId: string, examId: string, answers: { questionId: string, selectedOption: string, timeTaken: number }[]) {
-    const exam = await this.prisma.exam.findUnique({
-        where: { id: examId },
-        include: { questions: true }
+    const exam = await this.prisma.exam.findUnique({ 
+        where: { id: examId }, 
+        include: { questions: true } 
     });
-    if (!exam) throw new NotFoundException('Exam not found');
+    
+    if (!exam) {
+        throw new NotFoundException('Exam not found');
+    }
 
-    const attempt = await this.prisma.testAttempt.findFirst({
-        where: { userId, examId, status: 'IN_PROGRESS' }
+    const attempt = await this.prisma.testAttempt.findFirst({ 
+        where: { userId, examId, status: 'IN_PROGRESS' } 
     });
-    if (!attempt) throw new BadRequestException('No active attempt found to submit.');
+    
+    if (!attempt) {
+        throw new BadRequestException('No active attempt found to submit.');
+    }
 
     let totalScore = 0;
-    let physics = 0, chemistry = 0, maths = 0, biology = 0;
-    let correct = 0, wrong = 0, skipped = 0;
+    let physics = 0;
+    let chemistry = 0;
+    let maths = 0;
+    let biology = 0;
+    let correct = 0;
+    let wrong = 0;
+    let skipped = 0;
 
     const answerRecords: any[] = [];
 
@@ -214,29 +310,31 @@ export class ExamsService {
         else if (subj.includes('BIO')) biology += marksAwarded;
 
         answerRecords.push({
-            attemptId: attempt.id,
-            questionId: q.id,
-            selectedOption: selected,
-            isCorrect,
-            marksAwarded,
+            attemptId: attempt.id, 
+            questionId: q.id, 
+            selectedOption: selected, 
+            isCorrect, 
+            marksAwarded, 
             timeTaken
         });
     }
 
     await this.prisma.$transaction([
-        this.prisma.answer.createMany({ data: answerRecords }),
+        this.prisma.answer.createMany({ 
+            data: answerRecords 
+        }),
         this.prisma.testAttempt.update({
             where: { id: attempt.id },
             data: {
-                status: 'SUBMITTED',
-                submittedAt: new Date(),
-                totalScore,
-                physics,
-                chemistry,
-                maths,
+                status: 'SUBMITTED', 
+                submittedAt: new Date(), 
+                totalScore, 
+                physics, 
+                chemistry, 
+                maths, 
                 biology,
-                correctCount: correct,
-                wrongCount: wrong,
+                correctCount: correct, 
+                wrongCount: wrong, 
                 skippedCount: skipped
             }
         })
@@ -249,53 +347,58 @@ export class ExamsService {
   }
 
   async addQuestionsToExam(examId: string, questionBankIds: string[]) {
-      const sourceQuestions = await this.prisma.questionBank.findMany({
-          where: { id: { in: questionBankIds } }
+      const sourceQuestions = await this.prisma.questionBank.findMany({ 
+          where: { id: { in: questionBankIds } } 
       });
-
-      if (sourceQuestions.length === 0) return { count: 0 };
+      
+      if (sourceQuestions.length === 0) {
+          return { count: 0 };
+      }
 
       const examQuestionsData = sourceQuestions.map(q => ({
-          examId,
-          questionBankId: q.id,
-          questionText: q.questionText,
+          examId: examId, 
+          questionBankId: q.id, 
+          questionText: q.questionText, 
           questionImage: q.questionImage,
-          solutionImage: q.solutionImage,
-          options: q.options || {},
+          solutionImage: q.solutionImage, 
+          options: q.options || {}, 
           correctOption: q.correctOption,
-          subject: q.subject,
-          topic: q.topic,
-          type: q.type,
-          difficulty: q.difficulty,
+          subject: q.subject, 
+          topic: q.topic, 
+          type: q.type, 
+          difficulty: q.difficulty, 
           marks: q.marks,
-          negative: q.negative,
+          negative: q.negative, 
           expectedTime: q.expectedTime
       }));
 
-      const result = await this.prisma.question.createMany({
+      const result = await this.prisma.question.createMany({ 
           data: examQuestionsData as any 
       });
-
-      return { count: result.count };
+      
+      return { 
+          count: result.count 
+      };
   }
-
-  // --- QUESTION BANK DYNAMIC QUERIES ---
 
   async getPendingTopics(examType: string, subject: string) {
       const typeFilter = this.getExamTypeFilter(examType);
+      const subjectFilter = this.getSubjectFilter(subject);
       
       const whereClause: any = { 
-          difficulty: 'pending', 
-          subject: { equals: subject, mode: 'insensitive' } 
+          difficulty: 'pending' 
       };
-
+      
       if (typeFilter) {
           whereClause.examType = typeFilter;
       }
+      if (subjectFilter) {
+          whereClause.subject = subjectFilter;
+      }
 
       const topics = await this.prisma.questionBank.groupBy({
-          by: ['topic'],
-          where: whereClause,
+          by: ['topic'], 
+          where: whereClause, 
           _count: { id: true }
       });
       
@@ -305,75 +408,98 @@ export class ExamsService {
   }
 
   async getAvailableTopics(examType: string) {
-      const whereClause: any = {
-          difficulty: { not: 'pending' }
+      const typeFilter = this.getExamTypeFilter(examType);
+      
+      const whereClause: any = { 
+          difficulty: { not: 'pending' } 
       };
       
-      const typeFilter = this.getExamTypeFilter(examType);
       if (typeFilter) {
           whereClause.examType = typeFilter;
       }
 
       const topics = await this.prisma.questionBank.groupBy({
-          by: ['subject', 'topic'],
-          where: whereClause,
+          by: ['subject', 'topic'], 
+          where: whereClause, 
           _count: { id: true }
       });
       
       const formatted: Record<string, string[]> = {};
+      
       topics.forEach(t => {
           if (!t.subject) return;
           
           const subj = t.subject.charAt(0).toUpperCase() + t.subject.slice(1).toLowerCase();
           const topic = t.topic?.trim() || 'Uncategorized';
           
-          if (!formatted[subj]) formatted[subj] = [];
-          if (!formatted[subj].includes(topic)) formatted[subj].push(topic);
+          if (!formatted[subj]) {
+              formatted[subj] = [];
+          }
+          
+          if (!formatted[subj].includes(topic)) {
+              formatted[subj].push(topic);
+          }
       });
 
       for (const subj in formatted) {
           formatted[subj].sort();
       }
-
+      
       return formatted;
   }
 
   async getPendingQuestions(filters: any) {
       const { examType, subject, topic, searchQuery, showOnlyWithSolutions, skip = 0, take = 5 } = filters;
       
-      const whereClause: any = { difficulty: 'pending' };
-      
       const typeFilter = this.getExamTypeFilter(examType);
+      const subjectFilter = this.getSubjectFilter(subject);
+      
+      const whereClause: any = { 
+          difficulty: 'pending' 
+      };
+      
       if (typeFilter) {
           whereClause.examType = typeFilter;
       }
-      
-      if (subject) whereClause.subject = { equals: subject, mode: 'insensitive' };
-      if (topic) whereClause.topic = { contains: topic, mode: 'insensitive' };
-      if (searchQuery) whereClause.questionText = { contains: searchQuery, mode: 'insensitive' };
-      
+      if (subjectFilter) {
+          whereClause.subject = subjectFilter;
+      }
+      if (topic) {
+          whereClause.topic = { contains: topic, mode: 'insensitive' };
+      }
+      if (searchQuery) {
+          whereClause.questionText = { contains: searchQuery, mode: 'insensitive' };
+      }
       if (showOnlyWithSolutions === 'true') {
-           whereClause.OR = [
-               { explanation: { not: null, notIn: ['', 'NaN'] } },
-               { solutionImage: { not: null, notIn: ['null', 'NaN'] } }
+           whereClause.OR = [ 
+               { explanation: { not: null, notIn: ['', 'NaN'] } }, 
+               { solutionImage: { not: null, notIn: ['null', 'NaN'] } } 
            ];
       }
 
       const [questions, total] = await Promise.all([
-          this.prisma.questionBank.findMany({
-              where: whereClause,
-              skip: Number(skip),
-              take: Number(take),
-              orderBy: { createdAt: 'asc' }
+          this.prisma.questionBank.findMany({ 
+              where: whereClause, 
+              skip: Number(skip), 
+              take: Number(take), 
+              orderBy: { createdAt: 'asc' } 
           }),
-          this.prisma.questionBank.count({ where: whereClause })
+          this.prisma.questionBank.count({ 
+              where: whereClause 
+          })
       ]);
-
-      return { questions, total };
+      
+      return { 
+          questions, 
+          total 
+      };
   }
 
   async getApprovedQuestions(filters: any) {
       const { examType, subject, topic, searchQuery, difficulty, skip = 0, take = 20 } = filters;
+      
+      const typeFilter = this.getExamTypeFilter(examType);
+      const subjectFilter = this.getSubjectFilter(subject);
       
       const whereClause: any = {};
       
@@ -383,41 +509,52 @@ export class ExamsService {
           whereClause.difficulty = { not: 'pending' };
       }
       
-      const typeFilter = this.getExamTypeFilter(examType);
       if (typeFilter) {
           whereClause.examType = typeFilter;
       }
-      
-      if (subject) whereClause.subject = { equals: subject, mode: 'insensitive' };
-      if (topic) whereClause.topic = { contains: topic, mode: 'insensitive' };
-      if (searchQuery) whereClause.questionText = { contains: searchQuery, mode: 'insensitive' };
+      if (subjectFilter) {
+          whereClause.subject = subjectFilter;
+      }
+      if (topic) {
+          whereClause.topic = { contains: topic, mode: 'insensitive' };
+      }
+      if (searchQuery) {
+          whereClause.questionText = { contains: searchQuery, mode: 'insensitive' };
+      }
 
       const [questions, total] = await Promise.all([
-          this.prisma.questionBank.findMany({
-              where: whereClause,
-              skip: Number(skip),
-              take: Number(take),
-              orderBy: { createdAt: 'desc' }
+          this.prisma.questionBank.findMany({ 
+              where: whereClause, 
+              skip: Number(skip), 
+              take: Number(take), 
+              orderBy: { createdAt: 'desc' } 
           }),
-          this.prisma.questionBank.count({ where: whereClause })
+          this.prisma.questionBank.count({ 
+              where: whereClause 
+          })
       ]);
-
-      return { questions, total };
+      
+      return { 
+          questions, 
+          total 
+      };
   }
 
   async reviewQuestions(questions: any[]) {
     const updates = questions.map(q => this.prisma.questionBank.update({
-      where: { id: q.id },
+      where: { 
+          id: q.id 
+      },
       data: {
-        questionText: q.questionText,
+        questionText: q.questionText, 
         questionImage: q.questionImage, 
         solutionImage: q.solutionImage, 
-        explanation: q.explanation,     
-        options: q.options,
+        explanation: q.explanation, 
+        options: q.options, 
         correctOption: q.correctOption,
-        difficulty: q.difficulty,
-        topic: q.topic,                 
-        type: q.type,
+        difficulty: q.difficulty, 
+        topic: q.topic, 
+        type: q.type, 
         examType: q.examType 
       }
     }));
@@ -425,59 +562,64 @@ export class ExamsService {
     await this.prisma.$transaction(updates);
     
     return { 
-      success: true, 
-      count: updates.length,
-      message: `Successfully reviewed ${updates.length} questions.`
+        success: true, 
+        count: updates.length, 
+        message: `Successfully reviewed ${updates.length} questions.` 
     };
   }
 
-  // ✨ NEW RENAME TOPIC BULK FUNCTION
   async renameTopic(examType: string, subject: string, oldTopic: string, newTopic: string) {
       const typeFilter = this.getExamTypeFilter(examType);
+      const subjectFilter = this.getSubjectFilter(subject);
       
       const whereClause: any = { 
-          subject: { equals: subject, mode: 'insensitive' },
-          topic: oldTopic
+          topic: oldTopic 
       };
-
+      
       if (typeFilter) {
           whereClause.examType = typeFilter;
+      }
+      if (subjectFilter) {
+          whereClause.subject = subjectFilter;
       }
 
       const result = await this.prisma.questionBank.updateMany({
           where: whereClause,
           data: { topic: newTopic }
       });
-
+      
       return { 
           success: true, 
-          count: result.count,
-          message: `Renamed ${result.count} questions to ${newTopic}`
+          count: result.count, 
+          message: `Renamed ${result.count} questions to ${newTopic}` 
       };
   }
 
   async createQuestionFromAdmin(data: any) {
-    const systemTeacher = await this.prisma.teacherProfile.findFirst({
-        where: { user: { username: 'system_admin' } }
+    const systemTeacher = await this.prisma.teacherProfile.findFirst({ 
+        where: { user: { username: 'system_admin' } } 
     });
-
-    if (!systemTeacher) throw new InternalServerErrorException('System Teacher profile not found');
-
+    
+    if (!systemTeacher) {
+        throw new InternalServerErrorException('System Teacher profile not found');
+    }
+    
     return this.prisma.questionBank.create({
-        data: {
-            ...data,
-            createdById: systemTeacher.id,
-            isActive: true,
-            expectedTime: 60,
-            marks: 4,
-            negative: -1
+        data: { 
+            ...data, 
+            createdById: systemTeacher.id, 
+            isActive: true, 
+            expectedTime: 60, 
+            marks: 4, 
+            negative: -1 
         }
     });
   }
 
+  // ✨ RESTORED: The missing delete endpoint that got clipped!
   async deletePendingQuestion(id: string) {
-      return this.prisma.questionBank.delete({
-          where: { id }
+      return this.prisma.questionBank.delete({ 
+          where: { id } 
       });
   }
 
@@ -488,26 +630,29 @@ export class ExamsService {
 
       for (const req of blueprint) {
           if (req.count <= 0) continue;
-
-          const whereClause: any = {
-              difficulty: { equals: req.difficulty, mode: 'insensitive' },
-              subject: { equals: req.subject, mode: 'insensitive' }
-          };
-
+          
           const typeFilter = this.getExamTypeFilter(sourceDb || 'Any');
+          const subjectFilter = this.getSubjectFilter(req.subject);
+          
+          const whereClause: any = {
+              difficulty: { equals: req.difficulty, mode: 'insensitive' }
+          };
+          
           if (typeFilter) {
               whereClause.examType = typeFilter;
           }
-
+          if (subjectFilter) {
+              whereClause.subject = subjectFilter;
+          }
           if (topics && topics.length > 0) {
               whereClause.topic = { in: topics };
           }
 
-          const availableQs = await this.prisma.questionBank.findMany({
-              where: whereClause,
-              select: { id: true }
+          const availableQs = await this.prisma.questionBank.findMany({ 
+              where: whereClause, 
+              select: { id: true } 
           });
-
+          
           if (availableQs.length < req.count) {
               missingWarning += `Found ${availableQs.length}/${req.count} for ${req.subject} ${req.difficulty}. `;
           }
@@ -520,11 +665,11 @@ export class ExamsService {
       if (selectedQuestionIds.length > 0) {
           await this.addQuestionsToExam(examId, selectedQuestionIds);
       }
-
+      
       return { 
           success: true, 
-          addedCount: selectedQuestionIds.length,
-          warning: missingWarning || undefined
+          addedCount: selectedQuestionIds.length, 
+          warning: missingWarning || undefined 
       };
   }
 }

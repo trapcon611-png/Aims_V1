@@ -219,11 +219,8 @@ interface ExamManagerProps {
 export default function ExamManager({ batches, onRefresh }: ExamManagerProps) {
   // CORE STATES
   const [mode, setMode] = useState<'DETAILS' | 'EDITOR'>('DETAILS');
-  
-  // ✨ FIXED #2: Added examType explicitly to the newExam state
   const [newExam, setNewExam] = useState({ title: '', totalMarks: 300, durationMin: 180, scheduledAt: '', batchId: '', examType: 'JEE Main' });
-  
-  const [sourceDb, setSourceDb] = useState('Any');
+  const [sourceDb, setSourceDb] = useState('JEE Main');
   const [loading, setLoading] = useState(false);
 
   // EDITOR STATES
@@ -254,17 +251,20 @@ export default function ExamManager({ batches, onRefresh }: ExamManagerProps) {
       const isoScheduledAt = new Date(newExam.scheduledAt).toISOString();
 
       const createdExam = await adminApi.createExam({ 
-          ...newExam, 
+          title: newExam.title,
+          totalMarks: newExam.totalMarks,
+          durationMin: newExam.durationMin,
+          batchId: newExam.batchId,
           scheduledAt: isoScheduledAt,
           subject: 'Combined', 
-          examType: newExam.examType, // ✨ FIXED #2: Saving Exam Type directly to Exam Model
+          examType: 'MANUAL', 
           tags: [newExam.examType] 
       });
       
       setEditingExamId(createdExam.id);
       
-      // Auto-set the source DB to match the Exam Type to make building faster
-      setSourceDb(newExam.examType);
+      // ✨ FIX: This defaults the DB filter to whatever Exam Type they are creating!
+      setSourceDb(newExam.examType); 
       setMode('EDITOR');
     } catch (e: any) { 
         alert(`Failed to create exam: ${e.message}`); 
@@ -457,7 +457,6 @@ export default function ExamManager({ batches, onRefresh }: ExamManagerProps) {
                  <div><label className={labelStyle}>Exam Title</label><input className={inputStyle} required value={newExam.title} onChange={e => setNewExam({...newExam, title: e.target.value})} placeholder="e.g. Unit Test 1"/></div>
                  <div><label className={labelStyle}>Target Batch</label><select className={inputStyle} required value={newExam.batchId} onChange={e => setNewExam({...newExam, batchId: e.target.value})}><option value="">Select Batch</option>{batches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
                  
-                 {/* ✨ FIXED #2: Exam Type Dropdown */}
                  <div>
                     <label className={labelStyle}>Exam Type / Pattern</label>
                     <select className={inputStyle} required value={newExam.examType} onChange={e => setNewExam({...newExam, examType: e.target.value})}>
