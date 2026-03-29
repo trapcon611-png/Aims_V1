@@ -157,7 +157,6 @@ export const adminApi = {
   },
 
   // --- EXAM MANAGEMENT ---
-  // ✨ RESTORED TO /erp/exams
   async createExam(data: any) {
     const token = this.getToken();
     const res = await fetchWithAuth(`${API_URL}/erp/exams`, {
@@ -192,7 +191,6 @@ export const adminApi = {
           }))
       };
 
-      // Uses Local Next.js Route
       const res = await fetchWithAuth(`/student/exam/${examId}/import-questions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -206,7 +204,6 @@ export const adminApi = {
       return await res.json();
   },
 
-  // ✨ RESTORED TO /erp/exams
   async getExams() {
     const token = this.getToken();
     try { 
@@ -216,7 +213,6 @@ export const adminApi = {
     } catch (e) { return []; }
   },
 
-  // ✨ RESTORED TO /erp/exams/:id
   async deleteExam(id: string) {
     const token = this.getToken();
     const res = await fetchWithAuth(`${API_URL}/erp/exams/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
@@ -224,7 +220,6 @@ export const adminApi = {
     return await res.json();
   },
 
-  // ✨ RESTORED TO /erp/exams/:id
   async getExamById(id: string) {
     const token = this.getToken();
     const res = await fetchWithAuth(`${API_URL}/erp/exams/${id}`, { headers: { 'Authorization': `Bearer ${token}` } });
@@ -285,9 +280,10 @@ export const adminApi = {
       }; 
   }, 
 
+  // ✨ FIX: Pointed specifically to your new backend '/exams/:id/analytics' endpoint
   async getExamAnalytics(examId: string) { 
       const token = this.getToken(); 
-      const res = await fetchWithAuth(`${API_URL}/erp/academics/results?examId=${examId}`, { headers: { 'Authorization': `Bearer ${token}` } }); 
+      const res = await fetchWithAuth(`${API_URL}/exams/${examId}/analytics`, { headers: { 'Authorization': `Bearer ${token}` } }); 
       if (!res.ok) return []; 
       return await res.json(); 
   },
@@ -309,9 +305,10 @@ export const adminApi = {
       } catch(e) { return []; } 
   },
 
+  // ✨ FIX: Pointed specifically to your new backend '/exams/student-attempts' endpoint
   async getStudentAttempts(studentId: string) {
       const token = this.getToken();
-      const res = await fetchWithAuth(`${API_URL}/erp/attempts/${studentId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+      const res = await fetchWithAuth(`${API_URL}/exams/student-attempts?studentId=${studentId}`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (!res.ok) throw new Error('Failed to get student attempts'); 
       return await res.json();
   }

@@ -5,7 +5,10 @@ import { PrismaService } from '../prisma/prisma.service';
 export class ExamsService {
   constructor(private prisma: PrismaService) {}
 
-  // ✨ FIX 1: Enhanced Exam Type Matching (Catches "advance" without the d)
+  // ==========================================
+  // ✨ SMART FILTERS FOR DIRTY CSV DATA
+  // ==========================================
+
   private getExamTypeFilter(frontendType: string): any {
       if (!frontendType || frontendType === 'Any' || frontendType === 'undefined' || frontendType === 'null') {
           return undefined;
@@ -43,7 +46,6 @@ export class ExamsService {
       };
   }
 
-  // ✨ FIX 2: Brand New Subject Matcher (Catches MATH vs Mathematics)
   private getSubjectFilter(frontendSubject: string): any {
       if (!frontendSubject || frontendSubject === 'Any' || frontendSubject === '') {
           return undefined;
@@ -81,6 +83,10 @@ export class ExamsService {
       };
   }
 
+  // ==========================================
+  // GENERAL EXAM QUERIES
+  // ==========================================
+
   async findAll() {
     return this.prisma.exam.findMany({
       where: { 
@@ -97,25 +103,33 @@ export class ExamsService {
 
   async findOne(id: string) {
     return this.prisma.exam.findUnique({
-      where: { id },
+      where: { 
+          id: id 
+      },
       include: { 
           questions: true 
       }
     });
   }
 
+  // ==========================================
+  // EXAM ENGINE & ATTEMPTS
+  // ==========================================
+
   async getMyAttempts(userId: string) {
     return this.prisma.testAttempt.findMany({
       where: { 
-        userId,
-        status: { in: ['SUBMITTED', 'EVALUATED'] } 
+        userId: userId,
+        status: { 
+            in: ['SUBMITTED', 'EVALUATED'] 
+        } 
       },
       include: {
         exam: {
           select: { 
               title: true, 
               totalMarks: true, 
-              examType: true 
+              examType: true // Removed 'tags' to fix the Prisma error
           } 
         },
         answers: {
@@ -141,12 +155,16 @@ export class ExamsService {
   async getExamAnalytics(examId: string) {
     const attempts = await this.prisma.testAttempt.findMany({
       where: { 
-          examId, 
-          status: { in: ['SUBMITTED', 'EVALUATED'] } 
+          examId: examId, 
+          status: { 
+              in: ['SUBMITTED', 'EVALUATED'] 
+          } 
       },
       include: { 
           user: { 
-              include: { studentProfile: true } 
+              include: { 
+                  studentProfile: true 
+              } 
           } 
       },
       orderBy: { 
@@ -187,7 +205,10 @@ export class ExamsService {
     }
 
     let attempt = await this.prisma.testAttempt.findFirst({
-      where: { userId, examId }
+      where: { 
+          userId: userId, 
+          examId: examId 
+      }
     });
 
     if (attempt && attempt.status === 'SUBMITTED') {
@@ -198,8 +219,8 @@ export class ExamsService {
       try {
         attempt = await this.prisma.testAttempt.create({
             data: { 
-                userId, 
-                examId, 
+                userId: userId, 
+                examId: examId, 
                 status: 'IN_PROGRESS', 
                 startedAt: new Date() 
             }
@@ -245,7 +266,11 @@ export class ExamsService {
     }
 
     const attempt = await this.prisma.testAttempt.findFirst({ 
-        where: { userId, examId, status: 'IN_PROGRESS' } 
+        where: { 
+            userId: userId, 
+            examId: examId, 
+            status: 'IN_PROGRESS' 
+        } 
     });
     
     if (!attempt) {
@@ -304,18 +329,23 @@ export class ExamsService {
         totalScore += marksAwarded;
 
         const subj = q.subject?.toUpperCase() || '';
-        if (subj.includes('PHYSICS')) physics += marksAwarded;
-        else if (subj.includes('CHEMISTRY')) chemistry += marksAwarded;
-        else if (subj.includes('MATH')) maths += marksAwarded;
-        else if (subj.includes('BIO')) biology += marksAwarded;
+        if (subj.includes('PHYSICS')) {
+            physics += marksAwarded;
+        } else if (subj.includes('CHEMISTRY')) {
+            chemistry += marksAwarded;
+        } else if (subj.includes('MATH')) {
+            maths += marksAwarded;
+        } else if (subj.includes('BIO')) {
+            biology += marksAwarded;
+        }
 
         answerRecords.push({
             attemptId: attempt.id, 
             questionId: q.id, 
             selectedOption: selected, 
-            isCorrect, 
-            marksAwarded, 
-            timeTaken
+            isCorrect: isCorrect, 
+            marksAwarded: marksAwarded, 
+            timeTaken: timeTaken
         });
     }
 
@@ -328,11 +358,11 @@ export class ExamsService {
             data: {
                 status: 'SUBMITTED', 
                 submittedAt: new Date(), 
-                totalScore, 
-                physics, 
-                chemistry, 
-                maths, 
-                biology,
+                totalScore: totalScore, 
+                physics: physics, 
+                chemistry: chemistry, 
+                maths: maths, 
+                biology: biology,
                 correctCount: correct, 
                 wrongCount: wrong, 
                 skippedCount: skipped
@@ -346,9 +376,15 @@ export class ExamsService {
     };
   }
 
+  // ==========================================
+  // QUESTION BANK MANAGEMENT
+  // ==========================================
+
   async addQuestionsToExam(examId: string, questionBankIds: string[]) {
       const sourceQuestions = await this.prisma.questionBank.findMany({ 
-          where: { id: { in: questionBankIds } } 
+          where: { 
+              id: { in: questionBankIds } 
+          } 
       });
       
       if (sourceQuestions.length === 0) {
@@ -403,7 +439,10 @@ export class ExamsService {
       });
       
       return topics
-          .map(t => ({ name: t.topic || 'Uncategorized', count: t._count.id }))
+          .map(t => ({ 
+              name: t.topic || 'Uncategorized', 
+              count: t._count.id 
+          }))
           .sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -555,7 +594,8 @@ export class ExamsService {
         difficulty: q.difficulty, 
         topic: q.topic, 
         type: q.type, 
-        examType: q.examType 
+        examType: q.examType,
+        subject: q.subject 
       }
     }));
     
@@ -616,10 +656,9 @@ export class ExamsService {
     });
   }
 
-  // ✨ RESTORED: The missing delete endpoint that got clipped!
   async deletePendingQuestion(id: string) {
       return this.prisma.questionBank.delete({ 
-          where: { id } 
+          where: { id: id } 
       });
   }
 
@@ -659,6 +698,7 @@ export class ExamsService {
 
           const shuffled = availableQs.sort(() => 0.5 - Math.random());
           const selected = shuffled.slice(0, req.count).map(q => q.id);
+          
           selectedQuestionIds.push(...selected);
       }
 

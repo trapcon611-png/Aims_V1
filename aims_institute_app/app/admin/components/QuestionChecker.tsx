@@ -387,9 +387,7 @@ const CreateQuestionCard = ({ defaultExamType, defaultSubject, defaultTopic, onC
                 <div className="flex flex-col items-end gap-2">
                     <div className="flex items-center gap-2 w-full justify-end">
                         <button onClick={() => handleCreateClick('pending')} className="px-5 py-2.5 rounded-xl border border-blue-300 bg-blue-50 text-blue-700 text-sm font-bold hover:bg-blue-600 hover:text-white shadow-sm hover:shadow-md transition">Save Draft</button>
-                        
                         <div className="w-px h-8 bg-slate-200 mx-1"></div>
-                        
                         <button onClick={() => handleCreateClick('easy')} className="px-5 py-2.5 rounded-xl border border-green-300 bg-green-50 text-green-700 text-sm font-bold hover:bg-green-600 hover:text-white shadow-sm hover:shadow-md transition">Easy</button>
                         <button onClick={() => handleCreateClick('medium')} className="px-5 py-2.5 rounded-xl border border-amber-300 bg-amber-50 text-amber-700 text-sm font-bold hover:bg-amber-500 hover:text-white shadow-sm hover:shadow-md transition">Medium</button>
                         <button onClick={() => handleCreateClick('hard')} className="px-5 py-2.5 rounded-xl border border-red-300 bg-red-50 text-red-700 text-sm font-bold hover:bg-red-600 hover:text-white shadow-sm hover:shadow-md transition">Hard</button>
@@ -404,7 +402,7 @@ const CreateQuestionCard = ({ defaultExamType, defaultSubject, defaultTopic, onC
 // ==========================================
 // 2. STANDARD QUESTION CARD COMPONENT
 // ==========================================
-const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApproving, isSavingDraft, showToast, examTypeUiSelection }: any) => {
+const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApproving, isSavingDraft, showToast, examTypeUiSelection, currentSubject }: any) => {
     const parsedTopic = q.topic?.trim() || 'Uncategorized';
     const [selectedTopic, setSelectedTopic] = useState(defaultTopic || parsedTopic);
     const [isEditing, setIsEditing] = useState(false);
@@ -506,6 +504,7 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
         }
     };
 
+    // ✨ FIX: Guarantee that Drafts override dirty subjects/examTypes before saving!
     const handleSaveDraftClick = () => {
         const updatedQuestion = {
             ...q,
@@ -517,11 +516,14 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
             correctOption: correctOption,
             topic: selectedTopic,
             type: qTypeState,
-            examType: q.examType || getDbExamType(examTypeUiSelection, q.subject) 
+            difficulty: 'pending', 
+            examType: getDbExamType(examTypeUiSelection, currentSubject), // Forces clean examType
+            subject: currentSubject // Forces clean subject (e.g. Mathematics instead of MATH)
         };
         onSaveDraft(updatedQuestion, selectedTopic);
     };
 
+    // ✨ FIX: This forces the clean 'subject', 'examType', AND the chosen 'difficulty'
     const handleApproveClick = (difficulty: string) => {
         if (correctOption === 'pending' || String(correctOption).trim() === '') {
             return showToast(qTypeState === 'MCQ' ? 'Please select correct Option!' : 'Please enter numerical answer!', 'error');
@@ -537,7 +539,9 @@ const QuestionCard = ({ q, defaultTopic, onApprove, onSaveDraft, onDelete, isApp
             correctOption: correctOption,
             topic: selectedTopic,
             type: qTypeState,
-            examType: q.examType || getDbExamType(examTypeUiSelection, q.subject)
+            difficulty: difficulty, 
+            examType: getDbExamType(examTypeUiSelection, currentSubject),
+            subject: currentSubject 
         };
 
         onApprove(updatedQuestion, difficulty, selectedTopic);
@@ -978,7 +982,7 @@ export default function QuestionChecker() {
             showToast(`Successfully renamed ${res.count} questions to ${renamingTopic.new.trim()}!`, "success");
             setTopic(renamingTopic.new.trim());
             setRenamingTopic(null);
-            fetchTopics(); // Refresh the datalist dropdown
+            fetchTopics(); 
         } catch (e) {
             console.error(e);
             showToast("Failed to rename topic.", "error");
@@ -1018,9 +1022,10 @@ export default function QuestionChecker() {
                 API_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001';
             }
 
+            const token = localStorage.getItem('aims_token') || localStorage.getItem('admin_token') || '';
             const res = await fetch(`${API_URL}/exams/review-questions`, { 
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({ questions: [question] }) 
             });
 
@@ -1028,7 +1033,7 @@ export default function QuestionChecker() {
 
             setPendingQuestions(prev => prev.map(q => q.id === question.id ? { ...q, ...question } : q));
             showToast(`Draft successfully saved!`, "success");
-            fetchTopics(); // Update topic counters
+            fetchTopics(); 
         } catch (e) {
             console.error(e);
             showToast("Failed to save draft to database.", "error");
@@ -1045,9 +1050,11 @@ export default function QuestionChecker() {
                 API_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001';
             }
 
+            const token = localStorage.getItem('aims_token') || localStorage.getItem('admin_token') || '';
+            
             const res = await fetch(`${API_URL}/exams/review-questions`, { 
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({ questions: [question] }) 
             });
 
@@ -1060,7 +1067,7 @@ export default function QuestionChecker() {
             if (pendingQuestions.length === 1 && currentPage > 1) {
                 setCurrentPage(prev => prev - 1);
             }
-            fetchTopics(); // Update topic counters
+            fetchTopics(); 
         } catch (e) {
             console.error(e);
             showToast("Failed to save question to database.", "error");
@@ -1091,7 +1098,7 @@ export default function QuestionChecker() {
             setTopic('');
             setQuery('');
             setCurrentPage(1);
-            fetchTopics(); // Update topic counters
+            fetchTopics(); 
             
         } catch (e) {
             console.error(e);
@@ -1099,7 +1106,6 @@ export default function QuestionChecker() {
         }
     };
 
-    // ✨ Check if currently typed topic exists in the dropdown to show the Edit button
     const isTopicExactMatch = availableTopicsWithCount.some((t: any) => t.name === topic);
 
     return (
@@ -1276,6 +1282,7 @@ export default function QuestionChecker() {
                                         isSavingDraft={savingDraftId === q.id}
                                         showToast={showToast}
                                         examTypeUiSelection={examType}
+                                        currentSubject={subject} 
                                     />
                                 ))
                             )}
