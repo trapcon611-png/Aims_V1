@@ -4,7 +4,6 @@ import * as path from 'path';
 import csv from 'csv-parser';
 
 const prisma = new PrismaClient();
-const CSV_DIR = path.join(__dirname, 'csvs');
 
 // ✨ SMART FINDER: Recursively searches subfolders to find EXACTLY the file we want
 function findSpecificFile(dir: string, targetName: string, fileList: string[] = []) {
@@ -27,17 +26,24 @@ async function main() {
     console.log('🛡️  Existing questions will NOT be deleted.');
     console.log('🎯 Targeting ONLY "maths-cet.csv" to prevent duplicating older files.');
 
-    // Only grabs maths-cet.csv, even if it's hidden inside the MHT-CET subfolder!
-    const targetFiles = findSpecificFile(CSV_DIR, 'maths-cet.csv');
+    // ✨ THE FIX: We are now explicitly targeting your "csv_uploads" directory!
+    const CSV_DIR = path.join(__dirname, 'csv_uploads');
+    let targetFiles = findSpecificFile(CSV_DIR, 'maths-cet.csv');
+
+    // Fallback: If it's not in csv_uploads, check if a generic "csvs" folder was created
+    if (targetFiles.length === 0) {
+        const FALLBACK_DIR = path.join(__dirname, 'csvs');
+        targetFiles = findSpecificFile(FALLBACK_DIR, 'maths-cet.csv');
+    }
 
     if (targetFiles.length === 0) {
-        console.log(`❌ Could not find "maths-cet.csv" anywhere inside ${CSV_DIR}`);
+        console.log(`❌ Could not find "maths-cet.csv" anywhere inside /prisma/csv_uploads/`);
         return;
     }
 
     const systemAdmin = await prisma.user.findUnique({ where: { username: 'system_admin' } });
     
-    // ✨ FIX: Explicitly type as 'any' to prevent TypeScript from locking it as strictly 'null'
+    // Explicitly type as 'any' to prevent TypeScript from locking it as strictly 'null'
     let teacherProfile: any = null; 
     
     if (systemAdmin) {
