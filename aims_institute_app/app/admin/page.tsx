@@ -423,7 +423,6 @@ const QuestionSelectorModal = ({
         const topics = new Set<string>();
         
         repoQuestions.forEach(q => {
-            // If a subject is selected, only grab topics mapped to that subject
             if (searchSubject) {
                 const subjectKey = searchSubject === 'Math' ? 'Mathematics' : searchSubject;
                 if ((q.subject || '').toLowerCase().includes(subjectKey.toLowerCase())) {
@@ -762,7 +761,7 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
   const handleFinalizePaper = async (questions: any[]) => { if (!selectedExamId) return; try { await adminApi.importQuestionsToExam(selectedExamId, questions); alert(`Success! Imported ${questions.length} questions into the exam.`); setSelectedExamId(null); refreshData(); } catch (e: any) { console.error(e); alert(e.message || "Failed to save questions to exam."); } };
   const handleDeleteExam = async (id: string) => { try { await adminApi.deleteExam(id); alert("Exam Deleted"); refreshData(); } catch (e) { alert("Failed to delete exam"); } };
   
-  // PDF GENERATION WITH NEW LAYOUT AND NO AUTO TEXT
+  // ✨ FIXED PDF GENERATOR WITH LATEX & WATERMARK SUPPORT
   const handleDownloadPDF = async (exam: Exam) => { 
       try { 
           const fullExamData = await adminApi.getExamById(exam.id); 
@@ -770,6 +769,9 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
           const printWindow = window.open('', '_blank', 'width=900,height=800'); 
           if(!printWindow) return alert("Pop-up blocked. Please allow pop-ups to print."); 
           
+          // Secure absolute path for the watermark
+          const absoluteLogoPath = window.location.origin + LOGO_PATH;
+
           let html = `<html><head><title>${exam.title}</title>
           <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
           <style>
@@ -777,13 +779,15 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
               @media print {
                   @page { margin: 0; } 
                   body { padding: 2cm !important; }
+                  /* Force browsers to print the watermark */
+                  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
               }
               body { font-family: 'Times New Roman', serif; padding: 40px; position: relative; color: #000; }
               .q-item { margin-bottom: 30px; page-break-inside: avoid; }
               .options { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 12px; }
               
               /* Bigger Watermark Logo */
-              .logo-wm { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.08; width: 750px; z-index: -2; pointer-events: none; }
+              .logo-wm { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.06; width: 800px; max-width: 90vw; z-index: -2; pointer-events: none; }
               
               /* Professional Header Box */
               .header-box { border: 2px solid #000; padding: 20px; margin-bottom: 40px; border-radius: 8px; text-align: center; }
@@ -795,7 +799,7 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
           </head><body>
           
           <!-- Background Logo Watermark -->
-          <img src="${LOGO_PATH}" class="logo-wm" />
+          <img src="${absoluteLogoPath}" class="logo-wm" />
           
           <!-- Title and Info Box -->
           <div class="header-box">
@@ -817,8 +821,7 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
               if (qType === 'MCQ' && normOptions.length > 0) {
                   optionsHtml = '<div class="options">';
                   normOptions.forEach((opt, oIdx) => {
-                      const label = String.fromCharCode(65 + oIdx); // A, B, C, D
-                      // Only render text or image if they actually exist to avoid empty brackets
+                      const label = String.fromCharCode(65 + oIdx); 
                       optionsHtml += `<div><strong>(${label})</strong> ${opt.text} ${opt.image ? `<br/><img src="${opt.image}" style="max-height:100px; margin-top:8px;"/>` : ''}</div>`;
                   });
                   optionsHtml += '</div>';
@@ -826,15 +829,42 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
                   optionsHtml = `<div style="margin-top:10px;"><strong>Correct Answer:</strong> ${q.correctOption || q.correct_answer || '_____'}</div>`;
               }
 
+              // Safely extract and wrap text for LaTeX
+              let safeContent = String(q.questionText || q.question_text || '').replace(/\\n/g, '\n');
+              const hasMath = /\\ce\{|\\sqrt|\\frac|\\mu|\\alpha|\\beta|\\gamma|\\theta|\\pi|\\sum|\\int/.test(safeContent);
+              const hasDelimiters = /\$|\\\[|\\\(/.test(safeContent);
+              if (hasMath && !hasDelimiters) safeContent = `\\(${safeContent}\\)`;
+
               html += `
               <div class="q-item">
-                  <div style="font-size: 16px;"><strong>Q${idx+1}. </strong> ${q.questionText || q.question_text}</div>
+                  <div style="font-size: 16px;"><strong>Q${idx+1}. </strong> ${safeContent}</div>
                   ${validQImage ? `<img src="${validQImage}" style="max-height:200px;display:block;margin:15px 0"/>` : ''}
                   ${optionsHtml}
               </div>`; 
           }); 
           
-          html += `<script>document.addEventListener("DOMContentLoaded", function() { renderMathInElement(document.body); setTimeout(()=>window.print(),1000); });</script></body></html>`; 
+          // Execute KaTeX on load, then trigger print window
+          html += `
+          <script>
+            window.onload = function() { 
+                if(window.renderMathInElement) {
+                    renderMathInElement(document.body, {
+                        delimiters: [
+                            { left: '$$', right: '$$', display: true },
+                            { left: '\\\\[', right: '\\\\]', display: true },
+                            { left: '$', right: '$', display: false },
+                            { left: '\\\\(', right: '\\\\)', display: false }
+                        ],
+                        throwOnError: false,
+                        errorColor: '#cc0000',
+                        strict: false,
+                        trust: true
+                    });
+                }
+                setTimeout(()=>window.print(), 1000); 
+            };
+          </script></body></html>`; 
+
           printWindow.document.write(html); 
           printWindow.document.close(); 
       } catch(err) { 

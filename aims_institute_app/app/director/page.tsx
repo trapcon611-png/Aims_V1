@@ -483,13 +483,12 @@ export default function DirectorPage() {
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
-       {/* SIDEBAR */}
+       {/* ✨ FLAWLESS SIDEBAR WITH WHITE LOGO ✨ */}
        <aside className={`bg-slate-900 border-r border-slate-800 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-64'} shadow-lg relative z-20`}>
           <div className="p-6 flex items-center justify-between">
              {!isSidebarCollapsed && (
-                 <div className="flex items-center gap-2">
-                    <div className="relative w-8 h-8 bg-white rounded-full p-1"><Image src={'/logo.png'} alt="Logo" fill className="object-contain" unoptimized/></div>
-                    <div><h2 className="text-white font-bold text-lg leading-none">AIMS</h2><p className="text-[10px] text-[#c1121f] font-bold uppercase">ERP</p></div>
+                 <div className="relative h-10 w-40">
+                     <Image src="/whitelogo.png" alt="AIMS Logo" fill className="object-contain object-left" unoptimized/>
                  </div>
              )}
              <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="text-slate-400 hover:text-white"><Menu size={20}/></button>
@@ -500,7 +499,7 @@ export default function DirectorPage() {
                  {!isSidebarCollapsed && "Dashboard"}
              </button>
              
-             {/* ✨ ADDED 'carousel' TO THE SIDEBAR MAPPING ARRAY */}
+             {/* ✨ CAROUSEL ADDED TO SIDEBAR MAPPING ARRAY */}
              {['users', 'batches', 'accounts', 'enquiries', 'directory', 'academics', 'content', 'carousel'].map(tab => (
                  <button key={tab} onClick={() => setActiveTab(tab)} 
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${activeTab === tab ? 'bg-[#c1121f] text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`}
@@ -540,7 +539,7 @@ export default function DirectorPage() {
            {activeTab === 'directory' && <StudentDirectoryPanel students={students} batches={batches} onRefresh={refreshData} />}
            {activeTab === 'content' && <ContentPanel batches={batches} students={students} />}
            
-           {/* ✨ NEW CAROUSEL PANEL INTEGRATION */}
+           {/* ✨ CAROUSEL PANEL INTEGRATION */}
            {activeTab === 'carousel' && <CarouselPanel />}
 
            {/* --- INLINE TABS (ENQUIRIES) --- */}
