@@ -1,503 +1,536 @@
 'use client';
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { Loader2, AlertTriangle, CheckCircle, WifiOff, PlayCircle, Clock, Lock, LogOut } from 'lucide-react';
+import { useRouter, useParams } from 'next/navigation';
+import { 
+    Clock, CheckCircle, AlertTriangle, FileText, ChevronRight, 
+    ChevronLeft, Flag, CheckSquare, X, ShieldAlert, Loader2, Square
+} from 'lucide-react';
 import { studentApi } from '../../services/studentApi';
-import ExamHeader from '../../components/ExamHeader';
-import QuestionPalette from '../../components/QuestionPalette';
-import QuestionView from '../../components/QuestionView';
 
-interface ExamData {
-  attemptId: string;
-  exam: { title: string; duration: number; totalMarks: number; scheduledAt: string; examType?: string; };
-  questions: any[];
-  serverTime: string;
-}
+// ==========================================
+// ✨ LATEX RENDERER
+// ==========================================
+export const LatexRenderer = ({ content, className = "" }: { content: string, className?: string }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isReady, setIsReady] = useState(false);
 
-export default function ExamPage() {
-  const params = useParams();
-  const examId = params?.examId as string;
-  const router = useRouter();
-
-  // --- STATE ---
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [examData, setExamData] = useState<ExamData | null>(null);
-  
-  // Workflow States
-  const [hasStarted, setHasStarted] = useState(false); 
-  const [agreed, setAgreed] = useState(false); // NTA Instructions Checkbox
-  const [isOffline, setIsOffline] = useState(false);
-  const [isTooEarly, setIsTooEarly] = useState(false);
-  
-  // Exam State
-  const [currentQIndex, setCurrentQIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [markedForReview, setMarkedForReview] = useState<Record<string, boolean>>({});
-  const [timeLeft, setTimeLeft] = useState(0);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [submissionStatus, setSubmissionStatus] = useState<'IDLE' | 'SUBMITTING' | 'COMPLETED'>('IDLE');
-  
-  // Refs for Stability (Breaks dependency loops & allows timer to access latest state safely)
-  const answersRef = useRef<Record<string, string>>({});
-  const timeSpentRef = useRef<Record<string, number>>({});
-  const lastSwitchTime = useRef<number>(Date.now());
-  const examIdRef = useRef(examId);
-  const currentQIndexRef = useRef(currentQIndex); 
-  const examDataRef = useRef<ExamData | null>(null); 
-
-  // Sync state to refs
-  useEffect(() => { answersRef.current = answers; }, [answers]);
-  useEffect(() => { currentQIndexRef.current = currentQIndex; }, [currentQIndex]);
-  useEffect(() => { examDataRef.current = examData; }, [examData]);
-
-  // --- NETWORK MONITORING ---
   useEffect(() => {
-      const handleOnline = () => setIsOffline(false);
-      const handleOffline = () => setIsOffline(true);
-      window.addEventListener('online', handleOnline);
-      window.addEventListener('offline', handleOffline);
-      return () => {
-          window.removeEventListener('online', handleOnline);
-          window.removeEventListener('offline', handleOffline);
-      };
+    if (typeof window === 'undefined') return;
+    if (!window.scriptLoadingPromises) window.scriptLoadingPromises = {};
+
+    const loadScript = (src: string, id: string): Promise<void> => {
+      if (window.scriptLoadingPromises![src]) return window.scriptLoadingPromises![src]!;
+      if (document.getElementById(id)) return Promise.resolve();
+
+      const promise = new Promise<void>((resolve, reject) => {
+        const script = document.createElement("script");
+        script.id = id; script.src = src; script.crossOrigin = "anonymous";
+        script.onload = () => resolve(); script.onerror = () => reject();
+        document.head.appendChild(script);
+      });
+      window.scriptLoadingPromises![src] = promise;
+      return promise;
+    };
+
+    const initKatex = async () => {
+      if (!document.getElementById('katex-css')) {
+        const link = document.createElement("link");
+        link.id = 'katex-css'; link.href = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"; link.rel = "stylesheet";
+        document.head.appendChild(link);
+      }
+      try {
+        await loadScript("https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js", "katex-js");
+        await loadScript("https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/mhchem.min.js", "katex-mhchem");
+        await loadScript("https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js", "katex-auto-render");
+        setIsReady(true);
+      } catch (e) { console.error("Failed to load KaTeX", e); }
+    };
+
+    if (window.katex && window.renderMathInElement) setIsReady(true);
+    else initKatex();
   }, []);
 
-  // --- SUBMIT FUNCTION ---
-  const handleSubmit = useCallback(async (auto = false) => {
-    if(!auto && !window.confirm("Are you sure you want to submit the exam?")) return;
+  useEffect(() => {
+    if (!isReady || !containerRef.current || !content) return;
+    let safeContent = String(content).replace(/\\n/g, '\n');
+    const hasMath = /\\ce\{|\\sqrt|\\frac|\\mu|\\alpha|\\beta|\\gamma|\\theta|\\pi|\\sum|\\int/.test(safeContent);
+    const hasDelimiters = /\$|\\\[|\\\(/.test(safeContent);
+    if (hasMath && !hasDelimiters) safeContent = `\\(${safeContent}\\)`;
     
-    setSubmissionStatus('SUBMITTING');
-    const token = studentApi.getToken();
-    
-    const currentExam = examDataRef.current;
-    if (currentExam && currentExam.questions.length > 0) {
-        const finalQId = currentExam.questions[currentQIndexRef.current].id;
-        const now = Date.now();
-        const diff = (now - lastSwitchTime.current) / 1000;
-        timeSpentRef.current[finalQId] = (timeSpentRef.current[finalQId] || 0) + diff;
-    }
-    
-    const currentAnswers = answersRef.current;
-    const currentTimeSpent = timeSpentRef.current;
-    
-    const payload = Object.entries(currentAnswers).map(([qid, opt]) => ({
-        questionId: qid,
-        selectedOption: opt,
-        timeTaken: Math.round(currentTimeSpent[qid] || 0)
-    }));
-
-    try {
-        await studentApi.submitExam(examIdRef.current, payload, token);
-        setSubmissionStatus('COMPLETED');
-        
-        // Clear Storage
-        const keys = Object.keys(localStorage);
-        keys.forEach(key => {
-            if(key.startsWith('exam_') && key.includes(examIdRef.current)) localStorage.removeItem(key);
+    containerRef.current.innerHTML = safeContent;
+    if (window.renderMathInElement) {
+        window.renderMathInElement(containerRef.current, {
+            delimiters: [
+                { left: '$$', right: '$$', display: true },
+                { left: '\\[', right: '\\]', display: true },
+                { left: '$', right: '$', display: false },
+                { left: '\\(', right: '\\)', display: false }
+            ],
+            throwOnError: false, errorColor: '#cc0000', strict: false, trust: true
         });
-        
-    } catch(e: any) {
-        alert("Submission Failed. Please check your internet connection and try again.");
-        setSubmissionStatus('IDLE');
     }
-  }, []); 
+  }, [content, isReady]);
 
-  // --- ANTI-CHEAT (STRICT 3-STRIKE RULE) ---
-  const violationsRef = useRef(0);
+  if (!content) return null;
+  return <div ref={containerRef} className={`latex-container font-medium overflow-x-auto custom-scrollbar ${className}`}>{!isReady && <span>{content}</span>}</div>;
+};
+
+
+// ==========================================
+// MAIN EXAM COMPONENT
+// ==========================================
+export default function ExamSession() {
+  const router = useRouter();
+  const params = useParams();
+  const examId = params.examId as string;
+
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [examData, setExamData] = useState<any>(null);
+  const [questions, setQuestions] = useState<any[]>([]);
+  
+  const [status, setStatus] = useState<'INSTRUCTIONS' | 'IN_PROGRESS' | 'SUBMITTED'>('INSTRUCTIONS');
+  const [instructionsRead, setInstructionsRead] = useState(false);
+  
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [timeRemaining, setTimeRemaining] = useState(0);
+  
+  // Storage Maps
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [timeSpent, setTimeSpent] = useState<Record<string, number>>({});
+  
+  // Palette States
+  const [visited, setVisited] = useState<Set<string>>(new Set());
+  const [markedForReview, setMarkedForReview] = useState<Set<string>>(new Set());
+  
+  // Anti-Cheat
+  const [strikes, setStrikes] = useState(0);
+  const [showWarning, setShowWarning] = useState(false);
+
   useEffect(() => {
-      if (!hasStarted || submissionStatus !== 'IDLE') return;
-      
-      const handleVisibilityChange = () => {
-          if (document.hidden) {
-              violationsRef.current += 1;
-              
-              if (violationsRef.current >= 3) {
-                  alert("🚨 SECURITY VIOLATION 🚨\nYou have switched tabs 3 times. Your exam is now being automatically submitted.");
-                  handleSubmit(true);
-              } else {
-                  alert(`⚠️ WARNING: Tab switching is monitored. Violation ${violationsRef.current} of 3.\nIf you switch tabs again, your exam will be automatically submitted.`);
-              }
-          }
-      };
-      
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-      return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [hasStarted, submissionStatus, handleSubmit]);
-
-  // --- LOAD EXAM ---
-  useEffect(() => {
-      if (!examId) return;
-      examIdRef.current = examId; 
-
       const initExam = async () => {
-          setLoading(true);
-          const token = studentApi.getToken();
-          if(!token) { setError("Authentication required."); setLoading(false); return; }
-
           try {
+              const token = studentApi.getToken();
+              if (!token) return router.push('/');
               const data = await studentApi.startAttempt(examId, token);
               
-              if (data && data.questions) {
-                  data.questions = data.questions.map((q: any) => {
-                      let qImageUrl = q.questionImage || q.question_images?.[0];
-                      q.questionImage = typeof qImageUrl === 'string' && qImageUrl.length > 5 && qImageUrl !== 'null' ? qImageUrl : null;
-
-                      if (q.options) {
-                          let rawOpts: any[] = [];
-                          const sourceOpts = q.options || q.options_dict || [];
-                          
-                          if (Array.isArray(sourceOpts)) rawOpts = sourceOpts;
-                          else if (typeof sourceOpts === 'object') {
-                              rawOpts = [sourceOpts.a, sourceOpts.b, sourceOpts.c, sourceOpts.d].filter(x => x !== undefined);
-                              if (rawOpts.length === 0) rawOpts = Object.values(sourceOpts);
-                          } else if (typeof sourceOpts === 'string') {
-                              try {
-                                  const parsed = JSON.parse(sourceOpts);
-                                  rawOpts = Array.isArray(parsed) ? parsed : Object.values(parsed);
-                              } catch(e) { rawOpts = []; }
-                          }
-
-                          const cleanOptions: Record<string, string> = {};
-                          const keys = ['a', 'b', 'c', 'd'];
-                          
-                          rawOpts.forEach((opt, idx) => {
-                              if (idx > 3) return;
-                              const key = keys[idx];
-                              
-                              let parsedOpt = opt;
-                              if (typeof opt === 'string') {
-                                  const trimmed = opt.trim();
-                                  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-                                      try { parsedOpt = JSON.parse(trimmed); } catch(e) {}
-                                  }
-                              }
-                              
-                              let text = "";
-                              let img = null;
-
-                              if (typeof parsedOpt === 'object' && parsedOpt !== null) {
-                                  text = parsedOpt.latex || parsedOpt.text || "";
-                                  if (parsedOpt.image && parsedOpt.image !== 'null') {
-                                      img = parsedOpt.image;
-                                      if (!img.startsWith('http') && Array.isArray(q.option_images) && q.option_images.length > idx) {
-                                          img = q.option_images[idx];
-                                      }
-                                  }
-                              } else {
-                                  text = String(parsedOpt || "");
-                              }
-
-                              if (img && !text) {
-                                  cleanOptions[key] = img;
-                              } else if (text && !img) {
-                                  cleanOptions[key] = text;
-                              } else if (text && img) {
-                                  cleanOptions[key] = `${text} \n\n ![Image](${img})`;
-                              } else {
-                                  cleanOptions[key] = "";
-                              }
-                          });
-                          q.options = cleanOptions;
-                      }
-                      return q;
-                  });
-              }
-
-              const startTimeDate = new Date(data.exam.scheduledAt);
-              const now = new Date();
-              if (startTimeDate > now) {
-                  setExamData(data); 
-                  setIsTooEarly(true);
-                  setLoading(false);
-                  return;
-              }
-
-              setExamData(data);
-
-              const savedAns = localStorage.getItem(`exam_ans_${data.attemptId}`);
-              if(savedAns) {
-                  const parsed = JSON.parse(savedAns);
-                  setAnswers(parsed);
-                  answersRef.current = parsed;
-              }
+              setExamData(data.exam);
+              setQuestions(data.questions);
               
-              const savedRev = localStorage.getItem(`exam_rev_${data.attemptId}`);
-              if(savedRev) setMarkedForReview(JSON.parse(savedRev));
+              // Calculate Time accurately considering server start time
+              const startedAt = new Date(data.startedAt).getTime();
+              const now = new Date(data.serverTime).getTime();
+              const elapsedMs = now - startedAt;
+              const durationMs = (data.exam.durationMin * 60 * 1000);
+              const remaining = Math.max(0, Math.floor((durationMs - elapsedMs) / 1000));
               
-              const savedTime = localStorage.getItem(`exam_time_${data.attemptId}`);
-              if(savedTime) timeSpentRef.current = JSON.parse(savedTime);
-
-              let startTimestamp = parseInt(localStorage.getItem(`exam_start_${data.attemptId}`) || '0');
-              if (!startTimestamp) {
-                  startTimestamp = Date.now();
-                  localStorage.setItem(`exam_start_${data.attemptId}`, startTimestamp.toString());
-              }
-              const elapsed = Math.floor((Date.now() - startTimestamp) / 1000);
-              const remaining = (data.exam.duration * 60) - elapsed;
+              setTimeRemaining(remaining);
+              if (remaining <= 0) setStatus('SUBMITTED');
               
-              if(remaining <= 0) { 
-                  handleSubmit(true); 
-              } else { 
-                  setTimeLeft(remaining); 
-              }
+          } catch (e: any) {
+              alert(e.message || "Failed to load exam.");
+              router.push('/student');
+          } finally {
+              setLoading(false);
+          }
+      };
+      initExam();
+  }, [examId, router]);
 
-              lastSwitchTime.current = Date.now();
-          } catch(e:any) { 
-              console.error(e);
-              setError(e.message); 
-          } finally { 
-              setLoading(false); 
+  // Timer & Time Spent Tracking
+  useEffect(() => {
+      if (status !== 'IN_PROGRESS') return;
+      const timer = setInterval(() => {
+          setTimeRemaining(prev => {
+              if (prev <= 1) { clearInterval(timer); handleAutoSubmit(); return 0; }
+              return prev - 1;
+          });
+          
+          const currentQId = questions[currentIdx]?.id;
+          if (currentQId) {
+              setTimeSpent(prev => ({ ...prev, [currentQId]: (prev[currentQId] || 0) + 1 }));
+          }
+      }, 1000);
+      return () => clearInterval(timer);
+  }, [status, currentIdx, questions]);
+
+  // Mark first question visited on start
+  useEffect(() => {
+      if (status === 'IN_PROGRESS' && questions.length > 0) {
+          setVisited(prev => new Set(prev).add(questions[currentIdx].id));
+      }
+  }, [status, currentIdx, questions]);
+
+  // Anti-Cheat Monitor
+  useEffect(() => {
+      if (status !== 'IN_PROGRESS') return;
+
+      const handleVisibilityChange = () => {
+          if (document.hidden) {
+              setStrikes(s => {
+                  const newStrikes = s + 1;
+                  if (newStrikes >= 3) {
+                      handleAutoSubmit();
+                      alert("Exam auto-submitted due to multiple tab-switching violations.");
+                  } else {
+                      setShowWarning(true);
+                  }
+                  return newStrikes;
+              });
           }
       };
 
-      initExam();
-  }, [examId, handleSubmit]); 
+      const handleContextMenu = (e: Event) => e.preventDefault();
+      const handleCopyPaste = (e: Event) => e.preventDefault();
 
-  // --- TIMER ---
-  useEffect(() => {
-      if(!loading && hasStarted && timeLeft > 0 && submissionStatus === 'IDLE' && !isOffline && !isTooEarly) {
-          const t = setInterval(() => {
-              setTimeLeft(p => {
-                  if(p <= 1) { clearInterval(t); handleSubmit(true); return 0; }
-                  return p - 1;
-              });
-          }, 1000);
-          return () => clearInterval(t);
-      }
-  }, [loading, timeLeft, submissionStatus, hasStarted, isOffline, isTooEarly, handleSubmit]);
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      document.addEventListener('contextmenu', handleContextMenu);
+      document.addEventListener('copy', handleCopyPaste);
+      document.addEventListener('paste', handleCopyPaste);
 
-  // --- ACTIONS ---
-  const updateTimeSpent = (qId: string) => {
-      const now = Date.now();
-      const diff = (now - lastSwitchTime.current) / 1000;
-      timeSpentRef.current = { 
-          ...timeSpentRef.current, 
-          [qId]: (timeSpentRef.current[qId] || 0) + diff 
+      return () => {
+          document.removeEventListener('visibilitychange', handleVisibilityChange);
+          document.removeEventListener('contextmenu', handleContextMenu);
+          document.removeEventListener('copy', handleCopyPaste);
+          document.removeEventListener('paste', handleCopyPaste);
       };
-      if(examData) localStorage.setItem(`exam_time_${examData.attemptId}`, JSON.stringify(timeSpentRef.current));
-      lastSwitchTime.current = now;
+  }, [status]);
+
+  const formatTime = (seconds: number) => {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = seconds % 60;
+      if (h > 0) return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+      return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const handleSwitchQuestion = (idx: number) => {
-      if(!examData) return;
-      const qId = examData.questions[currentQIndex]?.id;
-      if(qId) updateTimeSpent(qId);
-      setCurrentQIndex(idx);
+  const handleStart = async () => {
+      if (!document.fullscreenElement) {
+          try { await document.documentElement.requestFullscreen(); } 
+          catch (e) { console.warn("Fullscreen blocked"); }
+      }
+      setStatus('IN_PROGRESS');
   };
 
-  const handleAnswer = (val: string) => {
-      if(submissionStatus !== 'IDLE') return;
-      const qId = examData?.questions[currentQIndex].id;
-      if(!qId) return;
+  const handleAutoSubmit = async () => {
+      if (status === 'SUBMITTED') return;
+      await finalizeSubmission();
+  };
+
+  const finalizeSubmission = async () => {
+      setSubmitting(true);
+      const token = studentApi.getToken();
       
-      const newAnswers = { ...answers, [qId]: val };
-      setAnswers(newAnswers);
-      localStorage.setItem(`exam_ans_${examData!.attemptId}`, JSON.stringify(newAnswers));
+      const payload = questions.map(q => ({
+          questionId: q.id,
+          selectedOption: answers[q.id] || '',
+          timeTaken: timeSpent[q.id] || 0
+      }));
+
+      try {
+          await studentApi.submitExam(examId, payload, token);
+          setStatus('SUBMITTED');
+          if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+      } catch (e) {
+          alert("Failed to submit exam. Check your connection.");
+      } finally {
+          setSubmitting(false);
+      }
   };
 
-  const handleReview = () => {
-      const qId = examData?.questions[currentQIndex].id;
-      if(!qId) return;
-      const newRev = { ...markedForReview, [qId]: !markedForReview[qId] };
-      setMarkedForReview(newRev);
-      localStorage.setItem(`exam_rev_${examData!.attemptId}`, JSON.stringify(newRev));
+  const handleOptionToggle = (qId: string, optKey: string, isMulti: boolean) => {
+      if (!isMulti) {
+          setAnswers(prev => ({ ...prev, [qId]: optKey }));
+      } else {
+          setAnswers(prev => {
+              const current = prev[qId] ? prev[qId].split(',') : [];
+              if (current.includes(optKey)) {
+                  const filtered = current.filter(k => k !== optKey);
+                  return { ...prev, [qId]: filtered.length > 0 ? filtered.sort().join(',') : '' };
+              } else {
+                  return { ...prev, [qId]: [...current, optKey].sort().join(',') };
+              }
+          });
+      }
+  };
+
+  const navigateTo = (index: number) => {
+      if (index >= 0 && index < questions.length) {
+          setCurrentIdx(index);
+          setVisited(prev => new Set(prev).add(questions[index].id));
+      }
+  };
+
+  const handleSaveNext = () => {
+      setMarkedForReview(prev => { const next = new Set(prev); next.delete(questions[currentIdx].id); return next; });
+      navigateTo(currentIdx + 1);
+  };
+
+  const handleMarkReview = () => {
+      setMarkedForReview(prev => new Set(prev).add(questions[currentIdx].id));
+      navigateTo(currentIdx + 1);
   };
 
   const handleClear = () => {
-      const qId = examData?.questions[currentQIndex].id;
-      if(!qId) return;
-      const newAnswers = { ...answers };
-      delete newAnswers[qId];
-      setAnswers(newAnswers);
-      localStorage.setItem(`exam_ans_${examData!.attemptId}`, JSON.stringify(newAnswers));
+      setAnswers(prev => { const next = { ...prev }; delete next[questions[currentIdx].id]; return next; });
   };
 
-  // --- RENDER ---
-  if (loading) return <div className="h-screen flex flex-col items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-blue-600 mb-4" size={48}/><p className="text-slate-500 font-medium">Loading Exam Environment...</p></div>;
-  
-  if (error) return <div className="h-screen flex flex-col items-center justify-center bg-slate-50 p-4 text-center"><AlertTriangle className="text-red-500 mb-4" size={48}/><h2 className="text-xl font-bold text-slate-800">Access Denied</h2><p className="text-red-600 mt-2">{error}</p><button onClick={() => router.push('/student')} className="mt-6 px-6 py-2 bg-slate-800 text-white rounded-lg">Return to Dashboard</button></div>;
-
-  if (isTooEarly) return (
-      <div className="h-screen flex flex-col items-center justify-center bg-slate-50 p-4 text-center">
-          <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border border-slate-200">
-             <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4"><Lock size={32}/></div>
-             <h2 className="text-xl font-bold text-slate-800">Exam Not Started</h2>
-             <p className="text-slate-500 mt-2 text-sm">This exam is scheduled for:</p>
-             <p className="text-lg font-bold text-blue-600 mt-2">{new Date(examData!.exam.scheduledAt).toLocaleString()}</p>
-             <button onClick={() => router.push('/student')} className="mt-6 w-full py-3 bg-slate-800 text-white rounded-lg font-bold hover:bg-slate-700 transition">Back to Dashboard</button>
+  if (loading) return <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-blue-600 mb-4" size={40}/> <h2 className="text-slate-600 font-bold">Securely loading exam...</h2></div>;
+  if (status === 'SUBMITTED') return (
+      <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
+          <div className="bg-white p-8 rounded-2xl shadow-xl text-center max-w-md w-full border border-slate-200 animate-in zoom-in">
+              <CheckCircle size={64} className="text-emerald-500 mx-auto mb-6"/>
+              <h2 className="text-2xl font-black text-slate-800 mb-2">Exam Submitted Successfully</h2>
+              <p className="text-slate-500 mb-8 font-medium">Your answers have been securely recorded. You can view your detailed analytics in the Results tab.</p>
+              <button onClick={() => router.push('/student')} className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition shadow-md">Return to Dashboard</button>
           </div>
       </div>
   );
 
-  if (submissionStatus === 'COMPLETED') return <div className="h-screen flex flex-col items-center justify-center bg-slate-50"><CheckCircle className="text-green-500 mb-4" size={64}/><h2 className="text-2xl font-bold text-slate-800">Exam Submitted!</h2><p className="text-slate-500 mt-2">Go to the Results tab to view your score.</p><button onClick={() => router.push('/student')} className="mt-6 px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg transition">Return Home</button></div>;
-
-  // --- NTA STYLE INSTRUCTIONS MODAL ---
-  if (!hasStarted) {
+  // --- INSTRUCTIONS SCREEN ---
+  if (status === 'INSTRUCTIONS') {
       return (
-        <div className="fixed inset-0 z-50 flex flex-col bg-slate-50 font-sans">
-            {/* Top NTA Style Header */}
-            <div className="bg-slate-900 border-b border-slate-800 px-6 py-4 flex justify-between items-center shrink-0 shadow-md">
-                <div className="h-10 w-40 relative">
-                    <img src="/whitelogo.png" alt="System Logo" className="w-full h-full object-contain object-left" />
-                </div>
-                <h1 className="text-white font-bold text-lg hidden sm:block tracking-wide">
-                    {examData?.exam?.title || 'EXAMINATION INSTRUCTIONS'}
-                </h1>
-            </div>
-            
-            {/* Scrollable Content Area */}
-            <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
-                <div className="max-w-4xl mx-auto bg-white border border-slate-200 shadow-sm rounded-lg overflow-hidden">
-                    
-                    <div className="p-4 bg-blue-50 border-b border-blue-100">
-                        <h2 className="text-lg font-bold text-blue-900 text-center uppercase tracking-wider">Please read the instructions carefully</h2>
-                    </div>
-                    
-                    <div className="p-6 md:p-10 space-y-8 text-sm text-slate-700 leading-relaxed">
-                        
-                        {/* Section 1: General */}
-                        <div>
-                            <h3 className="font-bold text-base mb-3 underline text-slate-900">General Instructions:</h3>
-                            <ol className="list-decimal pl-5 space-y-3">
-                                <li>Total duration of examination is <strong className="text-slate-900">{examData?.exam?.duration || 180} minutes</strong>.</li>
-                                <li>The clock will be set at the server. The countdown timer in the top right corner of the screen will display the remaining time available for you to complete the examination. When the timer reaches zero, the examination will end by itself. You will not be required to end or submit your examination manually.</li>
-                                <li>
-                                    The Question Palette displayed on the right side of the screen will show the status of each question using one of the following symbols:
-                                    
-                                    <div className="mt-5 mb-3 space-y-4 font-medium pl-2">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-8 h-8 flex items-center justify-center border border-slate-300 bg-slate-100 rounded text-slate-500 font-bold shrink-0 shadow-sm">1</div>
-                                            <span>You have not visited the question yet.</span>
-                                        </div>
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-8 h-8 flex items-center justify-center border border-slate-300 bg-white rounded text-slate-600 font-bold shrink-0 shadow-sm">2</div>
-                                            <span>You have not answered the question.</span>
-                                        </div>
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-8 h-8 flex items-center justify-center border border-green-300 bg-green-100 text-green-700 font-bold rounded shrink-0 shadow-sm">3</div>
-                                            <span>You have answered the question.</span>
-                                        </div>
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-8 h-8 flex items-center justify-center border border-orange-300 bg-orange-100 text-orange-700 font-bold rounded shrink-0 relative shadow-sm">
-                                                4
-                                            </div>
-                                            <span>You have NOT answered the question, but have marked the question for review.</span>
-                                        </div>
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-8 h-8 flex items-center justify-center border border-orange-300 bg-orange-100 text-orange-700 font-bold rounded shrink-0 relative shadow-sm">
-                                                5
-                                                <div className="absolute top-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full -mr-1 -mt-1 border border-white"/>
-                                            </div>
-                                            <span>The question(s) "Answered and Marked for Review" will be considered for evaluation.</span>
-                                        </div>
-                                    </div>
-                                </li>
-                                <li>You can click on the arrow which appears to the left of the question palette to collapse the question palette thereby maximizing the question window. To view the question palette again, you can click on the menu icon on the right side.</li>
-                            </ol>
-                        </div>
-                        
-                        {/* Section 2: Security & Strict Rules */}
-                        <div>
-                            <h3 className="font-bold text-base mb-3 underline text-slate-900">Strict Anti-Cheating & Security:</h3>
-                            <ol className="list-decimal pl-5 space-y-3">
-                                <li><strong>Tab Switching Monitored:</strong> Navigating away from the exam window or opening other applications is strictly prohibited. <span className="text-red-600 font-bold">3 violations will result in automatic submission of the exam.</span></li>
-                                <li><strong>Full Screen:</strong> It is highly recommended to take the exam in full-screen mode to avoid accidental clicks outside the window.</li>
-                                <li><strong>Connectivity:</strong> Ensure a stable internet connection. If disconnected, the timer will PAUSE locally, but do not close the window. The system will sync your answers automatically when reconnected.</li>
-                            </ol>
-                        </div>
-                        
-                    </div>
-                </div>
-            </div>
+          <div className="min-h-screen bg-slate-50 p-4 md:p-8 flex items-center justify-center">
+              <div className="max-w-4xl w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
+                  <div className="bg-blue-900 p-6 text-white text-center">
+                      <h1 className="text-2xl font-black uppercase tracking-wider">{examData?.title}</h1>
+                      <p className="opacity-80 font-medium mt-1">Total Time: {examData?.durationMin} Mins | Total Marks: {examData?.totalMarks}</p>
+                  </div>
+                  <div className="p-8">
+                      <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2"><AlertTriangle className="text-amber-500"/> Please read carefully:</h3>
+                      <ul className="space-y-3 text-slate-600 font-medium text-sm">
+                          <li className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0"/> The clock will be set at the server. The countdown timer in the top right corner will display the remaining time available for you to complete the examination.</li>
+                          <li className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0"/> The Question Palette displayed on the right side of screen will show the status of each question.</li>
+                          <li className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5 shrink-0"/> <strong>Anti-Cheat Active:</strong> Switching tabs, exiting full-screen, or opening other applications will trigger a warning. 3 warnings will result in auto-submission.</li>
+                          <li className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0"/> Exam Type: <strong>{examData?.examType}</strong>. Negative marking is active as per the standard pattern.</li>
+                      </ul>
 
-            {/* Footer / Declaration Checkbox */}
-            <div className="bg-white border-t border-slate-200 p-4 md:p-6 shrink-0 shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)] z-10">
-                <div className="max-w-4xl mx-auto flex flex-col gap-5">
-                    <label className="flex items-start gap-4 cursor-pointer group bg-slate-50 p-4 rounded-xl border border-slate-200 transition-colors hover:bg-blue-50/50 hover:border-blue-200">
-                        <input 
-                            type="checkbox" 
-                            className="mt-0.5 w-5 h-5 cursor-pointer accent-blue-600 border-slate-300 rounded shrink-0"
-                            checked={agreed}
-                            onChange={(e) => setAgreed(e.target.checked)}
-                        />
-                        <span className="text-[13px] md:text-sm text-slate-700 font-medium select-none group-hover:text-slate-900 leading-relaxed">
-                            I have read and understood the instructions. All computer hardware allotted to me are in proper working condition. I declare that I am not in possession of / not wearing / not carrying any prohibited gadget like mobile phone, bluetooth devices etc. /any prohibited material with me into the Examination Hall. I agree that in case of not adhering to the instructions, I shall be liable to be debarred from this Test and/or to disciplinary action.
-                        </span>
-                    </label>
-                    <div className="flex justify-between items-center border-t border-slate-100 pt-4 mt-1">
-                        <button onClick={() => router.push('/student')} className="text-slate-500 hover:text-slate-800 font-bold flex items-center gap-2 px-5 py-2.5 rounded-lg hover:bg-slate-100 transition">
-                            <LogOut size={16}/> Cancel
-                        </button>
-                        <button 
-                            onClick={() => {
-                                if (agreed) {
-                                    // Optionally request full screen upon starting (if supported by browser)
-                                    try { document.documentElement.requestFullscreen().catch(() => {}); } catch(e) {}
-                                    setHasStarted(true);
-                                }
-                            }} 
-                            disabled={!agreed}
-                            className={`px-8 py-3 rounded-xl font-bold shadow-md transition flex items-center gap-2 ${agreed ? 'bg-blue-600 hover:bg-blue-700 text-white active:scale-95 shadow-blue-200/50' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
-                        >
-                            Proceed <PlayCircle size={18}/>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
+                      <div className="mt-8 pt-6 border-t border-slate-200">
+                          <label className="flex items-center gap-3 cursor-pointer group p-3 bg-slate-50 rounded-xl border border-slate-200 hover:border-blue-300 transition">
+                              <input type="checkbox" checked={instructionsRead} onChange={(e) => setInstructionsRead(e.target.checked)} className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"/>
+                              <span className="text-sm font-bold text-slate-700 select-none">I have read and understood the instructions. I agree to not engage in any unfair means.</span>
+                          </label>
+                      </div>
+
+                      <div className="mt-6 flex justify-end">
+                          <button onClick={handleStart} disabled={!instructionsRead} className="bg-blue-600 text-white font-bold py-3 px-8 rounded-xl hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md">
+                              I am ready to begin
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          </div>
       );
   }
 
-  const currentQ = examData!.questions[currentQIndex];
-  const examType = examData!.exam.examType || 'JEE Main'; // ✨ Passes Exam Type down to QuestionView
+  // --- EXAM ENGINE VIEW ---
+  const currentQ = questions[currentIdx];
+  const isMultiCorrect = examData?.examType === 'JEE Advanced' && currentQ.type === 'MCQ';
+  
+  // Safely parse options dictionary
+  const qOpts = typeof currentQ.options === 'string' ? JSON.parse(currentQ.options) : (currentQ.options || {});
+  const optKeys = ['a', 'b', 'c', 'd'];
 
   return (
-      <div className="flex h-screen bg-slate-100 font-sans overflow-hidden select-none relative">
+      <div className="h-screen flex flex-col bg-slate-100 font-sans overflow-hidden select-none">
           
-          {/* OFFLINE OVERLAY */}
-          {isOffline && (
-              <div className="absolute inset-0 z-[100] bg-black/80 backdrop-blur-md flex flex-col items-center justify-center text-white p-4 text-center">
-                  <WifiOff size={64} className="mb-4 text-red-500 animate-pulse"/>
-                  <h2 className="text-2xl font-bold">Connection Lost</h2>
-                  <p className="text-slate-300 mt-2">The timer is paused. Please reconnect to resume your exam.</p>
+          {/* Anti-Cheat Warning Modal */}
+          {showWarning && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+                  <div className="bg-white p-8 rounded-2xl max-w-md w-full text-center border-t-4 border-red-600 shadow-2xl animate-in zoom-in">
+                      <ShieldAlert size={64} className="text-red-500 mx-auto mb-4"/>
+                      <h2 className="text-2xl font-black text-slate-800 mb-2">Warning: Tab Switched!</h2>
+                      <p className="text-slate-600 font-medium mb-6">You have navigated away from the exam window. This is strike {strikes}/3. Continuing this behavior will result in automatic disqualification.</p>
+                      <button onClick={() => setShowWarning(false)} className="w-full bg-red-600 text-white font-bold py-3 rounded-xl hover:bg-red-700 transition">I Understand, Return to Exam</button>
+                  </div>
               </div>
           )}
 
-          <ExamHeader 
-              title={examData!.exam.title} 
-              attemptId={examData!.attemptId} 
-              timeLeft={timeLeft}
-              onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-              onOpenQuestionPaper={() => {}} 
-          />
-          
-          <main className="flex-1 mt-16 p-2 md:p-6 overflow-hidden relative flex flex-col md:flex-row gap-4">
-              <QuestionView 
-                  question={currentQ}
-                  qIndex={currentQIndex}
-                  totalQuestions={examData!.questions.length}
-                  answer={answers[currentQ.id]}
-                  isMarked={markedForReview[currentQ.id]}
-                  examType={examType} // ✨ Passed to properly render Multi-Correct
-                  onAnswer={handleAnswer}
-                  onMarkReview={handleReview}
-                  onClear={handleClear}
-                  onNext={() => handleSwitchQuestion(Math.min(examData!.questions.length - 1, currentQIndex + 1))}
-                  onPrev={() => handleSwitchQuestion(Math.max(0, currentQIndex - 1))}
-              />
+          {/* TOP NAVBAR (NTA Style) */}
+          <header className="bg-blue-900 text-white flex justify-between items-center px-4 py-2.5 shrink-0 shadow-md z-10">
+              <div className="flex items-center gap-4">
+                  <div className="bg-white text-blue-900 px-3 py-1 rounded font-black text-lg tracking-wider">AIMS</div>
+                  <div className="hidden md:block">
+                      <h1 className="font-bold text-sm">{examData?.title}</h1>
+                      <span className="text-[10px] text-blue-200 uppercase tracking-widest">{examData?.examType}</span>
+                  </div>
+              </div>
               
-              <QuestionPalette 
-                  questions={examData!.questions}
-                  currentIndex={currentQIndex}
-                  answers={answers}
-                  markedForReview={markedForReview}
-                  onSwitch={handleSwitchQuestion}
-                  isOpen={isSidebarOpen}
-                  onClose={() => setIsSidebarOpen(false)}
-                  onSubmit={() => handleSubmit(false)}
-              />
-          </main>
+              <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-2 bg-blue-800/50 px-4 py-1.5 rounded-lg border border-blue-700">
+                      <Clock size={16} className={timeRemaining < 300 ? 'text-red-400 animate-pulse' : 'text-blue-300'}/>
+                      <span className={`font-mono text-lg font-bold tracking-wider ${timeRemaining < 300 ? 'text-red-400' : 'text-white'}`}>
+                          {formatTime(timeRemaining)}
+                      </span>
+                  </div>
+                  <button onClick={() => { if(confirm('Are you sure you want to final submit?')) finalizeSubmission(); }} disabled={submitting} className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-5 py-2 rounded shadow transition disabled:opacity-50 flex items-center gap-2">
+                      {submitting ? <Loader2 size={14} className="animate-spin"/> : <CheckSquare size={14}/>} Submit Exam
+                  </button>
+              </div>
+          </header>
+
+          <div className="flex flex-1 overflow-hidden">
+              
+              {/* LEFT: QUESTION AREA */}
+              <div className="flex-1 flex flex-col bg-white m-2 rounded-xl shadow-sm border border-slate-200 overflow-hidden relative">
+                  
+                  {/* Subject / Section Header */}
+                  <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex items-center justify-between shrink-0">
+                      <div className="flex items-center gap-2">
+                          <span className="text-xs font-black uppercase text-slate-500 tracking-wider">Section:</span>
+                          <span className="bg-blue-100 text-blue-800 px-3 py-0.5 rounded text-sm font-bold border border-blue-200">{currentQ?.subject || 'General'}</span>
+                      </div>
+                      <div className="flex gap-4">
+                          <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-200">+{currentQ?.marks} Marks</span>
+                          <span className="text-xs font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded border border-red-100">{currentQ?.negative} Negative</span>
+                      </div>
+                  </div>
+
+                  {/* Scrollable Question Content */}
+                  <div className="flex-1 overflow-y-auto p-6 md:p-10 custom-scrollbar text-slate-800">
+                      <div className="flex gap-4">
+                          <span className="font-black text-xl text-slate-400">Q.{currentIdx + 1}</span>
+                          <div className="flex-1">
+                              
+                              <div className="text-base font-medium leading-relaxed mb-4">
+                                  <LatexRenderer content={currentQ?.questionText} />
+                              </div>
+
+                              {/* ✨ FIX: Render Base64 Question Image if it exists! */}
+                              {currentQ?.questionImage && currentQ.questionImage.length > 10 && currentQ.questionImage !== 'null' && (
+                                  <div className="mt-4 mb-6 p-2 bg-slate-50 border border-slate-200 rounded-xl inline-block">
+                                      <img src={currentQ.questionImage} alt="Question Graphic" className="max-h-72 w-auto object-contain rounded" />
+                                  </div>
+                              )}
+
+                              <div className="w-full h-px bg-slate-100 my-6"></div>
+
+                              {currentQ?.type === 'MCQ' ? (
+                                  <div className="space-y-3 max-w-3xl">
+                                      {isMultiCorrect && <p className="text-xs font-bold text-amber-600 mb-3 uppercase tracking-wider flex items-center gap-1"><AlertTriangle size={14}/> Multiple Options can be correct</p>}
+                                      
+                                      {optKeys.map(key => {
+                                          const textVal = qOpts[key];
+                                          const imgVal = qOpts[`img_${key}`]; // ✨ Check for option images!
+                                          
+                                          // Safe check for missing options
+                                          if (!textVal && !imgVal) return null;
+
+                                          const isSelected = isMultiCorrect 
+                                              ? (answers[currentQ.id] && answers[currentQ.id].split(',').includes(key))
+                                              : answers[currentQ.id] === key;
+
+                                          return (
+                                              <label key={key} className={`flex items-start gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${isSelected ? 'border-blue-500 bg-blue-50/50 shadow-sm' : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'}`}>
+                                                  <div className="pt-0.5 shrink-0">
+                                                      <input 
+                                                          type={isMultiCorrect ? "checkbox" : "radio"}
+                                                          checked={isSelected || false}
+                                                          onChange={() => handleOptionToggle(currentQ.id, key, isMultiCorrect)}
+                                                          className={`w-5 h-5 cursor-pointer text-blue-600 focus:ring-blue-500 border-slate-300 ${isMultiCorrect ? 'rounded' : ''}`}
+                                                      />
+                                                  </div>
+                                                  <div className="flex-1 flex flex-col justify-center">
+                                                      {textVal && <LatexRenderer content={textVal} className={isSelected ? 'font-bold text-blue-900' : 'text-slate-700'} />}
+                                                      
+                                                      {/* ✨ FIX: Render Option Image! */}
+                                                      {imgVal && typeof imgVal === 'string' && imgVal.length > 10 && imgVal !== 'null' && (
+                                                          <div className="mt-2 bg-white p-1.5 border border-slate-200 rounded inline-block max-w-fit">
+                                                              <img src={imgVal} alt={`Option ${key}`} className="max-h-24 w-auto object-contain" />
+                                                          </div>
+                                                      )}
+                                                  </div>
+                                              </label>
+                                          );
+                                      })}
+                                  </div>
+                              ) : (
+                                  <div className="max-w-sm mt-4">
+                                      <p className="text-xs font-bold text-indigo-500 mb-2 uppercase tracking-wider">Enter Numerical Value:</p>
+                                      <input 
+                                          type="text"
+                                          value={answers[currentQ?.id] || ''}
+                                          onChange={(e) => setAnswers(prev => ({...prev, [currentQ.id]: e.target.value}))}
+                                          className="w-full p-4 text-xl font-mono font-black text-center border-2 border-slate-300 rounded-xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 outline-none transition"
+                                          placeholder="0.00"
+                                      />
+                                  </div>
+                              )}
+
+                          </div>
+                      </div>
+                  </div>
+
+                  {/* BOTTOM ACTION BAR */}
+                  <div className="bg-slate-50 border-t border-slate-200 p-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                      <div className="flex gap-2">
+                          <button onClick={handleMarkReview} className="bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm transition flex items-center gap-2">
+                              <Flag size={16}/> Mark for Review & Next
+                          </button>
+                          <button onClick={handleClear} className="bg-white hover:bg-slate-100 border border-slate-300 text-slate-600 px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm transition flex items-center gap-2">
+                              <X size={16}/> Clear Response
+                          </button>
+                      </div>
+                      
+                      <button onClick={handleSaveNext} className="bg-green-600 hover:bg-green-700 text-white px-8 py-2.5 rounded-lg text-sm font-bold shadow-sm transition flex items-center gap-2">
+                          Save & Next <ChevronRight size={18}/>
+                      </button>
+                  </div>
+              </div>
+
+              {/* RIGHT: QUESTION PALETTE */}
+              <div className="w-80 flex flex-col bg-white m-2 ml-0 rounded-xl shadow-sm border border-slate-200 overflow-hidden shrink-0 hidden lg:flex">
+                  
+                  <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center gap-3 shrink-0">
+                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center border border-blue-200">
+                          <FileText className="text-blue-600" size={20}/>
+                      </div>
+                      <div>
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Question Palette</p>
+                          <p className="text-sm font-black text-slate-700">{questions.length} Total Questions</p>
+                      </div>
+                  </div>
+
+                  {/* Legend */}
+                  <div className="p-4 grid grid-cols-2 gap-2 border-b border-slate-100 shrink-0">
+                      <div className="flex items-center gap-2 text-[10px] font-bold text-slate-600"><div className="w-6 h-6 rounded-md bg-white border border-slate-300 flex items-center justify-center text-slate-400">1</div> Not Visited</div>
+                      <div className="flex items-center gap-2 text-[10px] font-bold text-slate-600"><div className="w-6 h-6 rounded-md bg-red-500 text-white flex items-center justify-center border border-red-600">2</div> Not Answered</div>
+                      <div className="flex items-center gap-2 text-[10px] font-bold text-slate-600"><div className="w-6 h-6 rounded-md bg-green-500 text-white flex items-center justify-center border border-green-600">3</div> Answered</div>
+                      <div className="flex items-center gap-2 text-[10px] font-bold text-slate-600"><div className="w-6 h-6 rounded-md bg-purple-600 text-white flex items-center justify-center border border-purple-700">4</div> Marked</div>
+                  </div>
+
+                  {/* Number Grid */}
+                  <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                      <div className="grid grid-cols-5 gap-2">
+                          {questions.map((q, idx) => {
+                              const isCurrent = idx === currentIdx;
+                              const isVis = visited.has(q.id);
+                              const isAns = !!answers[q.id];
+                              const isMarked = markedForReview.has(q.id);
+
+                              let bgClass = "bg-white border-slate-300 text-slate-500"; // Not Visited
+                              if (isVis && !isAns && !isMarked) bgClass = "bg-red-500 border-red-600 text-white shadow-inner"; // Not Answered
+                              if (isAns && !isMarked) bgClass = "bg-green-500 border-green-600 text-white shadow-inner"; // Answered
+                              if (isMarked) bgClass = "bg-purple-600 border-purple-700 text-white shadow-inner"; // Marked
+                              
+                              // Answered and Marked
+                              if (isAns && isMarked) bgClass = "bg-purple-600 border-purple-700 text-white shadow-inner relative after:content-[''] after:absolute after:bottom-0.5 after:right-0.5 after:w-2 after:h-2 after:bg-green-400 after:rounded-full"; 
+
+                              return (
+                                  <button
+                                      key={q.id}
+                                      onClick={() => navigateTo(idx)}
+                                      className={`w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold transition-all border ${bgClass} ${isCurrent ? 'ring-2 ring-offset-2 ring-blue-500 scale-110 z-10' : 'hover:opacity-80'}`}
+                                  >
+                                      {idx + 1}
+                                  </button>
+                              );
+                          })}
+                      </div>
+                  </div>
+              </div>
+          </div>
       </div>
   );
 }
