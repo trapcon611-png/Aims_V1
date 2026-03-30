@@ -2,11 +2,36 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { 
-    Clock, CheckCircle, AlertTriangle, FileText, ChevronRight, 
-    ChevronLeft, Flag, CheckSquare, X, ShieldAlert, Loader2, Square
-} from 'lucide-react';
+import { Clock, CheckCircle, AlertTriangle, FileText, ChevronRight, ChevronLeft, Flag, CheckSquare, X, ShieldAlert, Loader2, Square } from 'lucide-react';
 import { studentApi } from '../../services/studentApi';
+
+// ==========================================
+// ✨ INDESTRUCTIBLE IMAGE RESOLVER (Handles Raw Base64)
+// ==========================================
+const getResolvedImageUrl = (imgUrl?: string | null) => {
+    if (!imgUrl || imgUrl === 'null' || imgUrl.trim() === '') return null;
+    
+    // 1. If it already has the perfect prefix or is a web link, use it!
+    if (imgUrl.startsWith('http') || imgUrl.startsWith('data:')) {
+        return imgUrl;
+    }
+    
+    // 2. If it's a RAW Base64 String (Long string, no file extensions)
+    // We automatically inject the correct HTML Base64 prefix!
+    if (imgUrl.length > 100 && !imgUrl.includes('.')) {
+        const mimeType = imgUrl.startsWith('/9j/') ? 'image/jpeg' : 'image/png';
+        return `data:${mimeType};base64,${imgUrl}`;
+    }
+    
+    // 3. Fallback: If it's a short filename (like 325_image_11.png), route to backend
+    let API_URL = process.env.NEXT_PUBLIC_API_URL;
+    if (!API_URL || API_URL.includes('localhost')) {
+        API_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001';
+    }
+    
+    const cleanPath = imgUrl.startsWith('/') ? imgUrl.substring(1) : imgUrl;
+    return `${API_URL}/uploads/${cleanPath}`;
+};
 
 // ==========================================
 // ✨ LATEX RENDERER
@@ -76,7 +101,6 @@ export const LatexRenderer = ({ content, className = "" }: { content: string, cl
   return <div ref={containerRef} className={`latex-container font-medium overflow-x-auto custom-scrollbar ${className}`}>{!isReady && <span>{content}</span>}</div>;
 };
 
-
 // ==========================================
 // MAIN EXAM COMPONENT
 // ==========================================
@@ -96,15 +120,12 @@ export default function ExamSession() {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [timeRemaining, setTimeRemaining] = useState(0);
   
-  // Storage Maps
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [timeSpent, setTimeSpent] = useState<Record<string, number>>({});
   
-  // Palette States
   const [visited, setVisited] = useState<Set<string>>(new Set());
   const [markedForReview, setMarkedForReview] = useState<Set<string>>(new Set());
   
-  // Anti-Cheat
   const [strikes, setStrikes] = useState(0);
   const [showWarning, setShowWarning] = useState(false);
 
@@ -118,7 +139,6 @@ export default function ExamSession() {
               setExamData(data.exam);
               setQuestions(data.questions);
               
-              // Calculate Time accurately considering server start time
               const startedAt = new Date(data.startedAt).getTime();
               const now = new Date(data.serverTime).getTime();
               const elapsedMs = now - startedAt;
@@ -138,7 +158,6 @@ export default function ExamSession() {
       initExam();
   }, [examId, router]);
 
-  // Timer & Time Spent Tracking
   useEffect(() => {
       if (status !== 'IN_PROGRESS') return;
       const timer = setInterval(() => {
@@ -155,14 +174,12 @@ export default function ExamSession() {
       return () => clearInterval(timer);
   }, [status, currentIdx, questions]);
 
-  // Mark first question visited on start
   useEffect(() => {
-      if (status === 'IN_PROGRESS' && questions.length > 0) {
+      if (status === 'IN_PROGRESS' && questions.length > 0 && questions[currentIdx]) {
           setVisited(prev => new Set(prev).add(questions[currentIdx].id));
       }
   }, [status, currentIdx, questions]);
 
-  // Anti-Cheat Monitor
   useEffect(() => {
       if (status !== 'IN_PROGRESS') return;
 
@@ -263,20 +280,24 @@ export default function ExamSession() {
   };
 
   const handleSaveNext = () => {
+      if (!questions[currentIdx]) return;
       setMarkedForReview(prev => { const next = new Set(prev); next.delete(questions[currentIdx].id); return next; });
       navigateTo(currentIdx + 1);
   };
 
   const handleMarkReview = () => {
+      if (!questions[currentIdx]) return;
       setMarkedForReview(prev => new Set(prev).add(questions[currentIdx].id));
       navigateTo(currentIdx + 1);
   };
 
   const handleClear = () => {
+      if (!questions[currentIdx]) return;
       setAnswers(prev => { const next = { ...prev }; delete next[questions[currentIdx].id]; return next; });
   };
 
   if (loading) return <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-blue-600 mb-4" size={40}/> <h2 className="text-slate-600 font-bold">Securely loading exam...</h2></div>;
+  
   if (status === 'SUBMITTED') return (
       <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
           <div className="bg-white p-8 rounded-2xl shadow-xl text-center max-w-md w-full border border-slate-200 animate-in zoom-in">
@@ -288,7 +309,6 @@ export default function ExamSession() {
       </div>
   );
 
-  // --- INSTRUCTIONS SCREEN ---
   if (status === 'INSTRUCTIONS') {
       return (
           <div className="min-h-screen bg-slate-50 p-4 md:p-8 flex items-center justify-center">
@@ -324,18 +344,19 @@ export default function ExamSession() {
       );
   }
 
-  // --- EXAM ENGINE VIEW ---
   const currentQ = questions[currentIdx];
+  if (status === 'IN_PROGRESS' && !currentQ) {
+      return <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-blue-600 mb-4" size={40}/> <h2 className="text-slate-600 font-bold">Synchronizing...</h2></div>;
+  }
+
   const isMultiCorrect = examData?.examType === 'JEE Advanced' && currentQ.type === 'MCQ';
-  
-  // Safely parse options dictionary
   const qOpts = typeof currentQ.options === 'string' ? JSON.parse(currentQ.options) : (currentQ.options || {});
   const optKeys = ['a', 'b', 'c', 'd'];
+  const resolvedQuestionImage = getResolvedImageUrl(currentQ?.questionImage);
 
   return (
       <div className="h-screen flex flex-col bg-slate-100 font-sans overflow-hidden select-none">
           
-          {/* Anti-Cheat Warning Modal */}
           {showWarning && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
                   <div className="bg-white p-8 rounded-2xl max-w-md w-full text-center border-t-4 border-red-600 shadow-2xl animate-in zoom-in">
@@ -347,7 +368,6 @@ export default function ExamSession() {
               </div>
           )}
 
-          {/* TOP NAVBAR (NTA Style) */}
           <header className="bg-blue-900 text-white flex justify-between items-center px-4 py-2.5 shrink-0 shadow-md z-10">
               <div className="flex items-center gap-4">
                   <div className="bg-white text-blue-900 px-3 py-1 rounded font-black text-lg tracking-wider">AIMS</div>
@@ -372,10 +392,7 @@ export default function ExamSession() {
 
           <div className="flex flex-1 overflow-hidden">
               
-              {/* LEFT: QUESTION AREA */}
               <div className="flex-1 flex flex-col bg-white m-2 rounded-xl shadow-sm border border-slate-200 overflow-hidden relative">
-                  
-                  {/* Subject / Section Header */}
                   <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex items-center justify-between shrink-0">
                       <div className="flex items-center gap-2">
                           <span className="text-xs font-black uppercase text-slate-500 tracking-wider">Section:</span>
@@ -387,7 +404,6 @@ export default function ExamSession() {
                       </div>
                   </div>
 
-                  {/* Scrollable Question Content */}
                   <div className="flex-1 overflow-y-auto p-6 md:p-10 custom-scrollbar text-slate-800">
                       <div className="flex gap-4">
                           <span className="font-black text-xl text-slate-400">Q.{currentIdx + 1}</span>
@@ -397,10 +413,14 @@ export default function ExamSession() {
                                   <LatexRenderer content={currentQ?.questionText} />
                               </div>
 
-                              {/* ✨ FIX: Render Base64 Question Image if it exists! */}
-                              {currentQ?.questionImage && currentQ.questionImage.length > 10 && currentQ.questionImage !== 'null' && (
-                                  <div className="mt-4 mb-6 p-2 bg-slate-50 border border-slate-200 rounded-xl inline-block">
-                                      <img src={currentQ.questionImage} alt="Question Graphic" className="max-h-72 w-auto object-contain rounded" />
+                              {resolvedQuestionImage && (
+                                  <div className="mt-4 mb-6 inline-block">
+                                      <img 
+                                          src={resolvedQuestionImage} 
+                                          alt="Question Graphic" 
+                                          className="max-h-72 w-auto object-contain rounded border border-slate-200 bg-slate-50 p-2" 
+                                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                      />
                                   </div>
                               )}
 
@@ -412,9 +432,8 @@ export default function ExamSession() {
                                       
                                       {optKeys.map(key => {
                                           const textVal = qOpts[key];
-                                          const imgVal = qOpts[`img_${key}`]; // ✨ Check for option images!
+                                          const imgVal = getResolvedImageUrl(qOpts[`img_${key}`]); 
                                           
-                                          // Safe check for missing options
                                           if (!textVal && !imgVal) return null;
 
                                           const isSelected = isMultiCorrect 
@@ -434,10 +453,14 @@ export default function ExamSession() {
                                                   <div className="flex-1 flex flex-col justify-center">
                                                       {textVal && <LatexRenderer content={textVal} className={isSelected ? 'font-bold text-blue-900' : 'text-slate-700'} />}
                                                       
-                                                      {/* ✨ FIX: Render Option Image! */}
-                                                      {imgVal && typeof imgVal === 'string' && imgVal.length > 10 && imgVal !== 'null' && (
-                                                          <div className="mt-2 bg-white p-1.5 border border-slate-200 rounded inline-block max-w-fit">
-                                                              <img src={imgVal} alt={`Option ${key}`} className="max-h-24 w-auto object-contain" />
+                                                      {imgVal && (
+                                                          <div className="mt-2 inline-block max-w-fit">
+                                                              <img 
+                                                                  src={imgVal} 
+                                                                  alt={`Option ${key}`} 
+                                                                  className="max-h-24 w-auto object-contain bg-white p-1.5 border border-slate-200 rounded" 
+                                                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                              />
                                                           </div>
                                                       )}
                                                   </div>
@@ -462,7 +485,6 @@ export default function ExamSession() {
                       </div>
                   </div>
 
-                  {/* BOTTOM ACTION BAR */}
                   <div className="bg-slate-50 border-t border-slate-200 p-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
                       <div className="flex gap-2">
                           <button onClick={handleMarkReview} className="bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm transition flex items-center gap-2">
@@ -479,20 +501,15 @@ export default function ExamSession() {
                   </div>
               </div>
 
-              {/* RIGHT: QUESTION PALETTE */}
               <div className="w-80 flex flex-col bg-white m-2 ml-0 rounded-xl shadow-sm border border-slate-200 overflow-hidden shrink-0 hidden lg:flex">
-                  
                   <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center gap-3 shrink-0">
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center border border-blue-200">
-                          <FileText className="text-blue-600" size={20}/>
-                      </div>
+                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center border border-blue-200"><FileText className="text-blue-600" size={20}/></div>
                       <div>
                           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Question Palette</p>
                           <p className="text-sm font-black text-slate-700">{questions.length} Total Questions</p>
                       </div>
                   </div>
 
-                  {/* Legend */}
                   <div className="p-4 grid grid-cols-2 gap-2 border-b border-slate-100 shrink-0">
                       <div className="flex items-center gap-2 text-[10px] font-bold text-slate-600"><div className="w-6 h-6 rounded-md bg-white border border-slate-300 flex items-center justify-center text-slate-400">1</div> Not Visited</div>
                       <div className="flex items-center gap-2 text-[10px] font-bold text-slate-600"><div className="w-6 h-6 rounded-md bg-red-500 text-white flex items-center justify-center border border-red-600">2</div> Not Answered</div>
@@ -500,7 +517,6 @@ export default function ExamSession() {
                       <div className="flex items-center gap-2 text-[10px] font-bold text-slate-600"><div className="w-6 h-6 rounded-md bg-purple-600 text-white flex items-center justify-center border border-purple-700">4</div> Marked</div>
                   </div>
 
-                  {/* Number Grid */}
                   <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
                       <div className="grid grid-cols-5 gap-2">
                           {questions.map((q, idx) => {
@@ -509,12 +525,11 @@ export default function ExamSession() {
                               const isAns = !!answers[q.id];
                               const isMarked = markedForReview.has(q.id);
 
-                              let bgClass = "bg-white border-slate-300 text-slate-500"; // Not Visited
-                              if (isVis && !isAns && !isMarked) bgClass = "bg-red-500 border-red-600 text-white shadow-inner"; // Not Answered
-                              if (isAns && !isMarked) bgClass = "bg-green-500 border-green-600 text-white shadow-inner"; // Answered
-                              if (isMarked) bgClass = "bg-purple-600 border-purple-700 text-white shadow-inner"; // Marked
+                              let bgClass = "bg-white border-slate-300 text-slate-500"; 
+                              if (isVis && !isAns && !isMarked) bgClass = "bg-red-500 border-red-600 text-white shadow-inner"; 
+                              if (isAns && !isMarked) bgClass = "bg-green-500 border-green-600 text-white shadow-inner"; 
+                              if (isMarked) bgClass = "bg-purple-600 border-purple-700 text-white shadow-inner"; 
                               
-                              // Answered and Marked
                               if (isAns && isMarked) bgClass = "bg-purple-600 border-purple-700 text-white shadow-inner relative after:content-[''] after:absolute after:bottom-0.5 after:right-0.5 after:w-2 after:h-2 after:bg-green-400 after:rounded-full"; 
 
                               return (

@@ -1,10 +1,26 @@
 'use client';
 import React, { useState, useMemo } from 'react';
-import { 
-    X, Clock, CheckCircle, XCircle, MinusCircle, 
-    BarChart2, Timer, Zap, Lightbulb, Loader2 
-} from 'lucide-react';
-import { LatexRenderer, ContentRenderer } from './LatexRenderer';
+import { X, Clock, CheckCircle, XCircle, MinusCircle, BarChart2, Timer, Zap, Lightbulb, Loader2 } from 'lucide-react';
+import { LatexRenderer } from './LatexRenderer';
+
+// --- ✨ INDESTRUCTIBLE IMAGE RESOLVER ---
+const getResolvedImageUrl = (imgUrl?: string | null) => {
+    if (!imgUrl || imgUrl === 'null' || imgUrl.trim() === '') return null;
+    if (imgUrl.startsWith('http') || imgUrl.startsWith('data:')) return imgUrl;
+    
+    // Automatically convert Raw Base64 string to a proper data URI
+    if (imgUrl.length > 100 && !imgUrl.includes('.')) {
+        const mimeType = imgUrl.startsWith('/9j/') ? 'image/jpeg' : 'image/png';
+        return `data:${mimeType};base64,${imgUrl}`;
+    }
+
+    let API_URL = process.env.NEXT_PUBLIC_API_URL;
+    if (!API_URL || API_URL.includes('localhost')) {
+        API_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001';
+    }
+    const cleanPath = imgUrl.startsWith('/') ? imgUrl.substring(1) : imgUrl;
+    return `${API_URL}/uploads/${cleanPath}`;
+};
 
 interface QuestionMetric {
     id: number;
@@ -22,6 +38,16 @@ interface QuestionMetric {
     solutionImage?: string;
 }
 
+type QuestionStat = { total: number; attempted: number; correct: number; wrong: number; skipped: number; score: number; totalTime: number; longestQuestion: any | null; };
+type SectionStats = { mcq: QuestionStat; integer: QuestionStat; totalScore: number; totalTime: number; accuracy: number; };
+type AnalyticsSummary = { Physics: SectionStats; Chemistry: SectionStats; Mathematics: SectionStats; General: SectionStats; Overall: { score: number; rank: number; accuracy: number; time: number }; };
+
+const initialStatBucket = (): SectionStats => ({
+    mcq: { total: 0, attempted: 0, correct: 0, wrong: 0, skipped: 0, score: 0, totalTime: 0, longestQuestion: null },
+    integer: { total: 0, attempted: 0, correct: 0, wrong: 0, skipped: 0, score: 0, totalTime: 0, longestQuestion: null },
+    totalScore: 0, totalTime: 0, accuracy: 0
+});
+
 const getQuestionType = (q: any) => { 
     const qType = q.type || q.question_type || ''; 
     if (qType.toUpperCase() === 'INTEGER' || qType.toUpperCase() === 'NUMERICAL') return 'INTEGER'; 
@@ -33,50 +59,26 @@ const getQuestionType = (q: any) => {
 };
 
 const normalizeOptions = (q: any) => {
-    let rawOpts: any[] = [];
-    const sourceOptions = q.options || q.options_dict || [];
+    const sourceOptions = q.options || q.options_dict || {};
 
     if (Array.isArray(sourceOptions)) {
-        rawOpts = sourceOptions;
-    } else if (typeof sourceOptions === 'object' && sourceOptions !== null) {
-        rawOpts = [sourceOptions.a, sourceOptions.b, sourceOptions.c, sourceOptions.d].filter(x => x !== undefined);
-        if (rawOpts.length === 0) rawOpts = Object.values(sourceOptions);
-    } else if (typeof sourceOptions === 'string') {
-        try {
-            const parsed = JSON.parse(sourceOptions);
-            if (Array.isArray(parsed)) rawOpts = parsed;
-            else rawOpts = [parsed.a, parsed.b, parsed.c, parsed.d].filter(x => x !== undefined);
-        } catch(e) {
-            return [];
-        }
+        return sourceOptions.map((opt) => {
+             let text = typeof opt === 'string' ? opt : (opt.text || opt.latex || '');
+             let image = typeof opt === 'object' ? getResolvedImageUrl(opt.image) : null;
+             return { text, image };
+        });
     }
-
-    return rawOpts.map((opt, idx) => {
-        let parsedOpt = opt;
-        if (typeof opt === 'string') {
-            const trimmed = opt.trim();
-            if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-                try { parsedOpt = JSON.parse(trimmed); } catch(e) {}
-            }
-        }
-        
-        let text = "";
-        let img = null;
-
-        if (typeof parsedOpt === 'object' && parsedOpt !== null) {
-            text = parsedOpt.latex || parsedOpt.text || "";
-            if (parsedOpt.image && parsedOpt.image !== 'null') {
-                img = parsedOpt.image;
-                if (!img.startsWith('http') && Array.isArray(q.option_images) && q.option_images.length > idx) {
-                    img = q.option_images[idx];
-                }
-            }
-        } else {
-            text = String(parsedOpt || "");
-        }
-
-        return { text, image: img };
-    });
+    
+    if (typeof sourceOptions === 'object') {
+        const keys = ['a', 'b', 'c', 'd'];
+        return keys.map(k => {
+             let text = sourceOptions[k] || '';
+             let image = getResolvedImageUrl(sourceOptions[`img_${k}`]);
+             return { text, image };
+        });
+    }
+    
+    return [];
 };
 
 const OptionsDisplay = ({ q, selectedOption }: { q: any, selectedOption?: string }) => {
@@ -92,7 +94,6 @@ const OptionsDisplay = ({ q, selectedOption }: { q: any, selectedOption?: string
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
             {normOptions.map((opt, idx) => {
                 const label = String.fromCharCode(97 + idx); 
-                
                 const isCorrect = correctVals.includes(label) || correctVals.includes(String(idx + 1));
                 const isSelected = selectedVals.includes(label) || selectedVals.includes(String(idx + 1));
 
@@ -106,11 +107,10 @@ const OptionsDisplay = ({ q, selectedOption }: { q: any, selectedOption?: string
                         <div className="flex-1 overflow-x-auto custom-scrollbar text-slate-700">
                             {opt.text && <LatexRenderer content={opt.text} />}
                             {opt.image && (
-                                <div className="mt-1 max-h-[100px] overflow-auto custom-scrollbar border border-slate-200 rounded p-1 bg-white inline-block">
-                                    <img src={opt.image} className="max-h-[80px] w-auto object-contain" alt={`Option ${label}`} />
+                                <div className="mt-2 inline-block max-w-fit bg-white p-1.5 border border-slate-200 rounded shadow-sm">
+                                    <img src={opt.image} className="max-h-24 w-auto object-contain" alt={`Option ${label}`} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                 </div>
                             )}
-                            {!opt.text && !opt.image && <span className="italic text-slate-300">Empty</span>}
                         </div>
                         {isCorrect && <CheckCircle size={18} className="text-green-600 shrink-0 mt-0.5"/>}
                         {isSelected && !isCorrect && <XCircle size={18} className="text-red-600 shrink-0 mt-0.5"/>}
@@ -137,29 +137,17 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
       return questions.filter(q => q.subject === activeSubject);
   }, [questions, activeSubject]);
 
-  // ✨ FIX: Safe stat calculation prevents infinite loading loop
   const stats = useMemo(() => {
       const subset = filteredQuestions;
-      
-      if (!subset || subset.length === 0) {
-          return { totalTime: 0, avgTime: 0, slowestQ: null, fastestCorrect: null, accuracy: 0 };
-      }
+      if (!subset || subset.length === 0) return { totalTime: 0, avgTime: 0, slowestQ: null, fastestCorrect: null, accuracy: 0 };
 
       const totalTime = subset.reduce((acc, q) => acc + (q.timeSpent || 0), 0);
       const slowest = subset.reduce((prev, curr) => ((prev.timeSpent || 0) > (curr.timeSpent || 0)) ? prev : curr, subset[0]);
       
       const correctOnes = subset.filter(q => q.status === 'CORRECT');
-      const fastest = correctOnes.length > 0 
-          ? correctOnes.reduce((prev, curr) => ((prev.timeSpent || 0) < (curr.timeSpent || 0)) ? prev : curr, correctOnes[0])
-          : null;
+      const fastest = correctOnes.length > 0 ? correctOnes.reduce((prev, curr) => ((prev.timeSpent || 0) < (curr.timeSpent || 0)) ? prev : curr, correctOnes[0]) : null;
 
-      return {
-          totalTime,
-          avgTime: Math.round(totalTime / subset.length),
-          slowestQ: slowest,
-          fastestCorrect: fastest,
-          accuracy: Math.round((correctOnes.length / subset.length) * 100) || 0
-      };
+      return { totalTime, avgTime: Math.round(totalTime / subset.length), slowestQ: slowest, fastestCorrect: fastest, accuracy: Math.round((correctOnes.length / subset.length) * 100) || 0 };
   }, [filteredQuestions]);
 
   const formatTime = (sec: number) => {
@@ -184,7 +172,6 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-2 md:p-6 animate-in fade-in">
       <div className="bg-white w-full max-w-7xl h-[90vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col relative border border-slate-200">
         
-        {/* HEADER */}
         <div className="bg-white border-b border-slate-200 p-6 flex justify-between items-center shrink-0">
            <div>
               <h2 className="text-xl font-black text-slate-800 tracking-tight">{result.examTitle}</h2>
@@ -200,7 +187,6 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
            <button onClick={onClose} className="p-2 bg-slate-100 hover:bg-red-50 hover:text-red-500 rounded-full transition"><X size={20}/></button>
         </div>
 
-        {/* SUBJECT TABS */}
         <div className="px-6 pt-4 bg-slate-50 border-b border-slate-200 flex gap-2 overflow-x-auto">
             {subjects.map(sub => (
                 <button
@@ -213,15 +199,12 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
             ))}
         </div>
 
-        {/* MAIN CONTENT GRID */}
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
             
-            {/* LEFT: STATISTICS SIDEBAR */}
             <div className="md:w-80 bg-slate-50 border-r border-slate-200 p-6 overflow-y-auto custom-scrollbar">
                 <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Performance Metrics</h3>
                 
                 <div className="space-y-4">
-                    {/* Accuracy Card */}
                     <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                         <div className="flex items-center gap-2 mb-2 text-blue-600">
                             <BarChart2 size={18}/>
@@ -233,7 +216,6 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
                         </div>
                     </div>
 
-                    {/* Slowest Question */}
                     <div className="bg-white p-4 rounded-xl border border-red-100 shadow-sm">
                         <div className="flex items-center gap-2 mb-2 text-red-500">
                             <Clock size={18}/>
@@ -245,7 +227,6 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
                         {stats.slowestQ && <p className="text-xs text-slate-500 mt-1">Spent on <span className="font-bold">Q.{stats.slowestQ.id}</span></p>}
                     </div>
 
-                    {/* Fastest Correct */}
                     {stats.fastestCorrect && (
                         <div className="bg-white p-4 rounded-xl border border-green-100 shadow-sm">
                             <div className="flex items-center gap-2 mb-2 text-green-600">
@@ -257,7 +238,6 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
                         </div>
                     )}
 
-                     {/* Avg Time */}
                      <div className="bg-white p-4 rounded-xl border border-purple-100 shadow-sm">
                         <div className="flex items-center gap-2 mb-2 text-purple-600">
                             <Timer size={18}/>
@@ -268,7 +248,6 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
                 </div>
             </div>
 
-            {/* RIGHT: QUESTION LIST */}
             <div className="flex-1 overflow-y-auto p-0 bg-white custom-scrollbar">
                 <table className="w-full text-left border-collapse">
                     <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
@@ -286,7 +265,8 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
                             </tr>
                         )}
                         {filteredQuestions.map((q) => {
-                            const validQImage = typeof q.questionImage === 'string' && q.questionImage.length > 5 && q.questionImage !== 'null' ? q.questionImage : null;
+                            const validQImage = getResolvedImageUrl(q.questionImage);
+                            const validSolImage = getResolvedImageUrl(q.solutionImage);
 
                             return (
                             <React.Fragment key={q.id}>
@@ -314,13 +294,11 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
                                     </td>
                                 </tr>
 
-                                {/* EXPANDED DETAILS WITH SOLUTIONS & HINTS */}
                                 {expandedRow === q.id && (
                                     <tr className="bg-slate-50/50">
                                         <td colSpan={4} className="px-6 py-4 border-b border-slate-200">
                                             <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
                                                 
-                                                {/* Question */}
                                                 <div className="mb-6">
                                                     <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Question</h4>
                                                     <div className="text-sm text-slate-800 font-medium leading-relaxed">
@@ -328,13 +306,17 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
                                                     </div>
                                                     
                                                     {validQImage && (
-                                                        <div className="mt-4 mb-2 max-h-[300px] border border-slate-200 rounded-lg bg-slate-50 overflow-auto custom-scrollbar flex justify-center p-2">
-                                                            <img src={validQImage} className="max-h-full w-auto object-contain" alt="Question Image"/>
+                                                        <div className="mt-4 mb-2 inline-block">
+                                                            <img 
+                                                                src={validQImage} 
+                                                                className="max-h-72 w-auto object-contain rounded border border-slate-200 bg-slate-50 p-2" 
+                                                                alt="Question Image"
+                                                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                            />
                                                         </div>
                                                     )}
                                                 </div>
 
-                                                {/* Answer Comparison Boxes */}
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     <div className={`p-4 rounded-xl border ${q.status === 'CORRECT' ? 'bg-green-50 border-green-200' : q.status === 'WRONG' ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
                                                         <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Your Answer</p>
@@ -346,7 +328,6 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
                                                     </div>
                                                 </div>
 
-                                                {/* FULL OPTIONS DISPLAY */}
                                                 {q.options && Object.keys(q.options).length > 0 && (
                                                     <div className="mt-6 border-t border-slate-100 pt-4">
                                                         <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Detailed Options</h4>
@@ -354,23 +335,27 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
                                                     </div>
                                                 )}
 
-                                                {/* ✨ SOLUTIONS & HINTS SECTION */}
                                                 <div className="mt-8 pt-6 border-t border-slate-200">
                                                     <div className="flex items-center gap-2 mb-4">
                                                         <Lightbulb size={18} className="text-amber-500" />
                                                         <h4 className="text-sm font-black text-slate-800 uppercase tracking-wider">Solution & Hints</h4>
                                                     </div>
                                                     
-                                                    {q.explanation || (q.solutionImage && q.solutionImage !== 'null') ? (
+                                                    {q.explanation || validSolImage ? (
                                                         <div className="bg-amber-50/50 border border-amber-200 rounded-xl p-5 shadow-inner">
                                                             {q.explanation && (
                                                                 <div className="text-sm text-slate-800 font-medium leading-relaxed">
                                                                     <LatexRenderer content={q.explanation} />
                                                                 </div>
                                                             )}
-                                                            {q.solutionImage && typeof q.solutionImage === 'string' && q.solutionImage.length > 5 && q.solutionImage !== 'null' && (
+                                                            {validSolImage && (
                                                                 <div className="mt-4 max-h-[400px] border border-slate-200 rounded-lg bg-white overflow-auto custom-scrollbar flex justify-center p-3 shadow-sm">
-                                                                    <img src={q.solutionImage} className="max-w-full h-auto object-contain" alt="Solution Graphic"/>
+                                                                    <img 
+                                                                        src={validSolImage} 
+                                                                        className="max-w-full h-auto object-contain" 
+                                                                        alt="Solution Graphic"
+                                                                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                                    />
                                                                 </div>
                                                             )}
                                                         </div>

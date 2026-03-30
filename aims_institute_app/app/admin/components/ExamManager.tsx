@@ -3,6 +3,34 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Database, Edit3, Loader2, BookOpen, Search, ArrowLeft, ArrowRight, Plus, Check, CheckCircle, Filter, Eye, Lightbulb } from 'lucide-react';
 import { adminApi } from '../services/adminApi';
 
+// ==========================================
+// ✨ INDESTRUCTIBLE IMAGE RESOLVER (Handles Raw Base64)
+// ==========================================
+const getResolvedImageUrl = (imgUrl?: string | null) => {
+    if (!imgUrl || imgUrl === 'null' || imgUrl.trim() === '') return null;
+    
+    // 1. If it already has the perfect prefix or is a web link, use it!
+    if (imgUrl.startsWith('http') || imgUrl.startsWith('data:')) {
+        return imgUrl;
+    }
+    
+    // 2. If it's a RAW Base64 String (Long string, no file extensions)
+    // We automatically inject the correct HTML Base64 prefix!
+    if (imgUrl.length > 100 && !imgUrl.includes('.')) {
+        const mimeType = imgUrl.startsWith('/9j/') ? 'image/jpeg' : 'image/png';
+        return `data:${mimeType};base64,${imgUrl}`;
+    }
+    
+    // 3. Fallback: If it's a short filename (like 325_image_11.png), route to backend
+    let API_URL = process.env.NEXT_PUBLIC_API_URL;
+    if (!API_URL || API_URL.includes('localhost')) {
+        API_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001';
+    }
+    
+    const cleanPath = imgUrl.startsWith('/') ? imgUrl.substring(1) : imgUrl;
+    return `${API_URL}/uploads/${cleanPath}`;
+};
+
 // --- DB STRING MAPPER (SOLVES NEET ROUTING) ---
 const getDbExamType = (uiType: string, subject: string) => {
     if (uiType === 'JEE Advanced') return 'JEE_Advanced';
@@ -26,49 +54,33 @@ const getQuestionType = (q: any) => {
     return 'MCQ'; 
 };
 
+// ✨ ROBUST OPTIONS PARSER: Extracts Base64 images directly from JSON
 const normalizeOptions = (q: any) => {
-    let rawOpts: any[] = [];
-    const sourceOptions = q.options || q.options_dict || [];
+    let sourceOptions = q.options || q.options_dict || {};
 
-    if (Array.isArray(sourceOptions)) {
-        rawOpts = sourceOptions;
-    } else if (typeof sourceOptions === 'object' && sourceOptions !== null) {
-        rawOpts = [sourceOptions.a, sourceOptions.b, sourceOptions.c, sourceOptions.d].filter(x => x !== undefined);
-        if (rawOpts.length === 0) rawOpts = Object.values(sourceOptions);
-    } else if (typeof sourceOptions === 'string') {
-        try {
-            const parsed = JSON.parse(sourceOptions);
-            if (Array.isArray(parsed)) rawOpts = parsed;
-            else rawOpts = [parsed.a, parsed.b, parsed.c, parsed.d].filter(x => x !== undefined);
-        } catch(e) { return []; }
+    if (typeof sourceOptions === 'string') {
+        try { sourceOptions = JSON.parse(sourceOptions); } catch (e) {}
     }
 
-    return rawOpts.map((opt, idx) => {
-        let parsedOpt = opt;
-        if (typeof opt === 'string') {
-            const trimmed = opt.trim();
-            if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-                try { parsedOpt = JSON.parse(trimmed); } catch(e) {}
-            }
-        }
-        
-        let text = "";
-        let img = null;
-
-        if (typeof parsedOpt === 'object' && parsedOpt !== null) {
-            text = parsedOpt.latex || parsedOpt.text || "";
-            if (parsedOpt.image && parsedOpt.image !== 'null') {
-                img = parsedOpt.image;
-                if (!img.startsWith('http') && Array.isArray(q.option_images) && q.option_images.length > idx) {
-                    img = q.option_images[idx];
-                }
-            }
-        } else {
-            text = String(parsedOpt || "");
-        }
-
-        return { text, image: img };
-    });
+    if (Array.isArray(sourceOptions)) {
+        return sourceOptions.map((opt) => {
+             let text = typeof opt === 'string' ? opt : (opt.text || opt.latex || '');
+             let image = typeof opt === 'object' ? getResolvedImageUrl(opt.image) : null;
+             return { text, image };
+        });
+    }
+    
+    if (typeof sourceOptions === 'object' && sourceOptions !== null) {
+        const keys = ['a', 'b', 'c', 'd'];
+        return keys.map(k => {
+             let text = sourceOptions[k] || '';
+             // ✨ FIX: explicitly extracts img_a, img_b and sends to resolver
+             let image = getResolvedImageUrl(sourceOptions[`img_${k}`]);
+             return { text, image };
+        });
+    }
+    
+    return [];
 };
 
 // ==========================================
@@ -190,11 +202,19 @@ const OptionsDisplay = ({ q }: { q: any }) => {
                         <span className={`font-bold uppercase pt-0.5 ${isCorrect ? 'text-green-700' : 'text-slate-500'}`}>{label}.</span>
                         <div className={`flex-1 overflow-x-auto custom-scrollbar ${isCorrect ? 'text-green-800 font-medium' : 'text-slate-600'}`}>
                             {opt.text && <LatexRenderer content={opt.text} />}
+                            
+                            {/* ✨ RENDER BASE64 OPTION IMAGES HERE */}
                             {opt.image && (
                                 <div className="mt-1 max-h-[100px] overflow-auto custom-scrollbar border border-slate-200 rounded p-1 bg-white inline-block">
-                                    <img src={opt.image} className="max-h-[80px] w-auto object-contain" alt={`Option ${label}`} />
+                                    <img 
+                                        src={opt.image} 
+                                        className="max-h-[80px] w-auto object-contain" 
+                                        alt={`Option ${label}`} 
+                                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                    />
                                 </div>
                             )}
+                            
                             {!opt.text && !opt.image && <span className="italic text-slate-300">Empty</span>}
                         </div>
                         {isCorrect && <CheckCircle size={14} className="ml-auto text-green-600 shrink-0 mt-0.5"/>}
@@ -262,8 +282,6 @@ export default function ExamManager({ batches, onRefresh }: ExamManagerProps) {
       });
       
       setEditingExamId(createdExam.id);
-      
-      // ✨ FIX: This defaults the DB filter to whatever Exam Type they are creating!
       setSourceDb(newExam.examType); 
       setMode('EDITOR');
     } catch (e: any) { 
@@ -293,7 +311,7 @@ export default function ExamManager({ batches, onRefresh }: ExamManagerProps) {
               });
               if (res.ok) {
                   const data = await res.json();
-                  setAvailableSyllabus(data); // Using the same format as QuestionChecker
+                  setAvailableSyllabus(data); 
               }
           } catch (e) { console.error("Failed to load topics", e); }
       };
@@ -626,9 +644,14 @@ export default function ExamManager({ batches, onRefresh }: ExamManagerProps) {
                                              <LatexRenderer content={q.questionText} />
                                          </div>
                                          
-                                         {q.questionImage && q.questionImage.length > 10 && q.questionImage !== 'null' && (
+                                         {getResolvedImageUrl(q.questionImage) && (
                                              <div className="mt-3 max-h-48 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center p-2">
-                                                 <img src={q.questionImage} alt="Question Graphic" className="max-h-44 w-auto object-contain" />
+                                                 <img 
+                                                     src={getResolvedImageUrl(q.questionImage)!} 
+                                                     alt="Question Graphic" 
+                                                     className="max-h-44 w-auto object-contain" 
+                                                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                 />
                                              </div>
                                          )}
 
@@ -648,9 +671,14 @@ export default function ExamManager({ batches, onRefresh }: ExamManagerProps) {
                                                      ) : (
                                                          <p className="text-xs text-slate-400 italic">No text explanation provided.</p>
                                                      )}
-                                                     {q.solutionImage && typeof q.solutionImage === 'string' && q.solutionImage.length > 10 && q.solutionImage !== 'null' && (
+                                                     {getResolvedImageUrl(q.solutionImage) && (
                                                          <div className="mt-2 max-h-40 overflow-hidden rounded bg-white flex items-center border border-slate-200 justify-center p-1">
-                                                             <img src={q.solutionImage} alt="Solution Graphic" className="max-h-36 w-auto object-contain" />
+                                                             <img 
+                                                                 src={getResolvedImageUrl(q.solutionImage)!} 
+                                                                 alt="Solution Graphic" 
+                                                                 className="max-h-36 w-auto object-contain" 
+                                                                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                             />
                                                          </div>
                                                      )}
                                                  </div>
