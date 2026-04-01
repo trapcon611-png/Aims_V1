@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as bodyParser from 'body-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -9,13 +10,19 @@ async function bootstrap() {
   // 1. Enable Validation
   app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
 
-  // 2. Enable CORS (Allow local dev AND production IP)
+  // 2. Enable CORS (Bulletproof configuration for NGINX & Domains)
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://76.13.247.225:3000'],
+    origin: true, // Dynamically allows all origins (IPs, domains, localhost without port restrictions)
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
+    allowedHeaders: 'Content-Type, Accept, Authorization',
   });
 
-  // 3. Setup Swagger
+  // 3. Increase Payload Limits (Prevents crashes when uploading massive Base64 images)
+  app.use(bodyParser.json({ limit: '50mb' }));
+  app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
+
+  // 4. Setup Swagger
   const config = new DocumentBuilder()
     .setTitle('AIMS Institute ERP')
     .setDescription('The API for AIMS Coaching Institute (Exams + Finance + Admissions)')
@@ -26,7 +33,6 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 
-  // REMOVED the duplicate app.enableCors() here
   await app.listen(3001);
 }
 bootstrap();
