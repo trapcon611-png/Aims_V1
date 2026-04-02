@@ -14,7 +14,6 @@ services:
     container_name: aims_postgres
     logging: *default-logging
     environment:
-      # Updated to match the credentials from your .env files!
       POSTGRES_USER: aims_manual
       POSTGRES_PASSWORD: Sameer
       POSTGRES_DB: aims_manual
@@ -33,11 +32,9 @@ services:
     logging: *default-logging
     ports:
       - "3001:3001"
-    # TELLS DOCKER TO INJECT EVERYTHING FROM YOUR .ENV FILE
     env_file:
       - ./aims_backend/.env
     environment:
-      # Overrides the 'localhost' from your .env to 'postgres' so Docker can connect internally
       - DATABASE_URL=postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public
     depends_on:
       - postgres
@@ -50,14 +47,18 @@ services:
     build:
       context: ./aims_institute_app
       dockerfile: Dockerfile
-      # Next.js will naturally read your ./aims_institute_app/.env file during the build phase!
+      # ✨ THE FIX: 'args' injects variables directly into the Next.js BUILD process
+      args:
+        - NEXT_PUBLIC_RAZORPAY_KEY_ID=rzp_live_SMgmgIgW1pxhhB
+        - NEXT_PUBLIC_API_URL=http://76.13.247.225:3001
     container_name: aims_frontend
     logging: *default-logging
     ports:
       - "3000:3000"
-    # TELLS DOCKER TO INJECT EVERYTHING FROM YOUR FRONTEND .ENV FILE
-    environment: # Add these two lines!
-      - NEXT_PUBLIC_RAZORPAY_KEY_ID="rzp_live_SMgmgIgW1pxhhB"
+    # We keep this here just for safety during runtime
+    environment: 
+      - NEXT_PUBLIC_RAZORPAY_KEY_ID=rzp_live_SMgmgIgW1pxhhB
+      - NEXT_PUBLIC_API_URL=http://76.13.247.225:3001
     env_file:
       - ./aims_institute_app/.env
     depends_on:
