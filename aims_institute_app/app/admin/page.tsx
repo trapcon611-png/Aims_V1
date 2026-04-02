@@ -761,16 +761,16 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
   const handleFinalizePaper = async (questions: any[]) => { if (!selectedExamId) return; try { await adminApi.importQuestionsToExam(selectedExamId, questions); alert(`Success! Imported ${questions.length} questions into the exam.`); setSelectedExamId(null); refreshData(); } catch (e: any) { console.error(e); alert(e.message || "Failed to save questions to exam."); } };
   const handleDeleteExam = async (id: string) => { try { await adminApi.deleteExam(id); alert("Exam Deleted"); refreshData(); } catch (e) { alert("Failed to delete exam"); } };
   
-  // ✨ FIXED PDF GENERATOR WITH LATEX & WATERMARK SUPPORT
+  // ✨ FIXED PDF GENERATOR WITH ROBUST LATEX POLLING & LOGO SUPPORT
   const handleDownloadPDF = async (exam: Exam) => { 
       try { 
           const fullExamData = await adminApi.getExamById(exam.id); 
           const questionsList = fullExamData.questions || []; 
-          const printWindow = window.open('', '_blank', 'width=900,height=800'); 
+          const printWindow = window.open('', '_blank'); 
           if(!printWindow) return alert("Pop-up blocked. Please allow pop-ups to print."); 
           
-          // Secure absolute path for the watermark
-          const absoluteLogoPath = window.location.origin + LOGO_PATH;
+          // Secure absolute path explicitly pointing to logo.png
+          const pdfLogoPath = window.location.origin + '/logo.png';
 
           let html = `<html><head><title>${exam.title}</title>
           <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
@@ -794,12 +794,13 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
               .header-box h1 { margin: 0 0 15px 0; font-size: 28px; text-transform: uppercase; letter-spacing: 1px;}
               .header-box .meta { display: flex; justify-content: space-between; font-weight: bold; font-size: 16px; border-top: 2px solid #000; padding-top: 15px; }
           </style>
+          <!-- LOAD KATEX -->
           <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
           <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
           </head><body>
           
           <!-- Background Logo Watermark -->
-          <img src="${absoluteLogoPath}" class="logo-wm" />
+          <img src="${pdfLogoPath}" class="logo-wm" />
           
           <!-- Title and Info Box -->
           <div class="header-box">
@@ -843,11 +844,11 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
               </div>`; 
           }); 
           
-          // Execute KaTeX on load, then trigger print window
+          // Execute KaTeX robustly with a polling system
           html += `
           <script>
-            window.onload = function() { 
-                if(window.renderMathInElement) {
+            function renderLatexAndPrint() {
+                if (window.renderMathInElement) {
                     renderMathInElement(document.body, {
                         delimiters: [
                             { left: '$$', right: '$$', display: true },
@@ -860,9 +861,16 @@ const AdminDashboard = ({ user, token, onLogout }: { user: any, token: string, o
                         strict: false,
                         trust: true
                     });
+                    
+                    // Wait for equations and images to settle before popping the print dialog
+                    setTimeout(() => window.print(), 800); 
+                } else {
+                    // KaTeX isn't loaded yet, try again in 100ms
+                    setTimeout(renderLatexAndPrint, 100);
                 }
-                setTimeout(()=>window.print(), 1000); 
-            };
+            }
+            // Start polling
+            renderLatexAndPrint();
           </script></body></html>`; 
 
           printWindow.document.write(html); 
