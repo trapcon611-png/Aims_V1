@@ -56,6 +56,8 @@ services:
     ports:
       - "3000:3000"
     # TELLS DOCKER TO INJECT EVERYTHING FROM YOUR FRONTEND .ENV FILE
+    environment: # Add these two lines!
+      - NEXT_PUBLIC_RAZORPAY_KEY_ID="rzp_live_SMgmgIgW1pxhhB"
     env_file:
       - ./aims_institute_app/.env
     depends_on:
