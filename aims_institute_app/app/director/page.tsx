@@ -270,7 +270,9 @@ const DirectorLogin = ({ onUnlock }: { onUnlock: () => void }) => {
       <DirectorBackground />
       <div className="relative z-10 w-full max-w-sm bg-gradient-to-br from-red-900 to-red-800 backdrop-blur-xl border border-red-700/50 rounded-3xl shadow-2xl p-8">
          <div className="text-center mb-6">
-             <div className="relative w-20 h-20 mx-auto mb-4 bg-white rounded-full p-2 shadow-lg"><Image src="/whitelogo.png" alt="Logo" fill className="object-contain" unoptimized/></div>
+             <div className="relative h-14 w-48 mx-auto mb-4">
+                 <Image src="/whitelogo.png" alt="Logo" fill className="object-contain object-center" unoptimized/>
+             </div>
              <h3 className="text-2xl font-bold text-white">ERP Console</h3>
              <p className="text-red-200 text-xs mt-1 font-mono uppercase tracking-widest flex items-center justify-center gap-2"><Activity size={12} className="animate-pulse"/> System Online</p>
          </div>

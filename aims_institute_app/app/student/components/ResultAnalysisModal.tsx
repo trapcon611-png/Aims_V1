@@ -180,6 +180,15 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
                  {result.examType && <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded font-bold uppercase">{result.examType}</span>}
                  <span className="text-slate-400">|</span>
                  <span className="text-slate-500 font-medium">Rank #{result.rank}</span>
+                 
+                 {/* ✨ PERCENTILE ADDED HERE */}
+                 {result.percentile !== undefined && (
+                     <>
+                         <span className="text-slate-400">|</span>
+                         <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-bold">{Number(result.percentile).toFixed(2)} %ile</span>
+                     </>
+                 )}
+
                  <span className="text-slate-400">|</span>
                  <span className="text-slate-500">{new Date(result.date).toLocaleDateString()}</span>
               </div>

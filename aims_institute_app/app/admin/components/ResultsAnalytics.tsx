@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { 
     Activity, ArrowLeft, BarChart2, ChevronRight, Loader2, 
     AlertCircle, Clock, CheckCircle, XCircle, MinusCircle, 
-    Target, Timer, BrainCircuit, Calendar
+    Target, Timer, BrainCircuit, Calendar, Lightbulb
 } from 'lucide-react';
 import { adminApi } from '../services/adminApi';
 import { LatexRenderer } from './LatexRenderer';
@@ -11,6 +11,25 @@ import { LatexRenderer } from './LatexRenderer';
 interface ResultsAnalyticsProps {
   exams: any[];
 }
+
+// --- ✨ INDESTRUCTIBLE IMAGE RESOLVER ---
+const getResolvedImageUrl = (imgUrl?: string | null) => {
+    if (!imgUrl || imgUrl === 'null' || imgUrl.trim() === '') return null;
+    if (imgUrl.startsWith('http') || imgUrl.startsWith('data:')) return imgUrl;
+    
+    // Automatically convert Raw Base64 string to a proper data URI
+    if (imgUrl.length > 100 && !imgUrl.includes('.')) {
+        const mimeType = imgUrl.startsWith('/9j/') ? 'image/jpeg' : 'image/png';
+        return `data:${mimeType};base64,${imgUrl}`;
+    }
+
+    let API_URL = process.env.NEXT_PUBLIC_API_URL;
+    if (!API_URL || API_URL.includes('localhost')) {
+        API_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001';
+    }
+    const cleanPath = imgUrl.startsWith('/') ? imgUrl.substring(1) : imgUrl;
+    return `${API_URL}/uploads/${cleanPath}`;
+};
 
 // --- ANALYTICS TYPES ---
 type QuestionStat = {
@@ -91,9 +110,9 @@ const normalizeOptions = (q: any) => {
         if (typeof parsedOpt === 'object' && parsedOpt !== null) {
             text = parsedOpt.latex || parsedOpt.text || "";
             if (parsedOpt.image && parsedOpt.image !== 'null') {
-                img = parsedOpt.image;
-                if (!img.startsWith('http') && Array.isArray(q.option_images) && q.option_images.length > idx) {
-                    img = q.option_images[idx];
+                img = getResolvedImageUrl(parsedOpt.image);
+                if (!img?.startsWith('http') && !img?.startsWith('data:') && Array.isArray(q.option_images) && q.option_images.length > idx) {
+                    img = getResolvedImageUrl(q.option_images[idx]);
                 }
             }
         } else {
@@ -132,7 +151,7 @@ const OptionsDisplay = ({ q, selectedOption }: { q: any, selectedOption?: string
                             {opt.text && <LatexRenderer content={opt.text} />}
                             {opt.image && (
                                 <div className="mt-1 max-h-[100px] overflow-auto custom-scrollbar border border-slate-200 rounded p-1 bg-white inline-block">
-                                    <img src={opt.image} className="max-h-[80px] w-auto object-contain" alt={`Option ${label}`} />
+                                    <img src={opt.image} className="max-h-[80px] w-auto object-contain" alt={`Option ${label}`} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                 </div>
                             )}
                             {!opt.text && !opt.image && <span className="italic text-slate-300">Empty</span>}
@@ -154,7 +173,7 @@ export default function ResultsAnalytics({ exams }: ResultsAnalyticsProps) {
   const [studentDetail, setStudentDetail] = useState<any | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [filterDate, setFilterDate] = useState('');
-  const [expandedRow, setExpandedRow] = useState<number | null>(null); // NEW: For expandable rows
+  const [expandedRow, setExpandedRow] = useState<number | null>(null); 
   
   // Tab State
   const [activeSubjectTab, setActiveSubjectTab] = useState<'Physics' | 'Chemistry' | 'Mathematics' | 'General'>('Physics');
@@ -171,11 +190,16 @@ export default function ResultsAnalytics({ exams }: ResultsAnalyticsProps) {
       return filtered.sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime());
   }, [exams, filterDate]);
 
+  // Find Percentile data for the selected student
+  const currentStudentRankData = useMemo(() => {
+      if (!analyticsData || !selectedStudentId) return null;
+      return analyticsData.find((r: any) => r.studentId === selectedStudentId);
+  }, [analyticsData, selectedStudentId]);
+
   // --- DATA PROCESSING ENGINE ---
   const processedStats = useMemo(() => {
       // Safety Check: Ensure deep data exists
       if (!studentDetail || !studentDetail.answers || !Array.isArray(studentDetail.answers)) {
-          console.warn("Analytics Engine: No answers array found in student detail.", studentDetail);
           return null;
       }
 
@@ -270,8 +294,6 @@ export default function ResultsAnalytics({ exams }: ResultsAnalyticsProps) {
       setExpandedRow(null); // Reset expanded row on new student
       try {
           const allAttempts = await adminApi.getStudentAttempts(studentId);
-          console.log("Raw Attempts Data:", allAttempts); // DEBUGGING LOG
-          
           const relevantAttempt = allAttempts.find((a: any) => a.examId === analyticsExamId);
           
           if (!relevantAttempt) {
@@ -343,7 +365,7 @@ export default function ResultsAnalytics({ exams }: ResultsAnalyticsProps) {
   );
 
   return (
-      <div className="flex flex-col h-[85vh] gap-6">
+      <div className="flex flex-col h-[92vh] gap-6">
          {/* TOP BAR */}
          <div className={`${glassPanel} p-6`}>
              <div className="flex justify-between items-center mb-4">
@@ -400,6 +422,7 @@ export default function ResultsAnalytics({ exams }: ResultsAnalyticsProps) {
                                      <th className="px-6 py-4">Rank</th>
                                      <th className="px-6 py-4">Student</th>
                                      <th className="px-6 py-4 text-center">Score</th>
+                                     <th className="px-6 py-4 text-center">Percentile</th>
                                      <th className="px-6 py-4 text-center">Accuracy</th>
                                      <th className="px-6 py-4 text-center">Action</th>
                                  </tr>
@@ -412,6 +435,9 @@ export default function ResultsAnalytics({ exams }: ResultsAnalyticsProps) {
                                          </td>
                                          <td className="px-6 py-4 font-bold text-slate-700 group-hover:text-amber-600 transition">{row.studentName}</td>
                                          <td className="px-6 py-4 text-center font-mono text-slate-900">{row.score}</td>
+                                         <td className="px-6 py-4 text-center font-bold text-amber-600">
+                                             {row.percentile !== undefined ? `${Number(row.percentile).toFixed(2)} %ile` : 'N/A'}
+                                         </td>
                                          <td className="px-6 py-4 text-center">
                                              <span className={`px-2 py-1 rounded text-xs font-bold ${row.accuracy > 70 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{row.accuracy}%</span>
                                          </td>
@@ -440,15 +466,29 @@ export default function ResultsAnalytics({ exams }: ResultsAnalyticsProps) {
                  ) : (
                      <div className="flex-1 flex flex-col h-full">
                          {/* HEADER */}
-                         <div className="p-6 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                         <div className="p-6 bg-slate-50 border-b border-slate-200 flex justify-between items-center flex-wrap gap-4">
                               <div>
                                   <h2 className="text-2xl font-black text-slate-800">{studentDetail.student?.name || "Student"}</h2>
-                                  <div className="flex gap-4 mt-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                  <div className="flex gap-4 mt-3 text-xs font-bold text-slate-500 uppercase tracking-wider flex-wrap">
                                       <span className="flex items-center gap-1"><Target size={14}/> Score: {processedStats?.Overall.score}</span>
+                                      
+                                      {/* ✨ PERCENTILE IN DETAIL VIEW */}
+                                      {currentStudentRankData?.percentile !== undefined && (
+                                          <span className="flex items-center gap-1 text-amber-700 bg-amber-100 px-2 py-0.5 rounded border border-amber-200">
+                                              {Number(currentStudentRankData.percentile).toFixed(2)} %ile
+                                          </span>
+                                      )}
+                                      
                                       <span className="flex items-center gap-1"><Timer size={14}/> Time: {Math.round((processedStats?.Overall.time || 0) / 60)} Mins</span>
+                                      
+                                      {/* ✨ ACCURATE DATE DISPLAY */}
+                                      <span className="flex items-center gap-1">
+                                          <Calendar size={14}/> 
+                                          {studentDetail.submittedAt ? new Date(studentDetail.submittedAt).toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
+                                      </span>
                                   </div>
                               </div>
-                              <div className="flex gap-2">
+                              <div className="flex gap-2 flex-wrap">
                                   {visibleTabs.map((subj) => (
                                       <button 
                                           key={subj}
@@ -487,8 +527,10 @@ export default function ResultsAnalytics({ exams }: ResultsAnalyticsProps) {
                                           })
                                           .map((ans: any, idx: number) => {
                                               const q = ans.question || {};
-                                              const qImageUrl = q.questionImage || q.question_images?.[0];
-                                              const validQImage = typeof qImageUrl === 'string' && qImageUrl.length > 5 && qImageUrl !== 'null' ? qImageUrl : null;
+                                              
+                                              // ✨ INDESTRUCTIBLE IMAGE RESOLUTION FOR EXPANDED ROW
+                                              const validQImage = getResolvedImageUrl(q.questionImage || q.question_images?.[0]);
+                                              const validSolImage = getResolvedImageUrl(q.solutionImage || q.solution_images?.[0] || q.explanation_image);
 
                                               return (
                                               <div key={idx} className="border-b border-slate-100 last:border-0">
@@ -532,7 +574,7 @@ export default function ResultsAnalytics({ exams }: ResultsAnalyticsProps) {
                                                                   
                                                                   {validQImage && (
                                                                       <div className="mt-4 mb-2 max-h-[300px] border border-slate-200 rounded-lg bg-slate-50 overflow-auto custom-scrollbar flex justify-center p-2">
-                                                                          <img src={validQImage} className="max-w-full h-auto object-contain" alt="Question Image"/>
+                                                                          <img src={validQImage} className="max-w-full h-auto object-contain" alt="Question Image" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}/>
                                                                       </div>
                                                                   )}
                                                               </div>
@@ -556,6 +598,39 @@ export default function ResultsAnalytics({ exams }: ResultsAnalyticsProps) {
                                                                       <OptionsDisplay q={q} selectedOption={ans.selectedOption} />
                                                                   </div>
                                                               )}
+
+                                                              {/* ✨ NEW: SOLUTION AND HINTS SECTION */}
+                                                              <div className="mt-6 border-t border-slate-200 pt-6">
+                                                                  <div className="flex items-center gap-2 mb-4">
+                                                                      <Lightbulb size={18} className="text-amber-500" />
+                                                                      <h4 className="text-sm font-black text-slate-800 uppercase tracking-wider">Solution & Hints</h4>
+                                                                  </div>
+                                                                  
+                                                                  {q.explanation || validSolImage ? (
+                                                                      <div className="bg-amber-50/50 border border-amber-200 rounded-xl p-5 shadow-inner">
+                                                                          {q.explanation && (
+                                                                              <div className="text-sm text-slate-800 font-medium leading-relaxed">
+                                                                                  <LatexRenderer content={q.explanation} />
+                                                                              </div>
+                                                                          )}
+                                                                          {validSolImage && (
+                                                                              <div className="mt-4 max-h-[400px] border border-slate-200 rounded-lg bg-white overflow-auto custom-scrollbar flex justify-center p-3 shadow-sm">
+                                                                                  <img 
+                                                                                      src={validSolImage} 
+                                                                                      className="max-w-full h-auto object-contain" 
+                                                                                      alt="Solution Graphic"
+                                                                                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                                                  />
+                                                                              </div>
+                                                                          )}
+                                                                      </div>
+                                                                  ) : (
+                                                                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-sm text-slate-500 italic flex items-center justify-center">
+                                                                          No detailed text or image solution provided for this question.
+                                                                      </div>
+                                                                  )}
+                                                              </div>
+
                                                           </div>
                                                       </div>
                                                   )}

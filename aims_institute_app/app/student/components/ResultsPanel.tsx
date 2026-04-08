@@ -20,13 +20,14 @@ export default function ResultsPanel({ results }: { results: any[] }) {
                          <th className="px-6 py-4 font-bold">Exam Name</th>
                          <th className="px-6 py-4 font-bold">Date</th>
                          <th className="px-6 py-4 font-bold text-right">Score</th>
+                         <th className="px-6 py-4 font-bold text-right">Percentile</th>
                          <th className="px-6 py-4 font-bold text-right">Action</th>
                      </tr>
                  </thead>
                  <tbody className="divide-y divide-slate-100">
                      {results.length === 0 ? (
                          <tr>
-                             <td colSpan={4} className="p-12 text-center text-slate-400 italic text-sm">
+                             <td colSpan={5} className="p-12 text-center text-slate-400 italic text-sm">
                                  No results available yet. Complete an exam to see analytics here.
                              </td>
                          </tr>
@@ -52,6 +53,11 @@ export default function ResultsPanel({ results }: { results: any[] }) {
                                  <td className="px-6 py-4 text-right">
                                      <span className="font-mono font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-md border border-blue-100">
                                          {res.score}/{res.totalMarks}
+                                     </span>
+                                 </td>
+                                 <td className="px-6 py-4 text-right">
+                                     <span className="font-mono font-bold text-amber-600 bg-amber-50 px-3 py-1 rounded-md border border-amber-100">
+                                         {res.percentile !== undefined ? `${Number(res.percentile).toFixed(2)} %ile` : 'N/A'}
                                      </span>
                                  </td>
                                  <td className="px-6 py-4 text-right">
