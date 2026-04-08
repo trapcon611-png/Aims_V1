@@ -15,7 +15,7 @@ services:
     logging: *default-logging
     environment:
       POSTGRES_USER: aims_manual
-      POSTGRES_PASSWORD: Sameer
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-SecurePassword123!}
       POSTGRES_DB: aims_manual
     ports:
       - "5432:5432"
@@ -35,7 +35,7 @@ services:
     env_file:
       - ./aims_backend/.env
     environment:
-      - DATABASE_URL=postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public
+      - DATABASE_URL=postgresql://aims_manual:${POSTGRES_PASSWORD:-SecurePassword123!}@postgres:5432/aims_manual?schema=public
     depends_on:
       - postgres
     restart: unless-stopped

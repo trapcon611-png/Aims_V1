@@ -101,7 +101,7 @@ export default function ParentPage() {
         .then(subscription => {
           if (subscription) {
             // FIXED: Point to /parent/subscribe
-            fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/parent/subscribe`, {
+            fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://76.13.247.225:3001'}/parent/subscribe`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
               body: JSON.stringify(subscription)
