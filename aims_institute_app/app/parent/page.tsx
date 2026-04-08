@@ -11,7 +11,7 @@ import StudentCard from './components/StudentCard';
 import NeuralBackground from './components/NeuralBackground';
 import InvoiceModal from './components/InvoiceModal';
 
-const LOGO_PATH = '/logo.png';
+const LOGO_PATH = '/mainpage.png';
 
 export default function ParentPage() {
   const router = useRouter(); // ADDED: Initialize router
@@ -112,9 +112,6 @@ export default function ParentPage() {
     }
   }, [token]);
 
-
-  // (REMOVED handleLogin here, as auth is now handled at root)
-
   const handleLogout = () => { 
       localStorage.removeItem('aims_token'); // Clear new token
       localStorage.removeItem('parent_token'); 
@@ -126,15 +123,15 @@ export default function ParentPage() {
       router.push('/'); // Redirect to root
   };
 
-  if (loading || !user) return (
-      <div className="h-screen flex items-center justify-center bg-white">
-          <Loader2 className="animate-spin text-purple-600" size={32}/>
-      </div>
-  );
-
   // Theme Classes
   const bgClass = isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900';
   const headerClass = isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white/80 border-slate-200';
+
+  if (loading || !user) return (
+      <div className={`h-screen flex items-center justify-center ${bgClass}`}>
+          <Loader2 className="animate-spin text-purple-600" size={32}/>
+      </div>
+  );
 
   return (
     <div className={`min-h-screen font-sans transition-colors duration-300 ${bgClass}`}>
@@ -143,12 +140,11 @@ export default function ParentPage() {
       {/* HEADER */}
       <header className={`${headerClass} backdrop-blur-md border-b px-6 py-4 flex justify-between items-center sticky top-0 z-50 transition-colors duration-300`}>
         <div className="flex items-center gap-3">
-            <div className="relative w-8 h-8 bg-white rounded-full p-0.5">
-                <Image src={LOGO_PATH} alt="Logo" fill className="object-contain" unoptimized />
+            <div className="relative h-10 w-40 sm:w-48">
+                <Image src={LOGO_PATH} alt="Logo" fill className="object-contain object-left" unoptimized />
             </div>
-            <div>
-                <h1 className="text-lg font-black leading-none tracking-tight">AIMS PORTAL</h1>
-                <p className="text-[10px] font-bold uppercase text-purple-600">Parent Access</p>
+            <div className={`hidden sm:block border-l-2 pl-3 ml-1 ${isDark ? 'border-slate-700' : 'border-slate-300'}`}>
+                <p className="text-[10px] font-bold uppercase text-purple-600 tracking-widest mt-0.5">Parent Access</p>
             </div>
         </div>
         <div className="flex items-center gap-4">
