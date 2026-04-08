@@ -57,7 +57,7 @@ export default function ResultsPanel({ results }: { results: any[] }) {
                                  </td>
                                  <td className="px-6 py-4 text-right">
                                      <span className="font-mono font-bold text-amber-600 bg-amber-50 px-3 py-1 rounded-md border border-amber-100">
-                                         {res.percentile !== undefined ? `${Number(res.percentile).toFixed(2)} %ile` : 'N/A'}
+                                         {res.percentile !== undefined && res.percentile !== null ? `${Number(res.percentile).toFixed(2)} %ile` : 'N/A'}
                                      </span>
                                  </td>
                                  <td className="px-6 py-4 text-right">

@@ -175,22 +175,28 @@ export default function ResultAnalysisModal({ result, onClose }: { result: any, 
         <div className="bg-white border-b border-slate-200 p-6 flex justify-between items-center shrink-0">
            <div>
               <h2 className="text-xl font-black text-slate-800 tracking-tight">{result.examTitle}</h2>
-              <div className="flex items-center gap-3 mt-1 text-sm">
+              <div className="flex items-center flex-wrap gap-3 mt-2 text-sm">
                  <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold">Score: {result.score}/{result.totalMarks}</span>
                  {result.examType && <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded font-bold uppercase">{result.examType}</span>}
-                 <span className="text-slate-400">|</span>
+                 
+                 <span className="text-slate-400 hidden sm:inline">|</span>
                  <span className="text-slate-500 font-medium">Rank #{result.rank}</span>
                  
-                 {/* ✨ PERCENTILE ADDED HERE */}
-                 {result.percentile !== undefined && (
+                 {/* ✨ PERCENTILE DISPLAY IN MODAL */}
+                 {result.percentile !== undefined && result.percentile !== null && (
                      <>
-                         <span className="text-slate-400">|</span>
-                         <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-bold">{Number(result.percentile).toFixed(2)} %ile</span>
+                         <span className="text-slate-400 hidden sm:inline">|</span>
+                         <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-bold">
+                             {Number(result.percentile).toFixed(2)} %ile
+                         </span>
                      </>
                  )}
 
-                 <span className="text-slate-400">|</span>
-                 <span className="text-slate-500">{new Date(result.date).toLocaleDateString()}</span>
+                 {/* ✨ BEAUTIFIED DATE */}
+                 <span className="text-slate-400 hidden sm:inline">|</span>
+                 <span className="text-slate-500 font-medium">
+                     {new Date(result.date).toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+                 </span>
               </div>
            </div>
            <button onClick={onClose} className="p-2 bg-slate-100 hover:bg-red-50 hover:text-red-500 rounded-full transition"><X size={20}/></button>

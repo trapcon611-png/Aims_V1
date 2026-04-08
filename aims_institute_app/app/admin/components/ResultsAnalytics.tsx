@@ -284,7 +284,21 @@ export default function ResultsAnalytics({ exams }: ResultsAnalyticsProps) {
       if(!examId) { setAnalyticsData(null); return; }
       try {
           const data = await adminApi.getExamAnalytics(examId);
-          setAnalyticsData(data);
+          
+          // ✨ FRONTEND PERCENTILE AUTO-CALCULATOR ✨
+          // Automatically calculates the NTA Percentile if the backend doesn't provide it
+          const totalCandidates = data.length;
+          const enrichedData = data.map((row: any) => {
+              let calcPercentile = row.percentile;
+              if (calcPercentile === undefined || calcPercentile === null) {
+                  // NTA Formula: (100 * Number of candidates with score <= candidate's score) / Total candidates
+                  const equalOrLessCount = data.filter((r: any) => r.score <= row.score).length;
+                  calcPercentile = totalCandidates > 0 ? (equalOrLessCount / totalCandidates) * 100 : 100;
+              }
+              return { ...row, percentile: calcPercentile };
+          });
+
+          setAnalyticsData(enrichedData);
       } catch(e) { alert("Failed to fetch results"); }
   };
 
