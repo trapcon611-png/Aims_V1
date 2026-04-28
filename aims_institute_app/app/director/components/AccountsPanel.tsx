@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Wallet, IndianRupee, Search, Calendar, Percent, Trash2, Printer, 
     X, Filter, Loader2, TrendingUp, TrendingDown, DollarSign, 
-    ChevronLeft, ChevronRight, User, Layers 
+    ChevronLeft, ChevronRight, User, Layers, MapPin
 } from 'lucide-react';
 import { directorApi } from '../services/directorApi';
 import InvoiceModal from './InvoiceModal';
@@ -16,14 +16,15 @@ export default function AccountsPanel({ students }: { students: any[] }) {
   
   // Student Search State (For Collect Fee Form)
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
-  const [feeCollectBatchFilter, setFeeCollectBatchFilter] = useState(''); // ✨ NEW: Batch filter for Collect Fee
+  const [feeCollectBranchFilter, setFeeCollectBranchFilter] = useState(''); // ✨ NEW: Branch filter for Collect Fee
+  const [feeCollectBatchFilter, setFeeCollectBatchFilter] = useState('');   // Batch filter for Collect Fee
   const [showStudentDropdown, setShowStudentDropdown] = useState(false);
 
   // Data
   const [expenses, setExpenses] = useState<any[]>([]);
   const [feeHistory, setFeeHistory] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
-  const [branches, setBranches] = useState<any[]>([]); // ✨ NEW
+  const [branches, setBranches] = useState<any[]>([]);
   
   // UI
   const [showInvoice, setShowInvoice] = useState(false);
@@ -66,16 +67,23 @@ export default function AccountsPanel({ students }: { students: any[] }) {
 
   // --- STUDENT AUTOCOMPLETE LOGIC ---
   const filteredStudentOptions = useMemo(() => {
-      // If no search and no batch, show nothing.
-      if (!studentSearchQuery && !feeCollectBatchFilter) return [];
+      // If no search and no filters, show nothing.
+      if (!studentSearchQuery && !feeCollectBatchFilter && !feeCollectBranchFilter) return [];
       
       let filtered = students;
       
-      // Filter by exactly the batch name
+      // 1. Filter by Branch (Find all batches in this branch, then filter students)
+      if (feeCollectBranchFilter && !feeCollectBatchFilter) {
+          const validBatchNames = batches.filter(b => b.branchId === feeCollectBranchFilter).map(b => b.name);
+          filtered = filtered.filter(s => validBatchNames.includes(s.batch));
+      }
+
+      // 2. Filter by exact Batch
       if (feeCollectBatchFilter) {
           filtered = filtered.filter(s => s.batch === feeCollectBatchFilter);
       }
 
+      // 3. Filter by Search Query
       if (studentSearchQuery) {
           const lower = studentSearchQuery.toLowerCase();
           filtered = filtered.filter(s => 
@@ -84,9 +92,9 @@ export default function AccountsPanel({ students }: { students: any[] }) {
           );
       }
       
-      // If only batch is selected, show up to 10 students. If search is used, show 5.
+      // If only branch/batch is selected, show up to 10 students. If search is used, show 5.
       return filtered.slice(0, studentSearchQuery ? 5 : 10); 
-  }, [students, studentSearchQuery, feeCollectBatchFilter]);
+  }, [students, studentSearchQuery, feeCollectBatchFilter, feeCollectBranchFilter, batches]);
 
   const selectStudentForFee = (student: any) => {
       setFeeForm(prev => ({ ...prev, studentId: student.id }));
@@ -187,7 +195,6 @@ export default function AccountsPanel({ students }: { students: any[] }) {
   const handleAddExpense = async (e: React.FormEvent) => {
       e.preventDefault();
       try {
-          // FIX: Assign response to variable 'res'
           const res = await directorApi.createExpense(newExpense);
           setExpenses(prev => [res, ...prev]);
           setNewExpense({ title: '', amount: 0, category: 'General' });
@@ -245,55 +252,84 @@ export default function AccountsPanel({ students }: { students: any[] }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
-          {/* 2. COLLECT FEE FORM (UPDATED WITH SEARCH) */}
-          <div className={glassPanel + " p-6 h-fit"}>
+          {/* 2. COLLECT FEE FORM */}
+          <div className={glassPanel + " p-6 h-fit relative"}>
               <h3 className="font-bold text-slate-800 mb-6 flex items-center text-lg border-b border-slate-100 pb-3">
                   <Wallet size={20} className="mr-2 text-emerald-600"/> Collect Fee
               </h3>
               <form onSubmit={handleCollectFee} className="space-y-5">
                   
-                  {/* ✨ NEW: BATCH FILTER AND SEARCHABLE STUDENT INPUT */}
-                  <div className="flex gap-4 relative">
-                      <div className="w-1/3">
-                          <label className={labelStyle}>Filter by Batch</label>
-                          <select 
-                              className={inputStyle + " font-bold text-blue-700 bg-blue-50/50"} 
-                              value={feeCollectBatchFilter} 
-                              onChange={e => {
-                                  setFeeCollectBatchFilter(e.target.value);
-                                  setFeeForm(prev => ({...prev, studentId: ''}));
-                                  setStudentSearchQuery('');
-                                  setShowStudentDropdown(true); // Pop open the list to easily pick
-                              }}
-                          >
-                              <option value="">All Batches</option>
-                              {batches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
-                          </select>
-                      </div>
+                  {/* ✨ SEARCHABLE STUDENT INPUT WITH DUAL FILTERS */}
+                  <div className="relative z-20">
+                      <div className="flex flex-col md:flex-row gap-4">
+                          
+                          {/* Branch Filter */}
+                          <div className="w-full md:w-1/3">
+                              <label className={labelStyle}>Filter by Branch</label>
+                              <div className="relative">
+                                  <select 
+                                      className={inputStyle + " pl-8 font-bold text-blue-700 bg-blue-50/50"} 
+                                      value={feeCollectBranchFilter} 
+                                      onChange={e => {
+                                          setFeeCollectBranchFilter(e.target.value);
+                                          setFeeCollectBatchFilter(''); // Reset batch
+                                          setFeeForm(prev => ({...prev, studentId: ''}));
+                                          setStudentSearchQuery('');
+                                          setShowStudentDropdown(true); 
+                                      }}
+                                  >
+                                      <option value="">All Branches</option>
+                                      {branches.map(br => <option key={br.id} value={br.id}>{br.name}</option>)}
+                                  </select>
+                                  <MapPin size={14} className="absolute left-3 top-3.5 text-blue-500" />
+                              </div>
+                          </div>
 
-                      <div className="flex-1 relative">
-                          <label className={labelStyle}>Search Student (Name or ID)</label>
-                          <div className="relative">
-                              <input 
-                                  type="text"
-                                  className={inputStyle + " pl-9"}
-                                  placeholder="Type Name or Student ID..."
-                                  value={studentSearchQuery}
-                                  onChange={(e) => {
-                                      setStudentSearchQuery(e.target.value);
-                                      setFeeForm(prev => ({...prev, studentId: ''})); // Reset ID on type
+                          {/* Batch Filter */}
+                          <div className="w-full md:w-1/3">
+                              <label className={labelStyle}>Filter by Batch</label>
+                              <select 
+                                  className={inputStyle + " font-bold text-blue-700 bg-blue-50/50"} 
+                                  value={feeCollectBatchFilter} 
+                                  onChange={e => {
+                                      setFeeCollectBatchFilter(e.target.value);
+                                      setFeeForm(prev => ({...prev, studentId: ''}));
+                                      setStudentSearchQuery('');
                                       setShowStudentDropdown(true);
                                   }}
-                                  onFocus={() => setShowStudentDropdown(true)}
-                                  onBlur={() => setTimeout(() => setShowStudentDropdown(false), 200)} // Delay to allow click
-                              />
-                              <Search size={16} className="absolute left-3 top-3 text-slate-400"/>
+                              >
+                                  <option value="">All Batches</option>
+                                  {batches
+                                      .filter(b => feeCollectBranchFilter ? b.branchId === feeCollectBranchFilter : true)
+                                      .map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+                              </select>
+                          </div>
+
+                          {/* Search Input */}
+                          <div className="flex-1 w-full relative">
+                              <label className={labelStyle}>Search Student</label>
+                              <div className="relative">
+                                  <input 
+                                      type="text"
+                                      className={inputStyle + " pl-9"}
+                                      placeholder="Name or ID..."
+                                      value={studentSearchQuery}
+                                      onChange={(e) => {
+                                          setStudentSearchQuery(e.target.value);
+                                          setFeeForm(prev => ({...prev, studentId: ''})); 
+                                          setShowStudentDropdown(true);
+                                      }}
+                                      onFocus={() => setShowStudentDropdown(true)}
+                                      onBlur={() => setTimeout(() => setShowStudentDropdown(false), 200)} 
+                                  />
+                                  <Search size={16} className="absolute left-3 top-3.5 text-slate-400"/>
+                              </div>
                           </div>
                       </div>
 
-                      {/* DROPDOWN RESULTS */}
-                      {showStudentDropdown && (studentSearchQuery || feeCollectBatchFilter) && (
-                          <div className="absolute z-50 w-full mt-[68px] bg-white border border-slate-200 rounded-lg shadow-2xl max-h-64 overflow-y-auto">
+                      {/* DROPDOWN RESULTS (Absolute positioned under the filters) */}
+                      {showStudentDropdown && (studentSearchQuery || feeCollectBatchFilter || feeCollectBranchFilter) && (
+                          <div className="absolute left-0 right-0 z-50 w-full mt-2 bg-white border border-slate-200 rounded-lg shadow-2xl max-h-64 overflow-y-auto">
                               {filteredStudentOptions.length > 0 ? (
                                   filteredStudentOptions.map(s => (
                                       <div 
@@ -523,7 +559,7 @@ export default function AccountsPanel({ students }: { students: any[] }) {
               </table>
           </div>
           
-          {/* ✨ PAGINATION FOOTER - INTACT & WORKING */}
+          {/* ✨ PAGINATION FOOTER */}
           {totalPages > 1 && (
             <div className="p-4 border-t border-slate-200 bg-white flex justify-between items-center text-xs">
                 <span className="text-slate-500 font-bold">Page {currentPage} of {totalPages}</span>

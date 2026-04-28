@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
     Users, Search, Filter, Lock, Copy, ChevronLeft, ChevronRight, 
-    Cake, RefreshCw, X, Key, Loader2, Trash2 // 🚨 Added Trash2 icon
+    Cake, RefreshCw, X, Key, Loader2, Trash2, MapPin
 } from 'lucide-react';
 import { directorApi } from '../services/directorApi';
 
@@ -12,7 +12,8 @@ interface StudentRecord {
   batch: string; address?: string; dob?: string; feeTotal: number; feePaid: number; feeRemaining: number;
 }
 
-interface Batch { id: string; name: string; }
+interface Branch { id: string; name: string; }
+interface Batch { id: string; name: string; branchId?: string; branch?: { name: string }; }
 
 export default function StudentDirectoryPanel({ 
     students, // Kept so parent component doesn't break
@@ -25,11 +26,13 @@ export default function StudentDirectoryPanel({
 }) {
     // --- STATE ---
     const [searchQuery, setSearchQuery] = useState('');
+    const [branchFilter, setBranchFilter] = useState('');
     const [batchFilter, setBatchFilter] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     
     // --- SERVER-SIDE STATE ---
     const [directoryData, setDirectoryData] = useState<StudentRecord[]>([]);
+    const [branches, setBranches] = useState<Branch[]>([]);
     const [totalPages, setTotalPages] = useState(1);
     const [totalRecords, setTotalRecords] = useState(0);
     const [isFetching, setIsFetching] = useState(false);
@@ -39,6 +42,11 @@ export default function StudentDirectoryPanel({
     const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl transition-all duration-300 overflow-hidden";
     const inputStyle = "w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-[#c1121f] focus:border-[#c1121f] outline-none transition font-medium";
     const selectStyle = "w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-[#c1121f] outline-none transition font-medium cursor-pointer";
+
+    // --- FETCH BRANCHES ---
+    useEffect(() => {
+        directorApi.getBranches().then(data => setBranches(data || [])).catch(console.error);
+    }, []);
 
     // --- SERVER-SIDE FETCH LOGIC ---
     useEffect(() => {
@@ -63,7 +71,7 @@ export default function StudentDirectoryPanel({
         return () => clearTimeout(timeoutId);
     }, [currentPage, searchQuery, batchFilter, onRefresh]);
 
-    useEffect(() => { setCurrentPage(1); }, [searchQuery, batchFilter]);
+    useEffect(() => { setCurrentPage(1); }, [searchQuery, batchFilter, branchFilter]);
 
     const handleCopy = (text: string) => {
         navigator.clipboard.writeText(text);
@@ -139,7 +147,26 @@ export default function StudentDirectoryPanel({
                             </div>
                         </div>
 
-                        <div className="w-full md:w-64">
+                        {/* ✨ NEW: FILTER BY BRANCH */}
+                        <div className="w-full md:w-48">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase mb-1 block tracking-wide">Filter by Branch</label>
+                            <select 
+                                className={selectStyle + " text-blue-700 bg-blue-50/50"}
+                                value={branchFilter}
+                                onChange={(e) => {
+                                    setBranchFilter(e.target.value);
+                                    setBatchFilter(''); // Reset batch filter when changing branch
+                                }}
+                            >
+                                <option value="">All Branches</option>
+                                {branches.map(br => (
+                                    <option key={br.id} value={br.id}>{br.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* FILTER BY BATCH (DYNAMICALLY FILTERED BY BRANCH) */}
+                        <div className="w-full md:w-48">
                             <label className="text-[9px] font-bold text-slate-500 uppercase mb-1 block tracking-wide">Filter by Batch</label>
                             <select 
                                 className={selectStyle}
@@ -147,7 +174,9 @@ export default function StudentDirectoryPanel({
                                 onChange={(e) => setBatchFilter(e.target.value)}
                             >
                                 <option value="">All Batches</option>
-                                {batches.map(b => (
+                                {batches
+                                    .filter(b => branchFilter ? b.branchId === branchFilter : true)
+                                    .map(b => (
                                     <option key={b.id} value={b.name}>{b.name}</option>
                                 ))}
                             </select>
@@ -184,90 +213,100 @@ export default function StudentDirectoryPanel({
                                     </td>
                                 </tr>
                             ) : (
-                                directoryData.map(s => (
-                                    <tr key={s.id} className="hover:bg-slate-50/80 transition duration-150 group">
-                                        
-                                        <td className="px-4 py-2 align-middle">
-                                            <div className="font-bold text-slate-800 text-sm leading-tight">{s.name}</div>
-                                            <div className="flex flex-wrap gap-2 items-center mt-1">
-                                                <span className="text-[9px] font-bold text-slate-500 uppercase bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                                                    {s.batch || 'Unassigned'}
-                                                </span>
-                                                {s.dob && (
-                                                    <span className="flex items-center gap-1 text-[9px] text-slate-400">
-                                                        <Cake size={10}/> {new Date(s.dob).toLocaleDateString(undefined, {month:'short', day:'numeric'})}
+                                directoryData.map(s => {
+                                    // ✨ Dynamically resolve Branch Name
+                                    const batchObj = batches.find(b => b.name === s.batch);
+                                    const branchName = batchObj?.branch?.name || (batchObj?.branchId ? branches.find(br => br.id === batchObj.branchId)?.name : null) || 'Global/Unassigned';
+
+                                    return (
+                                        <tr key={s.id} className="hover:bg-slate-50/80 transition duration-150 group">
+                                            
+                                            <td className="px-4 py-2 align-middle">
+                                                <div className="font-bold text-slate-800 text-sm leading-tight">{s.name}</div>
+                                                <div className="flex flex-wrap gap-2 items-center mt-1">
+                                                    <span className="text-[9px] font-bold text-slate-500 uppercase bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                                        {s.batch || 'Unassigned'}
                                                     </span>
+                                                    {/* ✨ BRANCH BADGE */}
+                                                    <span className="text-[9px] font-bold text-blue-600 uppercase bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex items-center gap-1">
+                                                        <MapPin size={8}/> {branchName}
+                                                    </span>
+                                                    {s.dob && (
+                                                        <span className="flex items-center gap-1 text-[9px] text-slate-400">
+                                                            <Cake size={10}/> {new Date(s.dob).toLocaleDateString(undefined, {month:'short', day:'numeric'})}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+
+                                            <td className="px-4 py-2 align-middle font-mono text-[11px]">
+                                                <div className="flex items-center gap-1.5 mb-0.5">
+                                                    <span className="text-slate-400 font-bold text-[9px] w-3">ID</span>
+                                                    <span className="text-slate-800 font-medium bg-slate-100 px-1 rounded">{s.studentId}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="text-slate-400 font-bold text-[9px] w-3">PW</span>
+                                                    <span className="text-slate-500">{s.studentPassword || '****'}</span>
+                                                </div>
+                                            </td>
+
+                                            <td className="px-4 py-2 align-middle">
+                                                <div className="font-medium text-slate-700 text-xs">Parent of {s.name.split(' ')[0]}</div>
+                                                {s.address && (
+                                                    <div className="text-[10px] text-slate-400 mt-0.5 leading-tight truncate max-w-[180px]" title={s.address}>
+                                                        {s.address}
+                                                    </div>
                                                 )}
-                                            </div>
-                                        </td>
+                                            </td>
 
-                                        <td className="px-4 py-2 align-middle font-mono text-[11px]">
-                                            <div className="flex items-center gap-1.5 mb-0.5">
-                                                <span className="text-slate-400 font-bold text-[9px] w-3">ID</span>
-                                                <span className="text-slate-800 font-medium bg-slate-100 px-1 rounded">{s.studentId}</span>
-                                            </div>
-                                            <div className="flex items-center gap-1.5">
-                                                <span className="text-slate-400 font-bold text-[9px] w-3">PW</span>
-                                                <span className="text-slate-500">{s.studentPassword || '****'}</span>
-                                            </div>
-                                        </td>
-
-                                        <td className="px-4 py-2 align-middle">
-                                            <div className="font-medium text-slate-700 text-xs">Parent of {s.name.split(' ')[0]}</div>
-                                            {s.address && (
-                                                <div className="text-[10px] text-slate-400 mt-0.5 leading-tight truncate max-w-[180px]" title={s.address}>
-                                                    {s.address}
+                                            <td className="px-4 py-2 align-middle font-mono text-[11px]">
+                                                <div className="flex items-center gap-1.5 mb-0.5">
+                                                    <span className="text-slate-400 font-bold text-[9px] w-3">ID</span>
+                                                    <span className="text-purple-700 font-medium bg-purple-50 px-1 rounded border border-purple-100">{s.parentId}</span>
                                                 </div>
-                                            )}
-                                        </td>
-
-                                        <td className="px-4 py-2 align-middle font-mono text-[11px]">
-                                            <div className="flex items-center gap-1.5 mb-0.5">
-                                                <span className="text-slate-400 font-bold text-[9px] w-3">ID</span>
-                                                <span className="text-purple-700 font-medium bg-purple-50 px-1 rounded border border-purple-100">{s.parentId}</span>
-                                            </div>
-                                            <div className="flex items-center gap-1.5">
-                                                <span className="text-slate-400 font-bold text-[9px] w-3">PW</span>
-                                                <span className="text-slate-500">{s.parentPassword || '****'}</span>
-                                            </div>
-                                        </td>
-
-                                        <td className="px-4 py-2 align-middle text-center">
-                                            {s.isMobileMasked ? (
-                                                <div className="inline-flex items-center gap-1 bg-red-50 text-red-500 px-2 py-1 rounded border border-red-100" title="Protected">
-                                                    <Lock size={10}/> <span className="font-bold text-[10px]">LOCKED</span>
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="text-slate-400 font-bold text-[9px] w-3">PW</span>
+                                                    <span className="text-slate-500">{s.parentPassword || '****'}</span>
                                                 </div>
-                                            ) : (
-                                                <div className="inline-flex items-center gap-1 bg-green-50 text-green-700 px-2 py-1 rounded border border-green-100 group-hover:border-green-200 transition">
-                                                    <span className="font-mono font-bold text-[11px]">{s.parentMobile}</span>
-                                                    <button onClick={() => handleCopy(s.parentMobile)} className="hover:text-green-900 ml-1" title="Copy">
-                                                        <Copy size={10}/>
-                                                    </button>
+                                            </td>
+
+                                            <td className="px-4 py-2 align-middle text-center">
+                                                {s.isMobileMasked ? (
+                                                    <div className="inline-flex items-center gap-1 bg-red-50 text-red-500 px-2 py-1 rounded border border-red-100" title="Protected">
+                                                        <Lock size={10}/> <span className="font-bold text-[10px]">LOCKED</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="inline-flex items-center gap-1 bg-green-50 text-green-700 px-2 py-1 rounded border border-green-100 group-hover:border-green-200 transition">
+                                                        <span className="font-mono font-bold text-[11px]">{s.parentMobile}</span>
+                                                        <button onClick={() => handleCopy(s.parentMobile)} className="hover:text-green-900 ml-1" title="Copy">
+                                                            <Copy size={10}/>
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </td>
+
+                                            <td className="px-4 py-2 align-middle text-right">
+                                                <div className={`font-bold text-sm ${s.feeRemaining > 0 ? 'text-[#c1121f]' : 'text-emerald-600'}`}>
+                                                    ₹ {s.feeRemaining.toLocaleString()}
                                                 </div>
-                                            )}
-                                        </td>
+                                                <div className="text-[9px] text-slate-400 mt-0.5">
+                                                    Paid: ₹{s.feePaid.toLocaleString()}
+                                                </div>
+                                            </td>
 
-                                        <td className="px-4 py-2 align-middle text-right">
-                                            <div className={`font-bold text-sm ${s.feeRemaining > 0 ? 'text-[#c1121f]' : 'text-emerald-600'}`}>
-                                                ₹ {s.feeRemaining.toLocaleString()}
-                                            </div>
-                                            <div className="text-[9px] text-slate-400 mt-0.5">
-                                                Paid: ₹{s.feePaid.toLocaleString()}
-                                            </div>
-                                        </td>
-
-                                        {/* 🚨 NEW: Delete Button Cell */}
-                                        <td className="px-4 py-2 align-middle text-center">
-                                            <button 
-                                                onClick={() => handleDelete(s.id, s.name)} 
-                                                className="p-1.5 text-slate-400 hover:text-white hover:bg-red-500 rounded-lg transition-colors"
-                                                title="Delete Student Permanently"
-                                            >
-                                                <Trash2 size={16}/>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))
+                                            {/* 🚨 NEW: Delete Button Cell */}
+                                            <td className="px-4 py-2 align-middle text-center">
+                                                <button 
+                                                    onClick={() => handleDelete(s.id, s.name)} 
+                                                    className="p-1.5 text-slate-400 hover:text-white hover:bg-red-500 rounded-lg transition-colors"
+                                                    title="Delete Student Permanently"
+                                                >
+                                                    <Trash2 size={16}/>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>

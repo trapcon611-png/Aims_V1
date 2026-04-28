@@ -173,15 +173,13 @@ export default function StudentCard({ child, onViewInvoice, isDark, token }: { c
   return (
     <div className={`${cardBg} rounded-3xl shadow-xl border overflow-hidden transition-all duration-300 mb-8 flex flex-col lg:flex-row min-h-125`}>
       <div className={`lg:w-72 ${sidebarBg} border-b lg:border-b-0 lg:border-r p-6 flex flex-col`}>
-          <div className="flex items-center gap-4 mb-8">
-            <div className="h-12 w-12 bg-linear-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg">
-                {child.name.charAt(0)}
-            </div>
-            <div>
-                <h2 className="text-lg font-bold truncate leading-tight">{child.name}</h2>
-                <p className="text-xs font-bold mt-1 text-purple-500">{child.batch}</p>
-            </div>
+          
+          {/* ✨ FIXED OVERFLOW & REMOVED INITIAL BLOCK */}
+          <div className="flex flex-col gap-1 mb-8 w-full max-w-full overflow-hidden">
+              <h2 className="text-xl font-black leading-tight break-words whitespace-normal w-full">{child.name}</h2>
+              <p className="text-xs font-bold text-purple-500">{child.batch}</p>
           </div>
+
           <nav className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0">
              <button onClick={() => setActiveTab('fees')} className={`flex-1 lg:flex-none flex items-center gap-3 p-3.5 rounded-xl transition-all duration-200 text-sm font-bold whitespace-nowrap ${activeTab === 'fees' ? tabActive : tabInactive}`}><Wallet size={18}/> Financials</button>
              <button onClick={() => setActiveTab('invoices')} className={`flex-1 lg:flex-none flex items-center gap-3 p-3.5 rounded-xl transition-all duration-200 text-sm font-bold whitespace-nowrap ${activeTab === 'invoices' ? tabActive : tabInactive}`}><FileCheck size={18}/> Invoices</button>
