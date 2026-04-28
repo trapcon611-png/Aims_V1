@@ -138,6 +138,37 @@ export const directorApi = {
     return await parseJsonSafely(res);
   },
 
+  // --- BRANCHES (NEW) ---
+  async getBranches() {
+      try {
+          const res = await fetchWithAuth(`${API_URL}/erp/branches`, {
+              headers: { 'Authorization': `Bearer ${this.getToken()}` }
+          });
+          if (!res.ok) return [];
+          return await parseJsonSafely(res, []);
+      } catch (e) { return []; }
+  },
+
+  async createBranch(data: any) {
+      const res = await fetchWithAuth(`${API_URL}/erp/branches`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` },
+          body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('Failed to create branch');
+      return await parseJsonSafely(res);
+  },
+
+  async deleteBranch(id: string) {
+      const res = await fetchWithAuth(`${API_URL}/erp/branches/${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${this.getToken()}` }
+      });
+      if (!res.ok) throw new Error('Failed to delete branch');
+      return await parseJsonSafely(res);
+  },
+
+  // --- BATCHES ---
   async getBatches() { 
       try { 
           const res = await fetchWithAuth(`${API_URL}/erp/batches`, { 
@@ -168,6 +199,15 @@ export const directorApi = {
       }); 
       if (!res.ok) throw new Error('Failed to update batch'); 
       return await parseJsonSafely(res); 
+  },
+
+  async deleteBatch(id: string) {
+      const res = await fetchWithAuth(`${API_URL}/erp/batches/${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${this.getToken()}` }
+      });
+      if (!res.ok) throw new Error('Failed to delete batch');
+      return await parseJsonSafely(res);
   },
 
   // --- FINANCE ---

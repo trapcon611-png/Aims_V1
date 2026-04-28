@@ -50,7 +50,7 @@ model StudentProfile {
   latePenalty         Float           @default(0) 
   installments        Int             @default(1) 
   nextPaymentDate     DateTime?       
-  installmentSchedule Json?            
+  installmentSchedule Json?           
   feeAgreementDate    DateTime?       
 
   feesPaid            FeeRecord[]
@@ -93,6 +93,10 @@ model Batch {
   notices   Notice[]
   resources Resource[]
   exams     Exam[]            
+
+  // ✨ NEW: Link to Branch (Optional to prevent data loss on existing batches)
+  branchId  String?
+  branch    Branch?     @relation(fields: [branchId], references: [id])
 }
 
 model Notice {
@@ -310,12 +314,12 @@ model Enquiry {
 // --- 7. PUSH NOTIFICATIONS ---
 
 model PushSubscription {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  endpoint  String   @unique 
-  p256dh    String   
-  auth      String   
+  id       String   @id @default(uuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id])
+  endpoint String   @unique 
+  p256dh   String   
+  auth     String   
   createdAt DateTime @default(now())
 }
 
@@ -325,4 +329,16 @@ model CarouselImage {
   aspectRatio String   @default("16:9") // "16:9" (Landscape) or "9:16" (Portrait)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
+}
+
+model Branch {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  address   String?
+  city      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // A single branch can have multiple batches
+  batches   Batch[]
 }

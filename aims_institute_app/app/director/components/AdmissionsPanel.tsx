@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { UserPlus, CheckCircle, Cake, RefreshCw, AlertCircle, Calendar } from 'lucide-react';
+import { UserPlus, CheckCircle, Cake, RefreshCw, AlertCircle, Calendar, MapPin } from 'lucide-react';
 import { directorApi } from '../services/directorApi';
 
 interface InstallmentPlan { id: number; amount: number; dueDate: string; }
@@ -8,8 +8,12 @@ interface InstallmentPlan { id: number; amount: number; dueDate: string; }
 export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[], onRefresh: () => void }) {
   const [status, setStatus] = useState('');
   const [isProcessing, setIsProcessing] = useState(false); // 🚨 The Loading Lock
+  
   const [localBatches, setLocalBatches] = useState<any[]>(batches || []);
-  const [isLoadingBatches, setIsLoadingBatches] = useState(false);
+  const [branches, setBranches] = useState<any[]>([]); // ✨ NEW: Branches state
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  
+  const [branchFilter, setBranchFilter] = useState(''); // ✨ NEW: Selected Branch Filter
   
   // Track if user has manually edited the schedule to prevent auto-overwrite
   const [isManualSchedule, setIsManualSchedule] = useState(false);
@@ -29,25 +33,25 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
   const redLabelStyle = "block text-[10px] font-bold text-red-700 uppercase mb-1 tracking-wide";
 
   // --- DATA FETCHING ---
-  const fetchBatches = async () => {
-      setIsLoadingBatches(true);
+  const fetchData = async () => {
+      setIsLoadingData(true);
       try {
-          const data = await directorApi.getBatches();
-          setLocalBatches(data);
+          const [batchData, branchData] = await Promise.all([
+              directorApi.getBatches(),
+              directorApi.getBranches()
+          ]);
+          setLocalBatches(batchData || []);
+          setBranches(branchData || []);
       } catch (e) {
-          console.error("Failed to load batches", e);
+          console.error("Failed to load data", e);
       } finally {
-          setIsLoadingBatches(false);
+          setIsLoadingData(false);
       }
   };
 
   useEffect(() => {
-     if (batches && batches.length > 0) {
-         setLocalBatches(batches);
-     } else {
-         fetchBatches();
-     }
-  }, [batches]);
+      fetchData();
+  }, []);
 
   // Update Fees when Batch is selected
   useEffect(() => {
@@ -127,7 +131,7 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
             ...prev, 
             studentName: '', studentId: '', studentPassword: '', 
             parentId: '', parentPassword: '', studentPhone: '', parentPhone: '',
-            fees: 0, waiveOff: 0, installments: 1, isManualSchedule: false
+            fees: 0, waiveOff: 0, installments: 1, isManualSchedule: false, batchId: ''
         }));
         onRefresh();
     } catch (e: any) { 
@@ -195,33 +199,56 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                         <input className={inputStyle} required placeholder="Set Password" value={admissionData.studentPassword} onChange={e => setAdmissionData({...admissionData, studentPassword: e.target.value})} />
                    </div>
 
-                   <div className="col-span-2">
-                       <label className={labelStyle}>Assign Batch</label>
-                       <div className="flex gap-2">
-                           <div className="relative flex-1">
+                   {/* ✨ NEW: DYNAMIC BRANCH & BATCH ASSIGNMENT */}
+                   <div className="col-span-2 grid grid-cols-2 gap-4">
+                       <div>
+                           <label className={labelStyle}>Filter by Branch</label>
+                           <div className="relative">
+                               <select 
+                                  className={inputStyle + " pl-8 text-blue-700 font-bold bg-blue-50/50"} 
+                                  value={branchFilter} 
+                                  onChange={e => {
+                                      setBranchFilter(e.target.value);
+                                      setAdmissionData({...admissionData, batchId: ''}); // Reset batch on branch change
+                                  }}
+                               >
+                                   <option value="">-- All Branches --</option>
+                                   {branches.map(br => (
+                                       <option key={br.id} value={br.id}>{br.name}</option>
+                                   ))}
+                               </select>
+                               <MapPin size={14} className="absolute left-3 top-3.5 text-blue-500" />
+                           </div>
+                       </div>
+
+                       <div>
+                           <label className={labelStyle}>Assign Batch</label>
+                           <div className="flex gap-2">
                                <select className={inputStyle} required value={admissionData.batchId} onChange={e => setAdmissionData({...admissionData, batchId: e.target.value})}>
                                    <option value="">-- Select Batch --</option>
-                                   {localBatches.map(b => (
+                                   {localBatches
+                                        .filter(b => branchFilter ? b.branchId === branchFilter : true)
+                                        .map(b => (
                                        <option key={b.id} value={b.id}>
                                            {b.name} ({b.startYear})
                                        </option>
                                    ))}
                                </select>
+                               <button 
+                                    type="button"
+                                    onClick={fetchData}
+                                    className="p-2.5 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 text-slate-600 transition"
+                                    title="Refresh Batches"
+                               >
+                                   <RefreshCw size={18} className={isLoadingData ? "animate-spin" : ""} />
+                               </button>
                            </div>
-                           <button 
-                                type="button"
-                                onClick={fetchBatches}
-                                className="p-2.5 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 text-slate-600 transition"
-                                title="Refresh Batches"
-                           >
-                               <RefreshCw size={18} className={isLoadingBatches ? "animate-spin" : ""} />
-                           </button>
+                           {!isLoadingData && localBatches.length === 0 && (
+                                <p className="text-[10px] text-red-500 mt-1 font-bold flex items-center gap-1">
+                                    <AlertCircle size={10}/> No batches found. Please create one in the Batches tab first.
+                                </p>
+                           )}
                        </div>
-                       {!isLoadingBatches && localBatches.length === 0 && (
-                            <p className="text-[10px] text-red-500 mt-1 font-bold flex items-center gap-1">
-                                <AlertCircle size={10}/> No batches found. Please create one in the Batches tab first.
-                            </p>
-                       )}
                    </div>
 
                    <div className="col-span-2">

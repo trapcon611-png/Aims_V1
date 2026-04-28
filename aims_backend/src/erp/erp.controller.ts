@@ -1,7 +1,6 @@
 import { Controller, Get, Post, Body, Param, Delete, Query, Patch, UseGuards } from '@nestjs/common';
 import { ErpService } from './erp.service';
 import { CreateQuestionDto } from './dto/create-question.dto'; 
-import { CreateBatchDto } from '../batches/dto/create-batch.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -10,6 +9,25 @@ import { Roles } from '../auth/roles.decorator';
 @UseGuards(AuthGuard('jwt'), RolesGuard)
 export class ErpController {
   constructor(private readonly erpService: ErpService) {}
+
+  // --- BRANCHES (NEW) ---
+  @Get('branches')
+  @Roles('SUPER_ADMIN', 'TEACHER')
+  getBranches() {
+      return this.erpService.getBranches();
+  }
+
+  @Post('branches')
+  @Roles('SUPER_ADMIN')
+  createBranch(@Body() dto: any) {
+      return this.erpService.createBranch(dto);
+  }
+
+  @Delete('branches/:id')
+  @Roles('SUPER_ADMIN')
+  deleteBranch(@Param('id') id: string) {
+      return this.erpService.deleteBranch(id);
+  }
 
   // --- BATCH MANAGEMENT ---
   @Get('batches')
@@ -28,6 +46,12 @@ export class ErpController {
   @Roles('SUPER_ADMIN')
   updateBatch(@Param('id') id: string, @Body() dto: any) {
     return this.erpService.updateBatch(id, dto);
+  }
+
+  @Delete('batches/:id')
+  @Roles('SUPER_ADMIN')
+  deleteBatch(@Param('id') id: string) {
+      return this.erpService.deleteBatch(id);
   }
 
   // --- FINANCE (EXPENSES & FEES) ---

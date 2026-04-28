@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Wallet, IndianRupee, Search, Calendar, Percent, Trash2, Printer, 
     X, Filter, Loader2, TrendingUp, TrendingDown, DollarSign, 
-    ChevronLeft, ChevronRight, User 
+    ChevronLeft, ChevronRight, User, Layers 
 } from 'lucide-react';
 import { directorApi } from '../services/directorApi';
 import InvoiceModal from './InvoiceModal';
@@ -16,12 +16,14 @@ export default function AccountsPanel({ students }: { students: any[] }) {
   
   // Student Search State (For Collect Fee Form)
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const [feeCollectBatchFilter, setFeeCollectBatchFilter] = useState(''); // ✨ NEW: Batch filter for Collect Fee
   const [showStudentDropdown, setShowStudentDropdown] = useState(false);
 
   // Data
   const [expenses, setExpenses] = useState<any[]>([]);
   const [feeHistory, setFeeHistory] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
+  const [branches, setBranches] = useState<any[]>([]); // ✨ NEW
   
   // UI
   const [showInvoice, setShowInvoice] = useState(false);
@@ -46,14 +48,16 @@ export default function AccountsPanel({ students }: { students: any[] }) {
   const refreshData = async () => {
       setIsLoading(true);
       try {
-          const [expData, feeData, batchData] = await Promise.all([
+          const [expData, feeData, batchData, branchData] = await Promise.all([
               directorApi.getExpenses(),
               directorApi.getFeeHistory(),
-              directorApi.getBatches()
+              directorApi.getBatches(),
+              directorApi.getBranches()
           ]);
           setExpenses(expData);
           setFeeHistory(feeData);
           setBatches(batchData);
+          setBranches(branchData);
       } catch(e) { console.error(e); }
       finally { setIsLoading(false); }
   };
@@ -62,14 +66,27 @@ export default function AccountsPanel({ students }: { students: any[] }) {
 
   // --- STUDENT AUTOCOMPLETE LOGIC ---
   const filteredStudentOptions = useMemo(() => {
-      if (!studentSearchQuery) return [];
-      const lower = studentSearchQuery.toLowerCase();
-      // Filter by Name or ID, limit to 5 results for speed
-      return students.filter(s => 
-          s.name.toLowerCase().includes(lower) || 
-          s.studentId.toLowerCase().includes(lower)
-      ).slice(0, 5); 
-  }, [students, studentSearchQuery]);
+      // If no search and no batch, show nothing.
+      if (!studentSearchQuery && !feeCollectBatchFilter) return [];
+      
+      let filtered = students;
+      
+      // Filter by exactly the batch name
+      if (feeCollectBatchFilter) {
+          filtered = filtered.filter(s => s.batch === feeCollectBatchFilter);
+      }
+
+      if (studentSearchQuery) {
+          const lower = studentSearchQuery.toLowerCase();
+          filtered = filtered.filter(s => 
+              s.name.toLowerCase().includes(lower) || 
+              s.studentId.toLowerCase().includes(lower)
+          );
+      }
+      
+      // If only batch is selected, show up to 10 students. If search is used, show 5.
+      return filtered.slice(0, studentSearchQuery ? 5 : 10); 
+  }, [students, studentSearchQuery, feeCollectBatchFilter]);
 
   const selectStudentForFee = (student: any) => {
       setFeeForm(prev => ({ ...prev, studentId: student.id }));
@@ -235,29 +252,48 @@ export default function AccountsPanel({ students }: { students: any[] }) {
               </h3>
               <form onSubmit={handleCollectFee} className="space-y-5">
                   
-                  {/* NEW: SEARCHABLE STUDENT INPUT */}
-                  <div className="relative">
-                      <label className={labelStyle}>Search Student (Name or ID)</label>
-                      <div className="relative">
-                          <input 
-                              type="text"
-                              className={inputStyle + " pl-9"}
-                              placeholder="Type Name or Student ID..."
-                              value={studentSearchQuery}
-                              onChange={(e) => {
-                                  setStudentSearchQuery(e.target.value);
-                                  setFeeForm(prev => ({...prev, studentId: ''})); // Reset ID on type
-                                  setShowStudentDropdown(true);
+                  {/* ✨ NEW: BATCH FILTER AND SEARCHABLE STUDENT INPUT */}
+                  <div className="flex gap-4 relative">
+                      <div className="w-1/3">
+                          <label className={labelStyle}>Filter by Batch</label>
+                          <select 
+                              className={inputStyle + " font-bold text-blue-700 bg-blue-50/50"} 
+                              value={feeCollectBatchFilter} 
+                              onChange={e => {
+                                  setFeeCollectBatchFilter(e.target.value);
+                                  setFeeForm(prev => ({...prev, studentId: ''}));
+                                  setStudentSearchQuery('');
+                                  setShowStudentDropdown(true); // Pop open the list to easily pick
                               }}
-                              onFocus={() => setShowStudentDropdown(true)}
-                              onBlur={() => setTimeout(() => setShowStudentDropdown(false), 200)} // Delay to allow click
-                          />
-                          <Search size={16} className="absolute left-3 top-3 text-slate-400"/>
+                          >
+                              <option value="">All Batches</option>
+                              {batches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+                          </select>
+                      </div>
+
+                      <div className="flex-1 relative">
+                          <label className={labelStyle}>Search Student (Name or ID)</label>
+                          <div className="relative">
+                              <input 
+                                  type="text"
+                                  className={inputStyle + " pl-9"}
+                                  placeholder="Type Name or Student ID..."
+                                  value={studentSearchQuery}
+                                  onChange={(e) => {
+                                      setStudentSearchQuery(e.target.value);
+                                      setFeeForm(prev => ({...prev, studentId: ''})); // Reset ID on type
+                                      setShowStudentDropdown(true);
+                                  }}
+                                  onFocus={() => setShowStudentDropdown(true)}
+                                  onBlur={() => setTimeout(() => setShowStudentDropdown(false), 200)} // Delay to allow click
+                              />
+                              <Search size={16} className="absolute left-3 top-3 text-slate-400"/>
+                          </div>
                       </div>
 
                       {/* DROPDOWN RESULTS */}
-                      {showStudentDropdown && studentSearchQuery && (
-                          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                      {showStudentDropdown && (studentSearchQuery || feeCollectBatchFilter) && (
+                          <div className="absolute z-50 w-full mt-[68px] bg-white border border-slate-200 rounded-lg shadow-2xl max-h-64 overflow-y-auto">
                               {filteredStudentOptions.length > 0 ? (
                                   filteredStudentOptions.map(s => (
                                       <div 
@@ -273,7 +309,7 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                                           </div>
                                           <div className="flex justify-between items-center mt-1">
                                               <span className="text-xs text-slate-500 font-mono">{s.studentId}</span>
-                                              <span className="text-[10px] text-slate-400">{s.batch}</span>
+                                              <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 rounded">{s.batch}</span>
                                           </div>
                                       </div>
                                   ))
@@ -459,7 +495,10 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                                       <div className="text-xs text-slate-400">{t.displayId || t.studentId}</div>
                                   </td>
                                   <td className="px-6 py-4 text-slate-600 text-xs">
-                                      <span className="bg-slate-100 px-2 py-1 rounded border border-slate-200">{t.batch || 'N/A'}</span>
+                                      {/* ✨ BATCH DISPLAYED CLEARLY */}
+                                      <span className="bg-blue-50 text-blue-700 font-bold px-2 py-1 rounded border border-blue-200">
+                                          {t.batch || 'N/A'}
+                                      </span>
                                   </td>
                                   <td className="px-6 py-4">
                                       <div className="font-bold text-slate-700 text-xs">{t.paymentMode}</div>
@@ -484,7 +523,7 @@ export default function AccountsPanel({ students }: { students: any[] }) {
               </table>
           </div>
           
-          {/* PAGINATION FOOTER */}
+          {/* ✨ PAGINATION FOOTER - INTACT & WORKING */}
           {totalPages > 1 && (
             <div className="p-4 border-t border-slate-200 bg-white flex justify-between items-center text-xs">
                 <span className="text-slate-500 font-bold">Page {currentPage} of {totalPages}</span>
@@ -492,14 +531,14 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                     <button 
                         onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
                         disabled={currentPage === 1}
-                        className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50 text-slate-600"
+                        className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50 text-slate-600 transition-colors"
                     >
                         <ChevronLeft size={16}/>
                     </button>
                     <button 
                         onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
                         disabled={currentPage === totalPages}
-                        className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50 text-slate-600"
+                        className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50 text-slate-600 transition-colors"
                     >
                         <ChevronRight size={16}/>
                     </button>

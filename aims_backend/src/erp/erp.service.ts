@@ -50,9 +50,36 @@ export class ErpService {
       });
   }
 
+  // --- BRANCH MANAGEMENT (NEW) ---
+  async getBranches() {
+      return this.prisma.branch.findMany({ orderBy: { name: 'asc' } });
+  }
+
+  async createBranch(data: any) {
+      return this.prisma.branch.create({
+          data: {
+              name: data.name,
+              city: data.city || null
+          }
+      });
+  }
+
+  async deleteBranch(id: string) {
+      // Safety Check: Don't delete a branch if it has active batches!
+      const activeBatches = await this.prisma.batch.count({ where: { branchId: id } });
+      if (activeBatches > 0) {
+          throw new ConflictException(`Cannot delete branch. It still has ${activeBatches} active batches assigned to it.`);
+      }
+
+      return this.prisma.branch.delete({ where: { id } });
+  }
+
   // --- BATCH MANAGEMENT ---
   async getBatches() {
-    return this.prisma.batch.findMany({ orderBy: { name: 'asc' } });
+    return this.prisma.batch.findMany({ 
+        include: { branch: true }, // Include branch relation for the frontend
+        orderBy: { name: 'asc' } 
+    });
   }
   async getAllBatches() { return this.getBatches(); }
 
@@ -63,7 +90,8 @@ export class ErpService {
         name: data.name,
         startYear: data.startYear,
         strength: Number(data.strength) || 60,
-        fee: Number(data.fee) || 0
+        fee: Number(data.fee) || 0,
+        branchId: data.branchId && data.branchId !== '' ? data.branchId : null // Link to branch
       } as any
     });
   }
@@ -75,6 +103,10 @@ export class ErpService {
               fee: data.fee ? Number(data.fee) : undefined,
           }
       });
+  }
+
+  async deleteBatch(id: string) {
+      return this.prisma.batch.delete({ where: { id } });
   }
 
   // --- EXAMS & IMPORT ---
@@ -391,7 +423,7 @@ export class ErpService {
         where: whereClause,
         include: { 
             user: true, 
-            batch: true, 
+            batch: { include: { branch: true } }, 
             parent: { include: { user: true } }, 
             feesPaid: true 
         }, 
