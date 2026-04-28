@@ -3,7 +3,7 @@ import React from 'react';
 import Image from 'next/image';
 import { Printer, X } from 'lucide-react';
 
-const LOGO_PATH = '/logo.png';
+const LOGO_PATH = '/mainpage.png';
 
 const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () => void, isGstEnabled: boolean }) => {
   const baseAmount = isGstEnabled ? Math.round(data.amount / 1.18) : data.amount;
@@ -27,13 +27,10 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
         {/* HEADER */}
         <div>
           <div className="flex justify-between items-start border-b-2 border-[#dc2626] pb-6 mb-6">
-              <div className="flex flex-col gap-2">
-                <div className="relative w-20 h-20">
-                   <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain" unoptimized />
-                </div>
-                <div>
-                   <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase font-serif">AIMS INSTITUTE</h1>
-                   <p className="text-xs font-bold text-[#dc2626] uppercase tracking-wide">Team of IITian's & Dr's</p>
+              <div className="flex flex-col gap-2 justify-center mt-2">
+                {/* ✨ RECTANGULAR LOGO CONTAINER */}
+                <div className="relative w-64 h-16">
+                   <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain object-left" unoptimized />
                 </div>
               </div>
               <div className="text-right text-xs text-slate-600">
