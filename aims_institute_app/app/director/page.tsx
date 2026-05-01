@@ -6,7 +6,7 @@ import {
   ArrowLeft, Loader2, UserPlus, Activity, Cpu, ChevronRight, ChevronLeft, Menu, Home,
   FileBarChart, Clock, CheckCircle, Video, Plus, Bell, Trash2, Search, X,
   AlertTriangle, User, Cake, Copy, Lock, LayoutGrid, DollarSign, TrendingUp, TrendingDown,
-  AlertCircle, BarChart3, Image as ImageIcon, Eye, EyeOff
+  AlertCircle, BarChart3, Image as ImageIcon, Eye, EyeOff, MapPin
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -17,7 +17,7 @@ import AccountsPanel from './components/AccountsPanel';
 import BatchesPanel from './components/BatchesPanel';
 import StudentDirectoryPanel from './components/StudentDirectoryPanel';
 import ContentPanel from './components/ContentPanel';
-import CarouselPanel from './components/CarouselPanel'; // ✨ NEW CAROUSEL PANEL IMPORTED
+import CarouselPanel from './components/CarouselPanel';
 
 // --- TYPES ---
 interface Batch { id: string; name: string; startYear: string; strength: number; fee: number; }
@@ -30,7 +30,7 @@ interface StudentRecord {
 interface Enquiry { 
   id: string; studentName: string; mobile: string; course: string; 
   status: 'ADMITTED' | 'PARTIALLY_ALLOCATED' | 'UNALLOCATED' | 'CANCELLED' | 'PENDING'; 
-  remarks: string; createdAt: string; followUpCount: number; allotedTo?: string;
+  remarks: string; createdAt: string; followUpCount: number; allotedTo?: string; branchId?: string;
 }
 interface Exam { id: string; title: string; durationMin?: number; totalMarks?: number; scheduledAt?: string; batch?: { name: string }; }
 
@@ -79,7 +79,6 @@ const DashboardHome = ({
     dueInstallments: any[],
     pendingEnquiries: any[]
 }) => {
-    // ✨ ADDED CAROUSEL TO NAV ITEMS
     const navItems = [
         { id: 'users', label: 'Admissions', icon: UserPlus, color: 'text-blue-600', border: 'border-blue-200', bg: 'hover:bg-blue-50', count: metrics.admissions > 0 ? `+${metrics.admissions}` : null },
         { id: 'accounts', label: 'Finance', icon: Wallet, color: 'text-emerald-600', border: 'border-emerald-200', bg: 'hover:bg-emerald-50', count: metrics.fees > 0 ? `₹${(metrics.fees/1000).toFixed(1)}k` : null },
@@ -98,7 +97,6 @@ const DashboardHome = ({
                 <h1 className="text-3xl font-black text-slate-800 mb-1">Overview</h1>
                 <p className="text-slate-500 text-sm mb-8">Welcome back. Here is what's happening at the institute today.</p>
                 
-                {/* ✨ UPDATED GRID TO md:grid-cols-4 lg:grid-cols-8 FOR 8 ITEMS */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-8 gap-4">
                     {navItems.map((item) => (
                         <button 
@@ -317,6 +315,7 @@ export default function DirectorPage() {
   const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
   const [feeHistory, setFeeHistory] = useState<any[]>([]);
+  const [branches, setBranches] = useState<any[]>([]); // ✨ NEW BRANCHES STATE
 
   // Derived Metrics
   const [todayMetrics, setTodayMetrics] = useState({ admissions: 0, enquiries: 0, fees: 0 });
@@ -324,10 +323,11 @@ export default function DirectorPage() {
   const [dueInstallments, setDueInstallments] = useState<any[]>([]);
   const [pendingEnquiries, setPendingEnquiries] = useState<any[]>([]);
 
-  // Local UI States (for inline tabs)
-  const [enquiryForm, setEnquiryForm] = useState({ studentName: '', mobile: '', course: '', allotedTo: '', remarks: '' });
+  // ✨ UPDATED: Added branchId to enquiryForm
+  const [enquiryForm, setEnquiryForm] = useState({ studentName: '', mobile: '', course: '', allotedTo: '', remarks: '', branchId: '' });
   const [enquirySearch, setEnquirySearch] = useState('');
   const [enquiryDateFilter, setEnquiryDateFilter] = useState('');
+  const [enquiryBranchFilter, setEnquiryBranchFilter] = useState(''); // ✨ NEW BRANCH FILTER
   const [enquiryPage, setEnquiryPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
   
@@ -342,7 +342,6 @@ export default function DirectorPage() {
           if (sessionString) {
               try {
                   const parsed = JSON.parse(sessionString);
-                  // If the token is 'null', 'undefined', or blank, DESTROY IT instantly.
                   if (parsed && parsed.token && parsed.token !== 'undefined' && parsed.token !== 'null') {
                       setIsUnlocked(true);
                   } else {
@@ -362,25 +361,25 @@ export default function DirectorPage() {
       if (!isUnlocked) return;
       setIsLoading(true);
       try {
-          // If any of these API calls hit a 401 Unauthorized, they safely return an empty array []
-          // which prevents the "Unexpected end of JSON input" crash from ever happening!
-          const [rawStsRes, rawBts, rawEnqs, rawFees] = await Promise.all([
-              directorApi.getStudents(1, 10000), // Fetch a large batch just for dashboard metric calculations
+          const [rawStsRes, rawBts, rawEnqs, rawFees, rawBranches] = await Promise.all([
+              directorApi.getStudents(1, 10000), 
               directorApi.getBatches(),
               directorApi.getEnquiries(),
-              directorApi.getFeeHistory()
+              directorApi.getFeeHistory(),
+              directorApi.getBranches() // ✨ FETCH BRANCHES
           ]);
           
-          // CRITICAL FIX: Extract the .data array so the dashboard metrics don't crash
           const sts = rawStsRes?.data || [];
           const bts = rawBts || [];
           const enqs = rawEnqs || [];
           const fees = rawFees || [];
+          const brs = rawBranches || [];
 
           setStudents(sts);
           setBatches(bts);
           setEnquiries(enqs);
           setFeeHistory(fees);
+          setBranches(brs); // Set branches
 
           // Calculate Dashboard Metrics
           const today = new Date().toISOString().split('T')[0];
@@ -468,15 +467,44 @@ export default function DirectorPage() {
   const handleLogout = () => { if(typeof window !== 'undefined') localStorage.removeItem('director_session'); setIsUnlocked(false); };
 
   // --- Handlers for Inline Tabs ---
-  const handleAddEnquiry = async (e: React.FormEvent) => { e.preventDefault(); await directorApi.createEnquiry(enquiryForm); setEnquiryForm({ studentName: '', mobile: '', course: '', allotedTo: '', remarks: '' }); refreshData(); };
-  const handleUpdateEnquiryStatus = async (id: string, s: string, f?: number) => { await directorApi.updateEnquiryStatus(id, s, f); refreshData(); };
-  const handlePhoneInput = (e: React.ChangeEvent<HTMLInputElement>, setter: any, field: string) => { const val = e.target.value.replace(/\D/g, '').slice(0, 10); setter((prev: any) => ({ ...prev, [field]: val })); };
+  const handleAddEnquiry = async (e: React.FormEvent) => { 
+      e.preventDefault(); 
+      await directorApi.createEnquiry(enquiryForm); 
+      setEnquiryForm({ studentName: '', mobile: '', course: '', allotedTo: '', remarks: '', branchId: '' }); 
+      refreshData(); 
+  };
+  const handleUpdateEnquiryStatus = async (id: string, s: string, f?: number) => { 
+      await directorApi.updateEnquiryStatus(id, s, f); 
+      refreshData(); 
+  };
+  const handlePhoneInput = (e: React.ChangeEvent<HTMLInputElement>, setter: any, field: string) => { 
+      const val = e.target.value.replace(/\D/g, '').slice(0, 10); 
+      setter((prev: any) => ({ ...prev, [field]: val })); 
+  };
+
+  // ✨ NEW: Handle Enquiry Deletion
+  const handleDeleteEnquiry = async (id: string, name: string) => {
+      if (window.confirm(`Are you sure you want to delete the enquiry for ${name}?`)) {
+          try {
+              // Ensure this API method exists in your directorApi.ts
+              if ((directorApi as any).deleteEnquiry) {
+                  await (directorApi as any).deleteEnquiry(id);
+                  refreshData();
+              } else {
+                  alert("Please add the 'deleteEnquiry(id)' method to your directorApi.ts!");
+              }
+          } catch (e) {
+              alert("Failed to delete enquiry.");
+          }
+      }
+  };
 
   // --- Filter Logic ---
   const filteredEnquiries = enquiries.filter(enq => {
       const matchesSearch = enq.studentName.toLowerCase().includes(enquirySearch.toLowerCase()) || enq.mobile.includes(enquirySearch);
       const matchesDate = enquiryDateFilter ? new Date(enq.createdAt).toISOString().split('T')[0] === enquiryDateFilter : true;
-      return matchesSearch && matchesDate;
+      const matchesBranch = enquiryBranchFilter ? enq.branchId === enquiryBranchFilter : true; // ✨ BRANCH FILTER
+      return matchesSearch && matchesDate && matchesBranch;
   });
   const paginatedEnquiries = filteredEnquiries.slice((enquiryPage - 1) * ITEMS_PER_PAGE, enquiryPage * ITEMS_PER_PAGE);
   const totalEnquiryPages = Math.ceil(filteredEnquiries.length / ITEMS_PER_PAGE);
@@ -485,7 +513,7 @@ export default function DirectorPage() {
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
-       {/* ✨ FLAWLESS SIDEBAR WITH WHITE LOGO ✨ */}
+       {/* SIDEBAR */}
        <aside className={`bg-slate-900 border-r border-slate-800 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-64'} shadow-lg relative z-20`}>
           <div className="p-6 flex items-center justify-between">
              {!isSidebarCollapsed && (
@@ -501,7 +529,6 @@ export default function DirectorPage() {
                  {!isSidebarCollapsed && "Dashboard"}
              </button>
              
-             {/* ✨ CAROUSEL ADDED TO SIDEBAR MAPPING ARRAY */}
              {['users', 'batches', 'accounts', 'enquiries', 'directory', 'academics', 'content', 'carousel'].map(tab => (
                  <button key={tab} onClick={() => setActiveTab(tab)} 
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${activeTab === tab ? 'bg-[#c1121f] text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`}
@@ -540,8 +567,6 @@ export default function DirectorPage() {
            {activeTab === 'batches' && <BatchesPanel onRefresh={refreshData} />}
            {activeTab === 'directory' && <StudentDirectoryPanel students={students} batches={batches} onRefresh={refreshData} />}
            {activeTab === 'content' && <ContentPanel batches={batches} students={students} />}
-           
-           {/* ✨ CAROUSEL PANEL INTEGRATION */}
            {activeTab === 'carousel' && <CarouselPanel />}
 
            {/* --- INLINE TABS (ENQUIRIES) --- */}
@@ -552,26 +577,72 @@ export default function DirectorPage() {
                  <form onSubmit={handleAddEnquiry} className="space-y-4">
                    <div><label className={labelStyle}>Student Name</label><input className={inputStyle} required placeholder="e.g. Amit Kumar" value={enquiryForm.studentName} onChange={e => setEnquiryForm({...enquiryForm, studentName: e.target.value})} /></div>
                    <div><label className={labelStyle}>Mobile (10 Digits)</label><input className={inputStyle} required placeholder="98765xxxxx" value={enquiryForm.mobile} onChange={e => handlePhoneInput(e, setEnquiryForm, 'mobile')} maxLength={10} /></div>
+                   
+                   {/* ✨ NEW: Branch Dropdown */}
+                   <div>
+                       <label className={labelStyle}>Assign to Branch</label>
+                       <select className={inputStyle} value={enquiryForm.branchId} onChange={e => setEnquiryForm({...enquiryForm, branchId: e.target.value})}>
+                           <option value="">Global / Unassigned</option>
+                           {branches.map(br => <option key={br.id} value={br.id}>{br.name}</option>)}
+                       </select>
+                   </div>
+
                    <div><label className={labelStyle}>Course</label><select className={inputStyle} required value={enquiryForm.course} onChange={e => setEnquiryForm({...enquiryForm, course: e.target.value})}><option value="">Select</option>{batches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}<option value="FOUNDATION">Foundation</option></select></div>
                    <div><label className={labelStyle}>Assign To</label><input className={inputStyle} placeholder="Counselor" value={enquiryForm.allotedTo} onChange={e => setEnquiryForm({...enquiryForm, allotedTo: e.target.value})} /></div>
                    <div><label className={labelStyle}>Remarks</label><textarea className={inputStyle} rows={2} placeholder="Notes..." value={enquiryForm.remarks} onChange={e => setEnquiryForm({...enquiryForm, remarks: e.target.value})} /></div>
                    <button className="w-full bg-[#c1121f] text-white py-3 rounded-xl font-bold hover:bg-red-800 transition shadow-lg">Save Enquiry</button>
                  </form>
                </div>
+               
                <div className={`lg:col-span-2 ${glassPanel} overflow-hidden flex flex-col h-[700px]`}>
                  <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex flex-col gap-4">
                      <div className="flex justify-between items-center"><h3 className="font-bold text-slate-800">Enquiries Directory</h3><span className="bg-[#c1121f] text-white text-xs font-bold px-2 py-1 rounded">{filteredEnquiries.length} Found</span></div>
-                     <div className="flex gap-2">
-                         <div className="relative flex-1"><input type="text" className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-[#c1121f] outline-none" placeholder="Search Name or Mobile..." value={enquirySearch} onChange={(e) => setEnquirySearch(e.target.value)} /><Search size={14} className="absolute left-3 top-3 text-slate-400"/></div>
-                         <input type="date" className="w-40 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 focus:ring-2 focus:ring-[#c1121f] outline-none" value={enquiryDateFilter} onChange={(e) => setEnquiryDateFilter(e.target.value)} />
-                         {(enquirySearch || enquiryDateFilter) && <button onClick={() => {setEnquirySearch(''); setEnquiryDateFilter('');}} className="px-3 py-2 bg-slate-200 hover:bg-slate-300 rounded-lg text-slate-600 transition" title="Clear Filters"><X size={16}/></button>}
+                     <div className="flex flex-wrap gap-2">
+                         <div className="relative flex-1 min-w-[200px]"><input type="text" className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-[#c1121f] outline-none" placeholder="Search Name or Mobile..." value={enquirySearch} onChange={(e) => setEnquirySearch(e.target.value)} /><Search size={14} className="absolute left-3 top-3 text-slate-400"/></div>
+                         
+                         {/* ✨ NEW: Branch Filter */}
+                         <select className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 focus:ring-2 focus:ring-[#c1121f] outline-none" value={enquiryBranchFilter} onChange={(e) => setEnquiryBranchFilter(e.target.value)}>
+                            <option value="">All Branches</option>
+                            {branches.map(br => <option key={br.id} value={br.id}>{br.name}</option>)}
+                         </select>
+
+                         <input type="date" className="w-36 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 focus:ring-2 focus:ring-[#c1121f] outline-none" value={enquiryDateFilter} onChange={(e) => setEnquiryDateFilter(e.target.value)} />
+                         {(enquirySearch || enquiryDateFilter || enquiryBranchFilter) && <button onClick={() => {setEnquirySearch(''); setEnquiryDateFilter(''); setEnquiryBranchFilter('');}} className="px-3 py-2 bg-slate-200 hover:bg-slate-300 rounded-lg text-slate-600 transition" title="Clear Filters"><X size={16}/></button>}
                      </div>
                  </div>
                  <div className="flex-1 overflow-y-auto custom-scrollbar">
                    <table className="w-full text-left">
                      <thead className="bg-slate-100 text-slate-500 text-xs uppercase sticky top-0 z-10 backdrop-blur-sm"><tr><th className="px-6 py-3">Date</th><th className="px-6 py-3">Name / Mobile</th><th className="px-6 py-3">Details</th><th className="px-6 py-3">Status</th><th className="px-6 py-3 text-right">Action</th></tr></thead>
                      <tbody className="divide-y divide-slate-100">{paginatedEnquiries.length === 0 ? <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-400 italic">No enquiries found.</td></tr> : paginatedEnquiries.map(enq => (
-                       <tr key={enq.id} className="hover:bg-slate-50 transition"><td className="px-6 py-4 text-xs font-mono text-slate-500">{new Date(enq.createdAt).toLocaleDateString()}</td><td className="px-6 py-4"><div className="font-bold text-slate-900">{enq.studentName}</div><div className="text-xs text-slate-500 font-mono">{enq.mobile}</div></td><td className="px-6 py-4"><span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200 mb-1"><User size={10}/> {enq.allotedTo || 'Unassigned'}</span><div className="text-xs text-slate-500 font-medium">{enq.course}</div></td><td className="px-6 py-4"><div className="flex items-center gap-2"><select className="p-1 border rounded text-xs bg-white text-slate-900 outline-none" value={enq.followUpCount || 0} onChange={(e) => handleUpdateEnquiryStatus(enq.id, enq.status, parseInt(e.target.value))}>{[0,1,2,3,4,5].map(n => <option key={n} value={n}>{n} Follow-ups</option>)}</select></div></td><td className="px-6 py-4 text-right"><select className={`p-1.5 border rounded text-xs font-bold outline-none ${enq.status === 'ADMITTED' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-white text-slate-900'}`} value={enq.status} onChange={(e) => handleUpdateEnquiryStatus(enq.id, e.target.value as any, enq.followUpCount)}><option value="PENDING">Pending</option><option value="ADMITTED">Admitted</option><option value="PARTIALLY_ALLOCATED">Allocated</option><option value="UNALLOCATED">Unallocated</option><option value="CANCELLED">Cancel</option></select></td></tr>))}</tbody>
+                       <tr key={enq.id} className="hover:bg-slate-50 transition">
+                         <td className="px-6 py-4 text-xs font-mono text-slate-500">{new Date(enq.createdAt).toLocaleDateString()}</td>
+                         <td className="px-6 py-4">
+                           <div className="font-bold text-slate-900">{enq.studentName}</div>
+                           <div className="text-xs text-slate-500 font-mono flex items-center gap-2">
+                              {enq.mobile}
+                           </div>
+                         </td>
+                         <td className="px-6 py-4">
+                           <div className="flex flex-col gap-1 items-start">
+                               <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200 mb-1"><User size={10}/> {enq.allotedTo || 'Unassigned'}</span>
+                               <div className="text-xs text-slate-500 font-medium">{enq.course}</div>
+                               {/* ✨ NEW: Branch Badge */}
+                               {enq.branchId && (
+                                    <span className="text-[9px] font-bold text-blue-600 uppercase bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex items-center gap-1 w-fit mt-1">
+                                        <MapPin size={8}/> {branches.find(b => b.id === enq.branchId)?.name || 'Branch'}
+                                    </span>
+                               )}
+                           </div>
+                         </td>
+                         <td className="px-6 py-4"><div className="flex items-center gap-2"><select className="p-1 border rounded text-xs bg-white text-slate-900 outline-none" value={enq.followUpCount || 0} onChange={(e) => handleUpdateEnquiryStatus(enq.id, enq.status, parseInt(e.target.value))}>{[0,1,2,3,4,5].map(n => <option key={n} value={n}>{n} Follow-ups</option>)}</select></div></td>
+                         <td className="px-6 py-4 text-right">
+                           <div className="flex items-center justify-end gap-2">
+                               <select className={`p-1.5 border rounded text-xs font-bold outline-none ${enq.status === 'ADMITTED' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-white text-slate-900'}`} value={enq.status} onChange={(e) => handleUpdateEnquiryStatus(enq.id, e.target.value as any, enq.followUpCount)}><option value="PENDING">Pending</option><option value="ADMITTED">Admitted</option><option value="PARTIALLY_ALLOCATED">Allocated</option><option value="UNALLOCATED">Unallocated</option><option value="CANCELLED">Cancel</option></select>
+                               {/* ✨ NEW: Delete Enquiry Button */}
+                               <button onClick={() => handleDeleteEnquiry(enq.id, enq.studentName)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition" title="Delete Enquiry"><Trash2 size={16}/></button>
+                           </div>
+                         </td>
+                       </tr>))}</tbody>
                    </table>
                  </div>
                  {totalEnquiryPages > 1 && <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center text-xs"><span className="text-slate-500">Page {enquiryPage} of {totalEnquiryPages}</span><div className="flex gap-2"><button onClick={() => setEnquiryPage(p => Math.max(1, p - 1))} disabled={enquiryPage === 1} className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50"><ChevronLeft size={16}/></button><button onClick={() => setEnquiryPage(p => Math.min(totalEnquiryPages, p + 1))} disabled={enquiryPage === totalEnquiryPages} className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50"><ChevronRight size={16}/></button></div></div>}

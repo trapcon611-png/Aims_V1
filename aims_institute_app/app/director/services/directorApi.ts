@@ -125,7 +125,21 @@ export const directorApi = {
       } 
   },
 
-  // 🚨 NEW: DELETE STUDENT API CALL
+  // ✨ NEW: UPDATE STUDENT API CALL (For the Edit Modal)
+  async updateStudent(id: string, data: any) {
+    const res = await fetchWithAuth(`${API_URL}/erp/students/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+        const errorData = await parseJsonSafely(res, { message: 'Failed to update student' });
+        throw new Error(errorData.message || 'Failed to update student');
+    }
+    return await parseJsonSafely(res);
+  },
+
+  // 🚨 DELETE STUDENT API CALL
   async deleteStudent(id: string) {
     const res = await fetchWithAuth(`${API_URL}/erp/students/${id}`, {
         method: 'DELETE',
@@ -138,7 +152,7 @@ export const directorApi = {
     return await parseJsonSafely(res);
   },
 
-  // --- BRANCHES (NEW) ---
+  // --- BRANCHES ---
   async getBranches() {
       try {
           const res = await fetchWithAuth(`${API_URL}/erp/branches`, {
@@ -310,6 +324,19 @@ export const directorApi = {
       }); 
       if (!res.ok) throw new Error('Failed to update enquiry'); 
       return await parseJsonSafely(res); 
+  },
+
+  // ✨ NEW: DELETE ENQUIRY API CALL
+  async deleteEnquiry(id: string) {
+      const res = await fetchWithAuth(`${API_URL}/erp/enquiries/${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${this.getToken()}` }
+      });
+      if (!res.ok) {
+          const errorData = await parseJsonSafely(res, { message: 'Failed to delete enquiry' });
+          throw new Error(errorData.message || 'Failed to delete enquiry');
+      }
+      return await parseJsonSafely(res);
   },
 
   // --- CONTENT ---
