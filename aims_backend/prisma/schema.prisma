@@ -44,6 +44,11 @@ model StudentProfile {
   parentId            String?
   parent              ParentProfile?  @relation(fields: [parentId], references: [id])
   
+  // ✨ NEW: SIS Fields
+  dob                 DateTime?
+  photoUrl            String?
+  remarks             String?
+
   // Fee Agreement Fields
   feeAgreed           Float           @default(0)
   waiveOff            Float           @default(0) 
@@ -94,7 +99,7 @@ model Batch {
   resources Resource[]
   exams     Exam[]            
 
-  // ✨ NEW: Link to Branch (Optional to prevent data loss on existing batches)
+  // Link to Branch
   branchId  String?
   branch    Branch?     @relation(fields: [branchId], references: [id])
 }
@@ -134,7 +139,7 @@ model Exam {
   id          String        @id @default(uuid())
   title       String
   description String?
-  examType    String?       @default("General") // NEW: Track if it's JEE, NEET, etc.
+  examType    String?       @default("General") // Track if it's JEE, NEET, etc.
   durationMin Int
   totalMarks  Int
   scheduledAt DateTime
@@ -162,8 +167,8 @@ model QuestionBank {
   topic           String?
   tags            String[]
   difficulty      String
-  type            String?         @default("MCQ") // NEW: Distinguish MCQ vs Numerical
-  examType        String?         @default("General") // NEW: Folder/Exam tracking
+  type            String?         @default("MCQ") // Distinguish MCQ vs Numerical
+  examType        String?         @default("General") // Folder/Exam tracking
   marks           Int             @default(4)
   negative        Int             @default(-1)
   expectedTime    Int             @default(60) 
@@ -215,7 +220,7 @@ model TestAttempt {
   physics      Float         @default(0) 
   chemistry    Float         @default(0)
   maths        Float         @default(0)
-  biology      Float         @default(0) // NEW: Track Biology scores for NEET/CET
+  biology      Float         @default(0) // Track Biology scores for NEET/CET
 
   scoreDetails Json?         
   correctCount Int           @default(0)

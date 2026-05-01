@@ -225,7 +225,13 @@ export class ErpController {
     return this.erpService.getStudentDirectory(pageNum, limitNum, search || '', batch || '');
   }
 
-  // 🚨 NEW: Delete Student Route
+  // ✨ NEW: Edit Student SIS Route
+  @Patch('students/:id')
+  @Roles('SUPER_ADMIN', 'TEACHER')
+  updateStudent(@Param('id') id: string, @Body() body: any) {
+      return this.erpService.updateStudent(id, body);
+  }
+
   @Delete('students/:id')
   @Roles('SUPER_ADMIN')
   async deleteStudent(@Param('id') id: string) {

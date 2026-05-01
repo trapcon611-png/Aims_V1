@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { UserPlus, CheckCircle, Cake, RefreshCw, AlertCircle, Calendar, MapPin } from 'lucide-react';
+import { UserPlus, CheckCircle, Cake, RefreshCw, AlertCircle, Calendar, MapPin, Camera, Upload } from 'lucide-react';
 import { directorApi } from '../services/directorApi';
 
 interface InstallmentPlan { id: number; amount: number; dueDate: string; }
@@ -10,20 +10,22 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
   const [isProcessing, setIsProcessing] = useState(false); // 🚨 The Loading Lock
   
   const [localBatches, setLocalBatches] = useState<any[]>(batches || []);
-  const [branches, setBranches] = useState<any[]>([]); // ✨ NEW: Branches state
+  const [branches, setBranches] = useState<any[]>([]); // ✨ Branches state
   const [isLoadingData, setIsLoadingData] = useState(false);
   
-  const [branchFilter, setBranchFilter] = useState(''); // ✨ NEW: Selected Branch Filter
+  const [branchFilter, setBranchFilter] = useState(''); // Selected Branch Filter
   
   // Track if user has manually edited the schedule to prevent auto-overwrite
   const [isManualSchedule, setIsManualSchedule] = useState(false);
 
+  // ✨ UPDATED: Added photoUrl and remarks to state
   const [admissionData, setAdmissionData] = useState({
     studentName: '', studentId: '', studentPassword: '', studentPhone: '', 
     address: '', batchId: '', fees: 0, waiveOff: 0, penalty: 0, 
     installments: 1, installmentSchedule: [] as InstallmentPlan[], 
     parentId: '', parentPassword: '', parentPhone: '',
-    agreedDate: new Date().toISOString().split('T')[0], withGst: false, dob: ''
+    agreedDate: new Date().toISOString().split('T')[0], withGst: false, dob: '',
+    photoUrl: '', remarks: '' 
   });
 
   // --- THEME STYLES ---
@@ -98,6 +100,18 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
       setAdmissionData(prev => ({ ...prev, installmentSchedule: updated }));
   };
 
+  // ✨ NEW: Handle Photo Upload (Convert to Base64 instantly)
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              setAdmissionData({ ...admissionData, photoUrl: reader.result as string });
+          };
+          reader.readAsDataURL(file);
+      }
+  };
+
   const handleAdmission = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -131,7 +145,8 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
             ...prev, 
             studentName: '', studentId: '', studentPassword: '', 
             parentId: '', parentPassword: '', studentPhone: '', parentPhone: '',
-            fees: 0, waiveOff: 0, installments: 1, isManualSchedule: false, batchId: ''
+            fees: 0, waiveOff: 0, installments: 1, isManualSchedule: false, batchId: '',
+            photoUrl: '', remarks: '', address: '', dob: ''
         }));
         onRefresh();
     } catch (e: any) { 
@@ -171,19 +186,42 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
             <div className="lg:col-span-7 space-y-6">
                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2">Student Info</h3>
                
-               <div className="grid grid-cols-2 gap-4">
-                   <div className="col-span-2">
-                       <label className={labelStyle}>Full Name</label>
-                       <input className={inputStyle} required placeholder="Enter Name" value={admissionData.studentName} onChange={e => setAdmissionData({...admissionData, studentName: e.target.value})} />
-                   </div>
-                   
-                   <div>
-                        <label className={labelStyle}>Date of Birth</label>
-                        <div className="relative">
-                            <input type="date" className={inputStyle} required value={admissionData.dob} onChange={e => setAdmissionData({...admissionData, dob: e.target.value})} />
-                        </div>
+               {/* ✨ NEW: Top Row with Photo & Name */}
+               <div className="flex gap-6 items-start">
+                   {/* Photo Upload Box */}
+                   <div className="flex flex-col items-center gap-2 shrink-0">
+                       <div className="w-24 h-28 bg-slate-50 border-2 border-dashed border-slate-300 rounded-lg overflow-hidden relative group flex items-center justify-center transition-colors hover:border-blue-400">
+                           {admissionData.photoUrl ? (
+                               <img src={admissionData.photoUrl} alt="Student" className="w-full h-full object-cover" />
+                           ) : (
+                               <div className="flex flex-col items-center text-slate-400">
+                                   <Camera size={24} className="mb-1 text-slate-300"/>
+                                   <span className="text-[9px] font-bold uppercase">Affix Photo</span>
+                               </div>
+                           )}
+                           <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                               <label className="cursor-pointer bg-white text-blue-600 p-2 rounded-full hover:bg-blue-50 transition shadow-lg">
+                                   <Upload size={16}/>
+                                   <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                               </label>
+                           </div>
+                       </div>
                    </div>
 
+                   {/* Name & DOB right next to Photo */}
+                   <div className="flex-1 space-y-4">
+                       <div>
+                           <label className={labelStyle}>Full Name</label>
+                           <input className={inputStyle} required placeholder="Enter Name" value={admissionData.studentName} onChange={e => setAdmissionData({...admissionData, studentName: e.target.value})} />
+                       </div>
+                       <div>
+                            <label className={labelStyle}>Date of Birth</label>
+                            <input type="date" className={inputStyle} value={admissionData.dob} onChange={e => setAdmissionData({...admissionData, dob: e.target.value})} />
+                       </div>
+                   </div>
+               </div>
+               
+               <div className="grid grid-cols-2 gap-4">
                    <div>
                         <label className={labelStyle}>Mobile</label>
                         <input className={inputStyle} required placeholder="10-digit Mobile" value={admissionData.studentPhone} onChange={e => setAdmissionData({...admissionData, studentPhone: e.target.value})} maxLength={10} />
@@ -199,7 +237,7 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                         <input className={inputStyle} required placeholder="Set Password" value={admissionData.studentPassword} onChange={e => setAdmissionData({...admissionData, studentPassword: e.target.value})} />
                    </div>
 
-                   {/* ✨ NEW: DYNAMIC BRANCH & BATCH ASSIGNMENT */}
+                   {/* DYNAMIC BRANCH & BATCH ASSIGNMENT */}
                    <div className="col-span-2 grid grid-cols-2 gap-4">
                        <div>
                            <label className={labelStyle}>Filter by Branch</label>
@@ -254,6 +292,12 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                    <div className="col-span-2">
                        <label className={labelStyle}>Residential Address</label>
                        <textarea className={inputStyle} rows={2} placeholder="Full address..." value={admissionData.address} onChange={(e) => setAdmissionData({...admissionData, address: e.target.value})} />
+                   </div>
+
+                   {/* ✨ NEW: Internal Remarks */}
+                   <div className="col-span-2">
+                       <label className={labelStyle}>Internal Remarks / Academic Details</label>
+                       <input className={inputStyle} placeholder="e.g. Needs extra attention in Physics / Scholarship 10%" value={admissionData.remarks} onChange={(e) => setAdmissionData({...admissionData, remarks: e.target.value})} />
                    </div>
                </div>
 

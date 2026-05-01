@@ -18,10 +18,9 @@ export class ErpService {
       );
   }
 
-  // --- HELPER: RECURSIVE SANITIZER (Fixes 0x00 / Invalid Byte Errors) ---
+  // --- HELPER: RECURSIVE SANITIZER ---
   private sanitize(data: any): any {
       if (typeof data === 'string') {
-          // Remove null bytes and other invisible control characters
           return data.replace(/\0/g, '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, "").trim();
       }
       if (Array.isArray(data)) {
@@ -50,7 +49,7 @@ export class ErpService {
       });
   }
 
-  // --- BRANCH MANAGEMENT (NEW) ---
+  // --- BRANCH MANAGEMENT ---
   async getBranches() {
       return this.prisma.branch.findMany({ orderBy: { name: 'asc' } });
   }
@@ -65,19 +64,17 @@ export class ErpService {
   }
 
   async deleteBranch(id: string) {
-      // Safety Check: Don't delete a branch if it has active batches!
       const activeBatches = await this.prisma.batch.count({ where: { branchId: id } });
       if (activeBatches > 0) {
           throw new ConflictException(`Cannot delete branch. It still has ${activeBatches} active batches assigned to it.`);
       }
-
       return this.prisma.branch.delete({ where: { id } });
   }
 
   // --- BATCH MANAGEMENT ---
   async getBatches() {
     return this.prisma.batch.findMany({ 
-        include: { branch: true }, // Include branch relation for the frontend
+        include: { branch: true }, 
         orderBy: { name: 'asc' } 
     });
   }
@@ -91,7 +88,7 @@ export class ErpService {
         startYear: data.startYear,
         strength: Number(data.strength) || 60,
         fee: Number(data.fee) || 0,
-        branchId: data.branchId && data.branchId !== '' ? data.branchId : null // Link to branch
+        branchId: data.branchId && data.branchId !== '' ? data.branchId : null 
       } as any
     });
   }
@@ -99,9 +96,7 @@ export class ErpService {
   async updateBatch(id: string, data: any) {
       return this.prisma.batch.update({
           where: { id },
-          data: {
-              fee: data.fee ? Number(data.fee) : undefined,
-          }
+          data: { fee: data.fee ? Number(data.fee) : undefined }
       });
   }
 
@@ -135,14 +130,10 @@ export class ErpService {
       return this.prisma.$transaction(async (tx) => {
           let count = 0;
           for (const [index, q] of questions.entries()) {
-              
-              // Validate and Sanitize Image URL
               let qImage: string | null = null;
               if (q.questionImage && typeof q.questionImage === 'string' && q.questionImage.length > 5) {
                   qImage = this.sanitize(q.questionImage);
               }
-
-              // Sanitize Options Object Recursively
               const safeOptions = this.sanitize(q.options || {});
 
               await tx.question.create({
@@ -165,7 +156,6 @@ export class ErpService {
               count++;
           }
 
-          // Update Exam Totals
           const totalMarks = questions.reduce((sum, q) => sum + (Number(q.marks) || 4), 0);
           await tx.exam.update({
               where: { id: examId },
@@ -173,7 +163,7 @@ export class ErpService {
           });
 
           return { count, message: "Questions imported successfully" };
-      }, { timeout: 20000 }); // Increase timeout for large imports
+      }, { timeout: 20000 }); 
   }
 
   // --- QUESTION BANK ---
@@ -214,7 +204,6 @@ export class ErpService {
 
     if(!teacherId) throw new BadRequestException("No Teacher/Admin profile found. Seed DB first.");
 
-    // Validate and Sanitize Image URL
     let qImage: string | null = null;
     if (dto.questionImage && typeof dto.questionImage === 'string' && dto.questionImage.length > 5) {
         qImage = this.sanitize(dto.questionImage);
@@ -312,14 +301,12 @@ export class ErpService {
   
   async getNotices() { return this.prisma.notice.findMany({ include: { batch: true }, orderBy: { createdAt: 'desc' } }); }
   
-  // Create Notice with Push Notification Logic
   async createNotice(data: any) { 
     let parentId: string | null = null;
     let studentId: string | null = null;
     let batchId: string | null = null;
     let targetUserIds: string[] = [];
 
-    // 1. Resolve Targets
     if (data.target === 'BATCH') {
         batchId = data.batchId;
         const students = await this.prisma.studentProfile.findMany({
@@ -329,7 +316,6 @@ export class ErpService {
         targetUserIds = students.map(s => s.userId);
     } else if (data.target === 'STUDENT') {
         studentId = data.studentId;
-        // Check if studentId is valid before querying
         if (studentId) {
             const student = await this.prisma.studentProfile.findUnique({
                 where: { id: studentId },
@@ -350,7 +336,6 @@ export class ErpService {
             }
         }
     } else {
-        // Global
         const allUsers = await this.prisma.user.findMany({ 
             where: { role: 'STUDENT', isActive: true }, 
             select: { id: true } 
@@ -358,7 +343,6 @@ export class ErpService {
         targetUserIds = allUsers.map(u => u.id);
     }
 
-    // 2. Save DB Record
     const notice = await this.prisma.notice.create({ 
         data: { 
             title: data.title, 
@@ -369,7 +353,6 @@ export class ErpService {
         } as any 
     });
 
-    // 3. Send Push
     this.sendPushToUsers(targetUserIds, {
         title: `📢 AIMS: ${data.title}`,
         body: data.content,
@@ -400,7 +383,7 @@ export class ErpService {
   async toggleMobileVisibility(parentId: string, isVisible: boolean) { return this.prisma.parentProfile.update({ where: { id: parentId }, data: { isMobileVisible: isVisible } }); }
   async toggleAllMobileVisibility(isVisible: boolean) { return this.prisma.parentProfile.updateMany({ data: { isMobileVisible: isVisible } }); }
 
-  // --- STUDENT DIRECTORY (Hyper-Optimized Server-Side Pagination) ---
+  // --- STUDENT DIRECTORY ---
   async getStudentDirectory(page: number = 1, limit: number = 20, search: string = '', batchFilter: string = '') {
     const whereClause: any = {};
 
@@ -450,7 +433,12 @@ export class ErpService {
           feePaid: paid, 
           feeRemaining: Math.max(0, effectiveTotal - paid), 
           installments: s.installmentSchedule, 
-          joinedAt: s.user?.createdAt || new Date() 
+          joinedAt: s.user?.createdAt || new Date(),
+          
+          // ✨ NEW: SIS Fields mapped for the Frontend
+          dob: s.dob,
+          photoUrl: s.photoUrl,
+          remarks: s.remarks
       };
     });
 
@@ -478,37 +466,82 @@ export class ErpService {
       
       const userId = student.userId;
 
-      // Wrap everything in a transaction to perform a Manual Cascade Delete
-      // This prevents the Foreign Key Constraint 500 error!
       await this.prisma.$transaction(async (tx) => {
-          
-          // 1. Delete Answers associated with this student's exam attempts
           const attempts = await tx.testAttempt.findMany({ where: { userId }, select: { id: true } });
           const attemptIds = attempts.map(a => a.id);
           if (attemptIds.length > 0) {
               await tx.answer.deleteMany({ where: { attemptId: { in: attemptIds } } });
           }
 
-          // 2. Delete the Test Attempts
           await tx.testAttempt.deleteMany({ where: { userId } });
-
-          // 3. Delete Fee Records
           await tx.feeRecord.deleteMany({ where: { studentId: studentProfileId } });
-
-          // 4. Delete Attendance
           await tx.attendance.deleteMany({ where: { studentId: studentProfileId } });
-
-          // 5. Delete Push Subscriptions
           await tx.pushSubscription.deleteMany({ where: { userId } });
-
-          // 6. Delete the Student Profile
           await tx.studentProfile.delete({ where: { id: studentProfileId } });
-
-          // 7. Finally, Delete the root User account
           await tx.user.delete({ where: { id: userId } });
       });
 
       return { success: true, message: 'Student and all related records successfully deleted' };
+  }
+
+  // ✨ NEW: FULL SIS UPDATE METHOD
+  async updateStudent(studentProfileId: string, data: any) {
+    const student = await this.prisma.studentProfile.findUnique({
+      where: { id: studentProfileId },
+      include: { user: true, parent: { include: { user: true } } }
+    });
+
+    if (!student) throw new NotFoundException('Student not found');
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Update Student Password
+      if (data.studentPassword && data.studentPassword !== student.user.visiblePassword) {
+        const hashedPass = await bcrypt.hash(data.studentPassword, 10);
+        await tx.user.update({
+          where: { id: student.userId },
+          data: { password: hashedPass, visiblePassword: data.studentPassword }
+        });
+      }
+
+      // 2. Update Parent Password
+      if (data.parentPassword && student.parent?.userId && data.parentPassword !== student.parent.user.visiblePassword) {
+        const hashedParentPass = await bcrypt.hash(data.parentPassword, 10);
+        await tx.user.update({
+          where: { id: student.parent.userId },
+          data: { password: hashedParentPass, visiblePassword: data.parentPassword }
+        });
+      }
+
+      // 3. Update Parent Mobile
+      if (data.parentMobile && student.parentId) {
+        await tx.parentProfile.update({
+          where: { id: student.parentId },
+          data: { mobile: data.parentMobile }
+        });
+      }
+
+      // 4. Resolve Batch ID if Name was passed from frontend Dropdown
+      let targetBatchId = student.batchId;
+      if (data.batch) {
+          const batchRecord = await tx.batch.findFirst({ where: { name: data.batch } });
+          if (batchRecord) targetBatchId = batchRecord.id;
+      }
+
+      // 5. Update the Core Profile Data
+      const updatedProfile = await tx.studentProfile.update({
+        where: { id: studentProfileId },
+        data: {
+          fullName: data.name || student.fullName,
+          address: data.address !== undefined ? data.address : student.address,
+          dob: data.dob ? new Date(data.dob) : student.dob,
+          photoUrl: data.photoUrl !== undefined ? data.photoUrl : student.photoUrl,
+          remarks: data.remarks !== undefined ? data.remarks : student.remarks,
+          batchId: targetBatchId,
+        }
+      });
+
+      return { success: true, message: 'Student updated successfully', profile: updatedProfile };
+    });
   }
 
   // 🚨 CRITICAL FIX: The Admission Route now throws ConflictExceptions!
@@ -526,7 +559,7 @@ export class ErpService {
         throw new ConflictException(`The ID '${input.parentId}' is already in use by a Non-Parent account!`);
     }
 
-    // 🔐 2. NEW: STRICT FINANCIAL VALIDATION
+    // 🔐 2. STRICT FINANCIAL VALIDATION
     const totalFee = Number(input.fees) || 0;
     const schedule = input.installmentSchedule || [];
     
@@ -586,7 +619,11 @@ export class ErpService {
                     installments: Number(input.installments)||1, 
                     nextPaymentDate: input.installmentDate ? new Date(input.installmentDate) : null, 
                     feeAgreementDate: input.agreedDate ? new Date(input.agreedDate) : new Date(), 
-                    installmentSchedule: JSON.parse(JSON.stringify(schedule)) 
+                    installmentSchedule: JSON.parse(JSON.stringify(schedule)),
+                    // ✨ NEW: Map the SIS variables
+                    dob: input.dob ? new Date(input.dob) : null,
+                    photoUrl: input.photoUrl || null,
+                    remarks: input.remarks || null
                 } as any 
             } 
         }
@@ -607,10 +644,9 @@ export class ErpService {
     const attempts = await this.prisma.testAttempt.findMany({ 
         where: whereClause, 
         include: { user: { include: { studentProfile: true } } }, 
-        orderBy: { totalScore: 'desc' } // Still order by highest score first
+        orderBy: { totalScore: 'desc' }
     }); 
 
-    // 🚨 FIX: Standard Competitive Ranking (Handles Ties Perfectly)
     let currentRank = 1;
     let previousScore: number | null = null;
 

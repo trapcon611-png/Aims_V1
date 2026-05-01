@@ -1,8 +1,9 @@
 'use client';
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { 
     Users, Search, Filter, Lock, Copy, ChevronLeft, ChevronRight, 
-    Cake, RefreshCw, X, Key, Loader2, Trash2, MapPin
+    Cake, RefreshCw, X, Key, Loader2, Trash2, MapPin, Edit, Printer, Camera, Upload, CheckCircle
 } from 'lucide-react';
 import { directorApi } from '../services/directorApi';
 
@@ -10,13 +11,15 @@ interface StudentRecord {
   id: string; name: string; studentId: string; studentPassword?: string; 
   parentId: string; parentPassword?: string; parentMobile: string; isMobileMasked?: boolean; 
   batch: string; address?: string; dob?: string; feeTotal: number; feePaid: number; feeRemaining: number;
+  photoUrl?: string; 
+  remarks?: string;  
 }
 
 interface Branch { id: string; name: string; }
 interface Batch { id: string; name: string; branchId?: string; branch?: { name: string }; }
 
 export default function StudentDirectoryPanel({ 
-    students, // Kept so parent component doesn't break
+    students, 
     batches, 
     onRefresh 
 }: { 
@@ -36,12 +39,18 @@ export default function StudentDirectoryPanel({
     const [totalPages, setTotalPages] = useState(1);
     const [totalRecords, setTotalRecords] = useState(0);
     const [isFetching, setIsFetching] = useState(false);
-    const ITEMS_PER_PAGE = 20; 
+    
+    const ITEMS_PER_PAGE = 10; 
+
+    // --- MODAL STATES ---
+    const [printStudent, setPrintStudent] = useState<StudentRecord | null>(null);
+    const [editingStudent, setEditingStudent] = useState<StudentRecord | null>(null);
 
     // --- STYLES ---
     const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl transition-all duration-300 overflow-hidden";
     const inputStyle = "w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-[#c1121f] focus:border-[#c1121f] outline-none transition font-medium";
     const selectStyle = "w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-[#c1121f] outline-none transition font-medium cursor-pointer";
+    const darkInputStyle = "w-full p-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-blue-500 outline-none transition text-sm font-medium placeholder:text-slate-500";
 
     // --- FETCH BRANCHES ---
     useEffect(() => {
@@ -73,12 +82,14 @@ export default function StudentDirectoryPanel({
 
     useEffect(() => { setCurrentPage(1); }, [searchQuery, batchFilter, branchFilter]);
 
-    const handleCopy = (text: string) => {
+    const handleCopy = (text: string, e?: React.MouseEvent) => {
+        if(e) e.stopPropagation();
         navigator.clipboard.writeText(text);
     };
 
-    // 🚨 NEW: DELETE LOGIC WITH CONFIRMATION
-    const handleDelete = async (id: string, name: string) => {
+    // 🚨 DELETE LOGIC WITH CONFIRMATION
+    const handleDelete = async (id: string, name: string, e: React.MouseEvent) => {
+        e.stopPropagation(); // Prevent opening print modal
         const confirmDelete = window.confirm(
             `⚠️ DANGER ZONE ⚠️\n\nAre you absolutely sure you want to permanently delete student: ${name}?\n\nThis will instantly erase their Profile, Parents, Fee Records, Exam Scores, and Attendance History. This action CANNOT be undone.`
         );
@@ -88,9 +99,9 @@ export default function StudentDirectoryPanel({
                 setIsFetching(true);
                 await directorApi.deleteStudent(id);
                 alert(`${name} has been successfully deleted from the system.`);
-                onRefresh(); // Trigger parent refresh to update dashboard stats
+                onRefresh(); 
                 
-                // Also locally filter out the deleted student so UI updates instantly
+                // Locally filter out the deleted student so UI updates instantly
                 setDirectoryData(prev => prev.filter(s => s.id !== id));
                 setTotalRecords(prev => Math.max(0, prev - 1));
             } catch (e: any) {
@@ -98,6 +109,55 @@ export default function StudentDirectoryPanel({
             } finally {
                 setIsFetching(false);
             }
+        }
+    };
+
+    // ✨ EDIT LOGIC
+    const handleEditClick = (student: StudentRecord, e: React.MouseEvent) => {
+        e.stopPropagation(); // Prevent opening print modal
+        setEditingStudent({ ...student });
+    };
+
+    const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file && editingStudent) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setEditingStudent({ ...editingStudent, photoUrl: reader.result as string });
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const submitEdit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingStudent) return;
+        
+        try {
+            setIsFetching(true);
+            const sessionData = localStorage.getItem('director_session');
+            const token = sessionData ? JSON.parse(sessionData).token : '';
+            
+            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+            
+            const res = await fetch(`${API_URL}/erp/students/${editingStudent.id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(editingStudent)
+            });
+
+            if (!res.ok) throw new Error("Failed to update student records.");
+            
+            alert("Student details updated successfully!");
+            setEditingStudent(null);
+            onRefresh(); // Refresh the list to pull the latest changes
+        } catch (error: any) {
+            alert(error.message || "Failed to update student.");
+        } finally {
+            setIsFetching(false);
         }
     };
 
@@ -147,7 +207,7 @@ export default function StudentDirectoryPanel({
                             </div>
                         </div>
 
-                        {/* ✨ NEW: FILTER BY BRANCH */}
+                        {/* FILTER BY BRANCH */}
                         <div className="w-full md:w-48">
                             <label className="text-[9px] font-bold text-slate-500 uppercase mb-1 block tracking-wide">Filter by Branch</label>
                             <select 
@@ -165,7 +225,7 @@ export default function StudentDirectoryPanel({
                             </select>
                         </div>
 
-                        {/* FILTER BY BATCH (DYNAMICALLY FILTERED BY BRANCH) */}
+                        {/* FILTER BY BATCH */}
                         <div className="w-full md:w-48">
                             <label className="text-[9px] font-bold text-slate-500 uppercase mb-1 block tracking-wide">Filter by Batch</label>
                             <select 
@@ -201,7 +261,6 @@ export default function StudentDirectoryPanel({
                                 <th className="px-4 py-2 w-[15%]">Credentials (P)</th>
                                 <th className="px-4 py-2 w-[12%] text-center">Mobile</th>
                                 <th className="px-4 py-2 text-right w-[8%]">Balance</th>
-                                {/* 🚨 NEW: Actions Column */}
                                 <th className="px-4 py-2 text-center w-[5%]">Actions</th>
                             </tr>
                         </thead>
@@ -214,28 +273,29 @@ export default function StudentDirectoryPanel({
                                 </tr>
                             ) : (
                                 directoryData.map(s => {
-                                    // ✨ Dynamically resolve Branch Name
                                     const batchObj = batches.find(b => b.name === s.batch);
                                     const branchName = batchObj?.branch?.name || (batchObj?.branchId ? branches.find(br => br.id === batchObj.branchId)?.name : null) || 'Global/Unassigned';
 
                                     return (
-                                        <tr key={s.id} className="hover:bg-slate-50/80 transition duration-150 group">
+                                        // ✨ Click row to Print Profile
+                                        <tr key={s.id} onClick={() => setPrintStudent(s)} className="hover:bg-slate-50/80 transition duration-150 group cursor-pointer">
                                             
                                             <td className="px-4 py-2 align-middle">
-                                                <div className="font-bold text-slate-800 text-sm leading-tight">{s.name}</div>
-                                                <div className="flex flex-wrap gap-2 items-center mt-1">
-                                                    <span className="text-[9px] font-bold text-slate-500 uppercase bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                                                        {s.batch || 'Unassigned'}
-                                                    </span>
-                                                    {/* ✨ BRANCH BADGE */}
-                                                    <span className="text-[9px] font-bold text-blue-600 uppercase bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex items-center gap-1">
-                                                        <MapPin size={8}/> {branchName}
-                                                    </span>
-                                                    {s.dob && (
-                                                        <span className="flex items-center gap-1 text-[9px] text-slate-400">
-                                                            <Cake size={10}/> {new Date(s.dob).toLocaleDateString(undefined, {month:'short', day:'numeric'})}
-                                                        </span>
+                                                <div className="flex items-center gap-3">
+                                                    {s.photoUrl && (
+                                                        <img src={s.photoUrl} alt="Photo" className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0"/>
                                                     )}
+                                                    <div>
+                                                        <div className="font-bold text-slate-800 text-sm leading-tight group-hover:text-blue-600 transition-colors">{s.name}</div>
+                                                        <div className="flex flex-wrap gap-2 items-center mt-1">
+                                                            <span className="text-[9px] font-bold text-slate-500 uppercase bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                                                {s.batch || 'Unassigned'}
+                                                            </span>
+                                                            <span className="text-[9px] font-bold text-blue-600 uppercase bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex items-center gap-1">
+                                                                <MapPin size={8}/> {branchName}
+                                                            </span>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </td>
 
@@ -253,7 +313,7 @@ export default function StudentDirectoryPanel({
                                             <td className="px-4 py-2 align-middle">
                                                 <div className="font-medium text-slate-700 text-xs">Parent of {s.name.split(' ')[0]}</div>
                                                 {s.address && (
-                                                    <div className="text-[10px] text-slate-400 mt-0.5 leading-tight truncate max-w-[180px]" title={s.address}>
+                                                    <div className="text-[10px] text-slate-400 mt-0.5 leading-tight max-w-45 truncate" title={s.address}>
                                                         {s.address}
                                                     </div>
                                                 )}
@@ -270,15 +330,15 @@ export default function StudentDirectoryPanel({
                                                 </div>
                                             </td>
 
-                                            <td className="px-4 py-2 align-middle text-center">
+                                            <td className="px-4 py-2 align-middle text-center" onClick={(e) => e.stopPropagation()}>
                                                 {s.isMobileMasked ? (
                                                     <div className="inline-flex items-center gap-1 bg-red-50 text-red-500 px-2 py-1 rounded border border-red-100" title="Protected">
                                                         <Lock size={10}/> <span className="font-bold text-[10px]">LOCKED</span>
                                                     </div>
                                                 ) : (
-                                                    <div className="inline-flex items-center gap-1 bg-green-50 text-green-700 px-2 py-1 rounded border border-green-100 group-hover:border-green-200 transition">
+                                                    <div className="inline-flex items-center gap-1 bg-green-50 text-green-700 px-2 py-1 rounded border border-green-100 group-hover:border-green-200 transition cursor-text">
                                                         <span className="font-mono font-bold text-[11px]">{s.parentMobile}</span>
-                                                        <button onClick={() => handleCopy(s.parentMobile)} className="hover:text-green-900 ml-1" title="Copy">
+                                                        <button onClick={(e) => handleCopy(s.parentMobile, e)} className="hover:text-green-900 ml-1" title="Copy">
                                                             <Copy size={10}/>
                                                         </button>
                                                     </div>
@@ -294,15 +354,23 @@ export default function StudentDirectoryPanel({
                                                 </div>
                                             </td>
 
-                                            {/* 🚨 NEW: Delete Button Cell */}
-                                            <td className="px-4 py-2 align-middle text-center">
-                                                <button 
-                                                    onClick={() => handleDelete(s.id, s.name)} 
-                                                    className="p-1.5 text-slate-400 hover:text-white hover:bg-red-500 rounded-lg transition-colors"
-                                                    title="Delete Student Permanently"
-                                                >
-                                                    <Trash2 size={16}/>
-                                                </button>
+                                            <td className="px-4 py-2 align-middle text-center" onClick={(e) => e.stopPropagation()}>
+                                                <div className="flex justify-center items-center gap-1">
+                                                    <button 
+                                                        onClick={(e) => handleEditClick(s, e)} 
+                                                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                        title="Edit Details"
+                                                    >
+                                                        <Edit size={16}/>
+                                                    </button>
+                                                    <button 
+                                                        onClick={(e) => handleDelete(s.id, s.name, e)} 
+                                                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                        title="Delete Student Permanently"
+                                                    >
+                                                        <Trash2 size={16}/>
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     );
@@ -337,6 +405,209 @@ export default function StudentDirectoryPanel({
                     </div>
                 )}
             </div>
+
+            {/* ✨ DARK MODE EDIT MODAL */}
+            {editingStudent && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl text-slate-100 shadow-2xl relative my-8">
+                        <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+                            <h3 className="text-xl font-bold flex items-center gap-2"><Edit size={20} className="text-blue-500"/> Edit Student Record</h3>
+                            <button onClick={() => setEditingStudent(null)} className="text-slate-400 hover:text-white p-2 bg-slate-800 rounded-full transition"><X size={18}/></button>
+                        </div>
+                        
+                        <form onSubmit={submitEdit} className="p-6 space-y-5">
+                            
+                            <div className="flex flex-col sm:flex-row gap-6 items-start">
+                                {/* Photo Upload */}
+                                <div className="flex flex-col items-center gap-2 w-full sm:w-auto shrink-0">
+                                    <div className="w-32 h-36 sm:w-28 sm:h-32 bg-slate-800 border-2 border-dashed border-slate-600 rounded-lg overflow-hidden relative group flex items-center justify-center mx-auto">
+                                        {editingStudent.photoUrl ? (
+                                            <img src={editingStudent.photoUrl} alt="Preview" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="flex flex-col items-center text-slate-500">
+                                                <Camera size={24} className="mb-1"/>
+                                                <span className="text-[10px] font-bold uppercase">No Photo</span>
+                                            </div>
+                                        )}
+                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                            <label className="cursor-pointer bg-blue-600 text-white p-2.5 rounded-full hover:bg-blue-500 transition shadow-lg">
+                                                <Upload size={18}/>
+                                                <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <p className="text-[9px] text-slate-400 uppercase font-bold text-center">Click to Upload<br/>JPG / PNG</p>
+                                </div>
+
+                                {/* Core Details */}
+                                <div className="flex-1 space-y-4 w-full">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Full Name</label>
+                                            <input className={darkInputStyle} required value={editingStudent.name} onChange={e => setEditingStudent({...editingStudent, name: e.target.value})} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Date of Birth</label>
+                                            <input type="date" className={darkInputStyle} value={editingStudent.dob ? new Date(editingStudent.dob).toISOString().split('T')[0] : ''} onChange={e => setEditingStudent({...editingStudent, dob: e.target.value})} />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Student Password</label>
+                                            <input className={darkInputStyle} value={editingStudent.studentPassword || ''} onChange={e => setEditingStudent({...editingStudent, studentPassword: e.target.value})} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Batch Assignment</label>
+                                            <select className={darkInputStyle} value={editingStudent.batch} onChange={e => setEditingStudent({...editingStudent, batch: e.target.value})}>
+                                                {batches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="border-t border-slate-800 pt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Parent Mobile</label>
+                                    <input className={darkInputStyle} value={editingStudent.parentMobile} onChange={e => setEditingStudent({...editingStudent, parentMobile: e.target.value})} maxLength={10} />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Parent Password</label>
+                                    <input className={darkInputStyle} value={editingStudent.parentPassword || ''} onChange={e => setEditingStudent({...editingStudent, parentPassword: e.target.value})} />
+                                </div>
+                                <div className="sm:col-span-2">
+                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Residential Address</label>
+                                    <textarea className={darkInputStyle} rows={2} value={editingStudent.address || ''} onChange={e => setEditingStudent({...editingStudent, address: e.target.value})} />
+                                </div>
+                                <div className="sm:col-span-2">
+                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Internal Remarks</label>
+                                    <input className={darkInputStyle} value={editingStudent.remarks || ''} onChange={e => setEditingStudent({...editingStudent, remarks: e.target.value})} placeholder="Any internal notes or tags..." />
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
+                                <button type="button" onClick={() => setEditingStudent(null)} className="px-5 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 font-bold transition text-sm">Cancel</button>
+                                <button type="submit" disabled={isFetching} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold shadow-lg transition flex items-center gap-2 text-sm disabled:opacity-50">
+                                    {isFetching ? <Loader2 size={16} className="animate-spin"/> : <CheckCircle size={16}/>} Save Changes
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ✨ PRINTABLE ADMISSION RECORD MODAL */}
+            {printStudent && (
+                <div className="fixed inset-0 z-100 flex items-start justify-center bg-slate-900/80 backdrop-blur-sm overflow-y-auto print:bg-white print:fixed print:inset-0 print:z-9999 print:block">
+                    <style jsx global>{`
+                        @media print {
+                            @page { size: A4; margin: 0; }
+                            body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; }
+                            .print-hidden { display: none !important; }
+                            .print-a4 { width: 210mm !important; min-height: 297mm !important; margin: 0 auto !important; border: none !important; box-shadow: none !important; padding: 15mm !important; border-radius: 0 !important; }
+                        }
+                    `}</style>
+
+                    <div className="print-a4 bg-white w-[210mm] min-h-[297mm] p-[15mm] relative shadow-2xl my-8 mx-auto flex flex-col text-slate-900">
+                        
+                        {/* Print Header */}
+                        <div className="flex justify-between items-start border-b-4 border-[#c1121f] pb-6 mb-8">
+                            <div className="flex flex-col gap-2 justify-center mt-2">
+                                <div className="relative w-64 h-16">
+                                    <Image src="/mainpage.png" alt="AIMS Logo" fill className="object-contain object-left" unoptimized />
+                                </div>
+                                <div className="mt-2">
+                                    <h2 className="text-xl font-bold text-slate-900 uppercase tracking-widest">Student Admission Record</h2>
+                                    <p className="text-xs text-slate-500 font-mono mt-1">Generated: {new Date().toLocaleString()}</p>
+                                </div>
+                            </div>
+                            <div className="w-[35mm] h-[45mm] border-2 border-slate-300 rounded flex flex-col items-center justify-center bg-slate-50 overflow-hidden shadow-sm p-1">
+                                {printStudent.photoUrl ? (
+                                    <img src={printStudent.photoUrl} alt="Student" className="w-full h-full object-cover rounded-sm" />
+                                ) : (
+                                    <>
+                                        <Camera size={24} className="text-slate-300 mb-1"/>
+                                        <span className="text-slate-400 text-[9px] text-center font-bold uppercase">Affix<br/>Photo</span>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Print Body Grid */}
+                        <div className="flex-1">
+                            
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b-2 border-slate-200 pb-1 mb-4">Academic & Personal Details</h3>
+                            <div className="grid grid-cols-2 gap-6 mb-8">
+                                <div className="space-y-4">
+                                    <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Full Name</span><span className="text-base font-bold">{printStudent.name}</span></div>
+                                    <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Date of Birth</span><span className="text-base font-bold">{printStudent.dob ? new Date(printStudent.dob).toLocaleDateString() : 'Not Provided'}</span></div>
+                                    <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Residential Address</span><span className="text-sm font-medium">{printStudent.address || 'Not Provided'}</span></div>
+                                </div>
+                                <div className="space-y-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
+                                    <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Student ID / Username</span><span className="text-lg font-mono font-black text-[#c1121f]">{printStudent.studentId}</span></div>
+                                    <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Student Password</span><span className="text-sm font-mono font-bold text-slate-700">{printStudent.studentPassword || '******'}</span></div>
+                                    <div>
+                                        <span className="text-[10px] font-bold text-slate-500 uppercase block">Assigned Batch</span>
+                                        <span className="text-sm font-bold bg-white px-2 py-0.5 border border-slate-300 rounded inline-block mt-0.5">{printStudent.batch}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b-2 border-slate-200 pb-1 mb-4">Parent / Guardian Details</h3>
+                            <div className="grid grid-cols-2 gap-6 mb-8">
+                                <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Guardian Mobile</span><span className="text-base font-bold font-mono">{printStudent.parentMobile}</span></div>
+                                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 flex justify-between items-center">
+                                    <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Parent Login ID</span><span className="text-lg font-mono font-black text-purple-700">{printStudent.parentId}</span></div>
+                                    <div className="text-right"><span className="text-[10px] font-bold text-slate-500 uppercase block">Password</span><span className="text-sm font-mono font-bold text-slate-700">{printStudent.parentPassword || '******'}</span></div>
+                                </div>
+                            </div>
+
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b-2 border-slate-200 pb-1 mb-4">Financial Summary</h3>
+                            <div className="grid grid-cols-3 gap-4 mb-8">
+                                <div className="p-4 border-2 border-slate-200 rounded-lg text-center">
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase block">Total Agreed Fee</span>
+                                    <span className="text-xl font-black text-slate-800">₹{printStudent.feeTotal.toLocaleString()}</span>
+                                </div>
+                                <div className="p-4 border-2 border-green-200 bg-green-50 rounded-lg text-center">
+                                    <span className="text-[10px] font-bold text-green-700 uppercase block">Fees Paid</span>
+                                    <span className="text-xl font-black text-green-700">₹{printStudent.feePaid.toLocaleString()}</span>
+                                </div>
+                                <div className="p-4 border-2 border-red-200 bg-red-50 rounded-lg text-center">
+                                    <span className="text-[10px] font-bold text-red-700 uppercase block">Pending Balance</span>
+                                    <span className="text-xl font-black text-[#c1121f]">₹{printStudent.feeRemaining.toLocaleString()}</span>
+                                </div>
+                            </div>
+
+                            {/* Remarks Section */}
+                            {printStudent.remarks && (
+                                <>
+                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b-2 border-slate-200 pb-1 mb-2 mt-8">Internal Remarks</h3>
+                                    <p className="text-sm text-slate-700 italic border-l-4 border-yellow-400 pl-3 py-1 bg-yellow-50">{printStudent.remarks}</p>
+                                </>
+                            )}
+                        </div>
+
+                        {/* Print Footer */}
+                        <div className="border-t-2 border-slate-300 pt-6 mt-12 flex justify-between items-end">
+                            <div className="text-xs text-slate-500">
+                                <p><strong>Note:</strong> This is a computer-generated admission record.</p>
+                                <p>Please keep your login credentials safe and secure.</p>
+                            </div>
+                            <div className="text-center">
+                                <div className="w-40 border-b border-slate-400 mb-2"></div>
+                                <p className="text-xs font-bold text-slate-800 uppercase">Authorized Signature</p>
+                            </div>
+                        </div>
+
+                        {/* Floating Action Buttons */}
+                        <div className="absolute top-4 -right-16 flex flex-col gap-2 print-hidden">
+                            <button onClick={() => window.print()} className="bg-blue-600 text-white p-3 rounded-full shadow-lg hover:bg-blue-700 transition" title="Print Document"><Printer size={20}/></button>
+                            <button onClick={() => setPrintStudent(null)} className="bg-white text-slate-700 border border-slate-200 p-3 rounded-full shadow-lg hover:bg-slate-50 transition" title="Close"><X size={20}/></button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
