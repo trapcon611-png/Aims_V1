@@ -306,6 +306,7 @@ model Enquiry {
   id            String        @id @default(uuid())
   studentName   String
   mobile        String
+  branchId      String?
   course        String?       
   allotedTo     String?       
   source        String?       

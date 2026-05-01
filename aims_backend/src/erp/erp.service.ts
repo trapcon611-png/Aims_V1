@@ -298,7 +298,6 @@ export class ErpService {
   }
 
   // --- CONTENT (NOTICES & RESOURCES) ---
-  
   async getNotices() { return this.prisma.notice.findMany({ include: { batch: true }, orderBy: { createdAt: 'desc' } }); }
   
   async createNotice(data: any) { 
@@ -435,7 +434,6 @@ export class ErpService {
           installments: s.installmentSchedule, 
           joinedAt: s.user?.createdAt || new Date(),
           
-          // ✨ NEW: SIS Fields mapped for the Frontend
           dob: s.dob,
           photoUrl: s.photoUrl,
           remarks: s.remarks
@@ -455,7 +453,7 @@ export class ErpService {
   
   async getStudents() { return this.getStudentDirectory(); }
 
-  // 🚨 CRITICAL FIX: MANUAL CASCADE DELETE
+  // 🚨 CASCADE DELETE STUDENT
   async deleteStudent(studentProfileId: string) {
       const student = await this.prisma.studentProfile.findUnique({ 
           where: { id: studentProfileId },
@@ -484,7 +482,7 @@ export class ErpService {
       return { success: true, message: 'Student and all related records successfully deleted' };
   }
 
-  // ✨ NEW: FULL SIS UPDATE METHOD
+  // ✨ FULL SIS UPDATE METHOD
   async updateStudent(studentProfileId: string, data: any) {
     const student = await this.prisma.studentProfile.findUnique({
       where: { id: studentProfileId },
@@ -544,11 +542,10 @@ export class ErpService {
     });
   }
 
-  // 🚨 CRITICAL FIX: The Admission Route now throws ConflictExceptions!
+  // 🚨 ADMISSION ROUTE
   async registerStudent(dto: any) {
     const input = dto; 
     
-    // 1. DUPLICATE ID CHECKS
     const existingStudent = await this.prisma.user.findUnique({ where: { username: input.studentId } });
     if (existingStudent) {
         throw new ConflictException(`Student ID '${input.studentId}' is already registered! Please assign a unique ID.`);
@@ -559,7 +556,6 @@ export class ErpService {
         throw new ConflictException(`The ID '${input.parentId}' is already in use by a Non-Parent account!`);
     }
 
-    // 🔐 2. STRICT FINANCIAL VALIDATION
     const totalFee = Number(input.fees) || 0;
     const schedule = input.installmentSchedule || [];
     
@@ -570,7 +566,6 @@ export class ErpService {
         }
     }
 
-    // 3. SECURE REGISTRATION TRANSACTION
     const salt = 10;
     const hashedStudentPass = await bcrypt.hash(input.studentPassword || '123', salt);
     const hashedParentPass = await bcrypt.hash(input.parentPassword || '123', salt);
@@ -620,7 +615,6 @@ export class ErpService {
                     nextPaymentDate: input.installmentDate ? new Date(input.installmentDate) : null, 
                     feeAgreementDate: input.agreedDate ? new Date(input.agreedDate) : new Date(), 
                     installmentSchedule: JSON.parse(JSON.stringify(schedule)),
-                    // ✨ NEW: Map the SIS variables
                     dob: input.dob ? new Date(input.dob) : null,
                     photoUrl: input.photoUrl || null,
                     remarks: input.remarks || null
@@ -703,8 +697,28 @@ export class ErpService {
 
   // --- CRM ---
   async getEnquiries() { return this.prisma.enquiry.findMany({ orderBy: { createdAt: 'desc' } }); }
-  async createEnquiry(data: any) { return this.prisma.enquiry.create({ data: { studentName: data.studentName, mobile: data.mobile, course: data.course, allotedTo: data.allotedTo, remarks: data.remarks, status: 'PENDING' } as any }); }
+  
+  // ✨ ENQUIRY CREATION WITH BRANCH
+  async createEnquiry(data: any) { 
+      return this.prisma.enquiry.create({ 
+          data: { 
+              studentName: data.studentName, 
+              mobile: data.mobile, 
+              course: data.course, 
+              allotedTo: data.allotedTo, 
+              remarks: data.remarks, 
+              status: 'PENDING',
+              branchId: data.branchId && data.branchId !== '' ? data.branchId : null 
+          } as any 
+      }); 
+  }
+  
   async updateEnquiryStatus(id: string, status: any, followUpCount?: number) { return this.prisma.enquiry.update({ where: { id }, data: { status, followUpCount: followUpCount !== undefined ? Number(followUpCount) : undefined } }); }
+
+  // ✨ DELETE ENQUIRY
+  async deleteEnquiry(id: string) {
+      return this.prisma.enquiry.delete({ where: { id } });
+  }
 
   async seedSystem() { return { message: "Seed disabled." }; }
 }

@@ -10,7 +10,7 @@ import { Roles } from '../auth/roles.decorator';
 export class ErpController {
   constructor(private readonly erpService: ErpService) {}
 
-  // --- BRANCHES (NEW) ---
+  // --- BRANCHES ---
   @Get('branches')
   @Roles('SUPER_ADMIN', 'TEACHER')
   getBranches() {
@@ -85,7 +85,7 @@ export class ErpController {
     return this.erpService.collectFee(data);
   }
 
-  // --- NEW: FEE HISTORY ---
+  // --- FEE HISTORY ---
   @Get('fees')
   @Roles('SUPER_ADMIN')
   getAllFees() {
@@ -111,7 +111,6 @@ export class ErpController {
     return this.erpService.getExamById(id);
   }
 
-  // NEW: Bulk Import Questions Endpoint (Fixes 500 Error)
   @Post('exams/:id/import')
   @Roles('SUPER_ADMIN', 'TEACHER')
   importQuestions(@Param('id') id: string, @Body() body: { questions: any[] }) {
@@ -225,7 +224,6 @@ export class ErpController {
     return this.erpService.getStudentDirectory(pageNum, limitNum, search || '', batch || '');
   }
 
-  // ✨ NEW: Edit Student SIS Route
   @Patch('students/:id')
   @Roles('SUPER_ADMIN', 'TEACHER')
   updateStudent(@Param('id') id: string, @Body() body: any) {
@@ -255,6 +253,13 @@ export class ErpController {
   @Roles('SUPER_ADMIN', 'TEACHER')
   updateEnquiryStatus(@Param('id') id: string, @Body() body: { status: string, followUpCount?: number }) {
     return this.erpService.updateEnquiryStatus(id, body.status, body.followUpCount);
+  }
+
+  // ✨ DELETE ENQUIRY
+  @Delete('enquiries/:id')
+  @Roles('SUPER_ADMIN', 'TEACHER')
+  deleteEnquiry(@Param('id') id: string) {
+      return this.erpService.deleteEnquiry(id);
   }
 
   // --- CONTENT (RESOURCES & NOTICES) ---
