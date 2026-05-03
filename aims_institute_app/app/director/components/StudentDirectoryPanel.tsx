@@ -13,7 +13,6 @@ interface StudentRecord {
   batch: string; address?: string; dob?: string; feeTotal: number; feePaid: number; feeRemaining: number;
   photoUrl?: string; 
   remarks?: string;  
-  // ✨ NEW: SIS Fields
   fatherName?: string;
   motherName?: string;
   parentEmail?: string;
@@ -412,136 +411,141 @@ export default function StudentDirectoryPanel({
                 )}
             </div>
 
-            {/* ✨ DARK MODE EDIT MODAL (Expanded for full SIS tracking) */}
+            {/* ✨ DARK MODE EDIT MODAL (Perfect Scroll Structure) */}
             {editingStudent && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl text-slate-100 shadow-2xl relative my-8">
-                        <div className="p-6 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-slate-900/90 backdrop-blur-md z-10 rounded-t-2xl">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 sm:p-8">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl text-slate-100 shadow-2xl flex flex-col max-h-full overflow-hidden">
+                        
+                        {/* Static Header */}
+                        <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900 shrink-0">
                             <h3 className="text-xl font-bold flex items-center gap-2"><Edit size={20} className="text-blue-500"/> Edit Student Record</h3>
                             <button onClick={() => setEditingStudent(null)} className="text-slate-400 hover:text-white p-2 bg-slate-800 rounded-full transition"><X size={18}/></button>
                         </div>
                         
-                        <form onSubmit={submitEdit} className="p-6 space-y-6">
-                            
-                            <div className="flex flex-col sm:flex-row gap-6 items-start">
-                                {/* Photo Upload */}
-                                <div className="flex flex-col items-center gap-2 w-full sm:w-auto shrink-0">
-                                    <div className="w-32 h-36 sm:w-28 sm:h-32 bg-slate-800 border-2 border-dashed border-slate-600 rounded-lg overflow-hidden relative group flex items-center justify-center mx-auto">
-                                        {editingStudent.photoUrl ? (
-                                            <img src={editingStudent.photoUrl} alt="Preview" className="w-full h-full object-cover" />
-                                        ) : (
-                                            <div className="flex flex-col items-center text-slate-500">
-                                                <Camera size={24} className="mb-1"/>
-                                                <span className="text-[10px] font-bold uppercase">No Photo</span>
+                        {/* Scrollable Body */}
+                        <div className="flex-1 overflow-y-auto p-5 sm:p-6 custom-scrollbar bg-slate-900">
+                            <form id="editForm" onSubmit={submitEdit} className="space-y-6">
+                                
+                                <div className="flex flex-col sm:flex-row gap-6 items-start">
+                                    {/* Photo Upload */}
+                                    <div className="flex flex-col items-center gap-2 w-full sm:w-auto shrink-0">
+                                        <div className="w-32 h-36 sm:w-28 sm:h-32 bg-slate-800 border-2 border-dashed border-slate-600 rounded-lg overflow-hidden relative group flex items-center justify-center mx-auto">
+                                            {editingStudent.photoUrl ? (
+                                                <img src={editingStudent.photoUrl} alt="Preview" className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="flex flex-col items-center text-slate-500">
+                                                    <Camera size={24} className="mb-1"/>
+                                                    <span className="text-[10px] font-bold uppercase">No Photo</span>
+                                                </div>
+                                            )}
+                                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                                <label className="cursor-pointer bg-blue-600 text-white p-2.5 rounded-full hover:bg-blue-500 transition shadow-lg">
+                                                    <Upload size={18}/>
+                                                    <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                                                </label>
                                             </div>
-                                        )}
-                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                            <label className="cursor-pointer bg-blue-600 text-white p-2.5 rounded-full hover:bg-blue-500 transition shadow-lg">
-                                                <Upload size={18}/>
-                                                <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
-                                            </label>
+                                        </div>
+                                        <p className="text-[9px] text-slate-400 uppercase font-bold text-center">Click to Upload<br/>JPG / PNG</p>
+                                    </div>
+
+                                    {/* Core Details */}
+                                    <div className="flex-1 space-y-4 w-full">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Full Name</label>
+                                                <input className={darkInputStyle} required value={editingStudent.name} onChange={e => setEditingStudent({...editingStudent, name: e.target.value})} />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Date of Birth</label>
+                                                <input type="date" className={darkInputStyle} value={editingStudent.dob ? new Date(editingStudent.dob).toISOString().split('T')[0] : ''} onChange={e => setEditingStudent({...editingStudent, dob: e.target.value})} />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Student Password</label>
+                                                <input className={darkInputStyle} value={editingStudent.studentPassword || ''} onChange={e => setEditingStudent({...editingStudent, studentPassword: e.target.value})} />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Batch Assignment</label>
+                                                <select className={darkInputStyle} value={editingStudent.batch} onChange={e => setEditingStudent({...editingStudent, batch: e.target.value})}>
+                                                    {batches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+                                                </select>
+                                            </div>
                                         </div>
                                     </div>
-                                    <p className="text-[9px] text-slate-400 uppercase font-bold text-center">Click to Upload<br/>JPG / PNG</p>
                                 </div>
 
-                                {/* Core Details */}
-                                <div className="flex-1 space-y-4 w-full">
+                                {/* Academic History */}
+                                <div className="border-t border-slate-800 pt-5">
+                                    <h4 className="text-xs font-bold text-slate-300 uppercase mb-3">Academic Background</h4>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div>
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Full Name</label>
-                                            <input className={darkInputStyle} required value={editingStudent.name} onChange={e => setEditingStudent({...editingStudent, name: e.target.value})} />
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Last School Attended</label>
+                                            <input className={darkInputStyle} value={editingStudent.lastSchool || ''} onChange={e => setEditingStudent({...editingStudent, lastSchool: e.target.value})} placeholder="e.g. DPS Pune" />
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Date of Birth</label>
-                                            <input type="date" className={darkInputStyle} value={editingStudent.dob ? new Date(editingStudent.dob).toISOString().split('T')[0] : ''} onChange={e => setEditingStudent({...editingStudent, dob: e.target.value})} />
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Last Percentage / Grade</label>
+                                            <input className={darkInputStyle} value={editingStudent.lastPercentage || ''} onChange={e => setEditingStudent({...editingStudent, lastPercentage: e.target.value})} placeholder="e.g. 85.5%" />
                                         </div>
                                     </div>
+                                </div>
 
+                                {/* Parent Details */}
+                                <div className="border-t border-slate-800 pt-5">
+                                    <h4 className="text-xs font-bold text-slate-300 uppercase mb-3">Parent / Guardian Details</h4>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Father's Name</label>
+                                            <input className={darkInputStyle} value={editingStudent.fatherName || ''} onChange={e => setEditingStudent({...editingStudent, fatherName: e.target.value})} placeholder="Full Name" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Mother's Name</label>
+                                            <input className={darkInputStyle} value={editingStudent.motherName || ''} onChange={e => setEditingStudent({...editingStudent, motherName: e.target.value})} placeholder="Full Name" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Parent Email</label>
+                                            <input type="email" className={darkInputStyle} value={editingStudent.parentEmail || ''} onChange={e => setEditingStudent({...editingStudent, parentEmail: e.target.value})} placeholder="email@example.com" />
+                                        </div>
+                                    </div>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div>
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Student Password</label>
-                                            <input className={darkInputStyle} value={editingStudent.studentPassword || ''} onChange={e => setEditingStudent({...editingStudent, studentPassword: e.target.value})} />
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Parent Mobile (Login ID)</label>
+                                            <input className={darkInputStyle} required value={editingStudent.parentMobile} onChange={e => setEditingStudent({...editingStudent, parentMobile: e.target.value})} maxLength={10} />
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Batch Assignment</label>
-                                            <select className={darkInputStyle} value={editingStudent.batch} onChange={e => setEditingStudent({...editingStudent, batch: e.target.value})}>
-                                                {batches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
-                                            </select>
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Parent Password</label>
+                                            <input className={darkInputStyle} value={editingStudent.parentPassword || ''} onChange={e => setEditingStudent({...editingStudent, parentPassword: e.target.value})} />
                                         </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            {/* Academic History */}
-                            <div className="border-t border-slate-800 pt-5">
-                                <h4 className="text-xs font-bold text-slate-300 uppercase mb-3">Academic Background</h4>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                {/* Contact & Remarks */}
+                                <div className="border-t border-slate-800 pt-5 grid grid-cols-1 gap-4">
                                     <div>
-                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Last School Attended</label>
-                                        <input className={darkInputStyle} value={editingStudent.lastSchool || ''} onChange={e => setEditingStudent({...editingStudent, lastSchool: e.target.value})} placeholder="e.g. DPS Pune" />
+                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Residential Address</label>
+                                        <textarea className={darkInputStyle} rows={2} value={editingStudent.address || ''} onChange={e => setEditingStudent({...editingStudent, address: e.target.value})} />
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Last Percentage / Grade</label>
-                                        <input className={darkInputStyle} value={editingStudent.lastPercentage || ''} onChange={e => setEditingStudent({...editingStudent, lastPercentage: e.target.value})} placeholder="e.g. 85.5%" />
+                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Internal Remarks</label>
+                                        <input className={darkInputStyle} value={editingStudent.remarks || ''} onChange={e => setEditingStudent({...editingStudent, remarks: e.target.value})} placeholder="Any internal notes or tags..." />
                                     </div>
                                 </div>
-                            </div>
+                            </form>
+                        </div>
 
-                            {/* Parent Details */}
-                            <div className="border-t border-slate-800 pt-5">
-                                <h4 className="text-xs font-bold text-slate-300 uppercase mb-3">Parent / Guardian Details</h4>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Father's Name</label>
-                                        <input className={darkInputStyle} value={editingStudent.fatherName || ''} onChange={e => setEditingStudent({...editingStudent, fatherName: e.target.value})} placeholder="Full Name" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Mother's Name</label>
-                                        <input className={darkInputStyle} value={editingStudent.motherName || ''} onChange={e => setEditingStudent({...editingStudent, motherName: e.target.value})} placeholder="Full Name" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Parent Email</label>
-                                        <input type="email" className={darkInputStyle} value={editingStudent.parentEmail || ''} onChange={e => setEditingStudent({...editingStudent, parentEmail: e.target.value})} placeholder="email@example.com" />
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Parent Mobile (Login ID)</label>
-                                        <input className={darkInputStyle} required value={editingStudent.parentMobile} onChange={e => setEditingStudent({...editingStudent, parentMobile: e.target.value})} maxLength={10} />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Parent Password</label>
-                                        <input className={darkInputStyle} value={editingStudent.parentPassword || ''} onChange={e => setEditingStudent({...editingStudent, parentPassword: e.target.value})} />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Contact & Remarks */}
-                            <div className="border-t border-slate-800 pt-5 grid grid-cols-1 gap-4">
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Residential Address</label>
-                                    <textarea className={darkInputStyle} rows={2} value={editingStudent.address || ''} onChange={e => setEditingStudent({...editingStudent, address: e.target.value})} />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Internal Remarks</label>
-                                    <input className={darkInputStyle} value={editingStudent.remarks || ''} onChange={e => setEditingStudent({...editingStudent, remarks: e.target.value})} placeholder="Any internal notes or tags..." />
-                                </div>
-                            </div>
-
-                            {/* Actions */}
-                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-800 sticky bottom-0 bg-slate-900 mt-4">
-                                <button type="button" onClick={() => setEditingStudent(null)} className="px-5 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 font-bold transition text-sm">Cancel</button>
-                                <button type="submit" disabled={isFetching} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold shadow-lg transition flex items-center gap-2 text-sm disabled:opacity-50">
-                                    {isFetching ? <Loader2 size={16} className="animate-spin"/> : <CheckCircle size={16}/>} Save Changes
-                                </button>
-                            </div>
-                        </form>
+                        {/* Static Footer */}
+                        <div className="p-5 border-t border-slate-800 bg-slate-900 shrink-0 flex justify-end gap-3 rounded-b-2xl">
+                            <button type="button" onClick={() => setEditingStudent(null)} className="px-5 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 font-bold transition text-sm">Cancel</button>
+                            <button type="submit" form="editForm" disabled={isFetching} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold shadow-lg transition flex items-center gap-2 text-sm disabled:opacity-50">
+                                {isFetching ? <Loader2 size={16} className="animate-spin"/> : <CheckCircle size={16}/>} Save Changes
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
 
-            {/* ✨ PRINTABLE ADMISSION RECORD MODAL (Fully Expanded) */}
+            {/* ✨ PRINTABLE ADMISSION RECORD MODAL (Mobile Removed) */}
             {printStudent && (
                 <div className="fixed inset-0 z-100 flex items-start justify-center bg-slate-900/80 backdrop-blur-sm overflow-y-auto print:bg-white print:fixed print:inset-0 print:z-9999 print:block">
                     <style jsx global>{`
@@ -602,13 +606,13 @@ export default function StudentDirectoryPanel({
                                 </div>
                             </div>
 
+                            {/* ✨ REMOVED GUARDIAN MOBILE FROM PRINT VIEW */}
                             <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b-2 border-slate-200 pb-1 mb-4">Parent / Guardian Details</h3>
                             <div className="grid grid-cols-2 gap-6 mb-6">
                                 <div className="space-y-4">
                                     <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Father's Name</span><span className="text-sm font-bold">{printStudent.fatherName || 'Not Provided'}</span></div>
                                     <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Mother's Name</span><span className="text-sm font-bold">{printStudent.motherName || 'Not Provided'}</span></div>
                                     <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Parent Email</span><span className="text-sm font-medium">{printStudent.parentEmail || 'Not Provided'}</span></div>
-                                    <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Guardian Mobile</span><span className="text-base font-bold font-mono">{printStudent.parentMobile}</span></div>
                                 </div>
                                 <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 flex flex-col justify-center gap-4 h-fit">
                                     <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Parent Login ID</span><span className="text-lg font-mono font-black text-purple-700">{printStudent.parentId}</span></div>
