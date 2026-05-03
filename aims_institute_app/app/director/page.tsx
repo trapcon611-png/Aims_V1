@@ -6,7 +6,7 @@ import {
   ArrowLeft, Loader2, UserPlus, Activity, Cpu, ChevronRight, ChevronLeft, Menu, Home,
   FileBarChart, Clock, CheckCircle, Video, Plus, Bell, Trash2, Search, X,
   AlertTriangle, User, Cake, Copy, Lock, LayoutGrid, DollarSign, TrendingUp, TrendingDown,
-  AlertCircle, BarChart3, Image as ImageIcon, Eye, EyeOff, MapPin
+  AlertCircle, BarChart3, Image as ImageIcon, Eye, EyeOff, MapPin, MessageSquare, History
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -18,9 +18,10 @@ import BatchesPanel from './components/BatchesPanel';
 import StudentDirectoryPanel from './components/StudentDirectoryPanel';
 import ContentPanel from './components/ContentPanel';
 import CarouselPanel from './components/CarouselPanel';
+import AttendancePanel from './components/AttendancePanel'; // ✨ IMPORTED ATTENDANCE PANEL
 
 // --- TYPES ---
-interface Batch { id: string; name: string; startYear: string; strength: number; fee: number; }
+interface Batch { id: string; name: string; startYear: string; strength: number; fee: number; branchId?: string; }
 interface StudentRecord {
   id: string; name: string; studentId: string; studentPassword?: string; 
   parentId: string; parentPassword?: string; parentMobile: string; isMobileMasked?: boolean; 
@@ -31,6 +32,7 @@ interface Enquiry {
   id: string; studentName: string; mobile: string; course: string; 
   status: 'ADMITTED' | 'PARTIALLY_ALLOCATED' | 'UNALLOCATED' | 'CANCELLED' | 'PENDING'; 
   remarks: string; createdAt: string; followUpCount: number; allotedTo?: string; branchId?: string;
+  followUpLogs?: { date: string; status: string; remark: string }[];
 }
 interface Exam { id: string; title: string; durationMin?: number; totalMarks?: number; scheduledAt?: string; batch?: { name: string }; }
 
@@ -54,7 +56,6 @@ const MiniChart = ({ data, color, label, value, subLabel }: { data: number[], co
                 <div className="text-[10px] text-slate-400 font-medium mt-1">{subLabel}</div>
             </div>
             
-            {/* Chart Graphic */}
             <div className="absolute bottom-0 left-0 right-0 h-16 opacity-40 group-hover:opacity-60 transition-opacity">
                 <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
                     <path d={`M0 100 L0 ${100 - (data[0]/max)*80} ${points.split(' ').map((p, i) => `L${p}`).join(' ')} L100 100 Z`} fill="currentColor" className={color.replace('stroke-', 'text-')} opacity="0.1" />
@@ -85,14 +86,13 @@ const DashboardHome = ({
         { id: 'batches', label: 'Batches', icon: Layers, color: 'text-purple-600', border: 'border-purple-200', bg: 'hover:bg-purple-50', count: null },
         { id: 'enquiries', label: 'Enquiries', icon: PhoneCall, color: 'text-orange-500', border: 'border-orange-200', bg: 'hover:bg-orange-50', count: metrics.enquiries > 0 ? `+${metrics.enquiries}` : null },
         { id: 'directory', label: 'Directory', icon: Users, color: 'text-slate-600', border: 'border-slate-200', bg: 'hover:bg-slate-50', count: null },
+        { id: 'attendance', label: 'Attendance', icon: CheckCircle, color: 'text-cyan-600', border: 'border-cyan-200', bg: 'hover:bg-cyan-50', count: null },
         { id: 'academics', label: 'Academics', icon: GraduationCap, color: 'text-indigo-600', border: 'border-indigo-200', bg: 'hover:bg-indigo-50', count: null },
-        { id: 'content', label: 'Content', icon: BookOpen, color: 'text-pink-600', border: 'border-pink-200', bg: 'hover:bg-pink-50', count: null },
         { id: 'carousel', label: 'Website Carousel', icon: ImageIcon, color: 'text-teal-600', border: 'border-teal-200', bg: 'hover:bg-teal-50', count: null },
     ];
 
     return (
         <div className="flex flex-col gap-10 p-6 md:p-10 max-w-7xl mx-auto">
-            {/* 1. Header & Navigation */}
             <div>
                 <h1 className="text-3xl font-black text-slate-800 mb-1">Overview</h1>
                 <p className="text-slate-500 text-sm mb-8">Welcome back. Here is what's happening at the institute today.</p>
@@ -109,7 +109,6 @@ const DashboardHome = ({
                             </div>
                             <span className="font-bold text-slate-700 text-[10px] uppercase tracking-widest text-center group-hover:text-slate-900">{item.label}</span>
                             
-                            {/* Notification Badge */}
                             {item.count && (
                                 <div className="absolute -top-2 -right-1 bg-[#c1121f] text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-lg ring-2 ring-white animate-in zoom-in">
                                     {item.count}
@@ -120,35 +119,13 @@ const DashboardHome = ({
                 </div>
             </div>
 
-            {/* 2. Live Trends */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <MiniChart 
-                    label="New Enquiries" 
-                    value={`+${graphs.enquiries[6]}`} 
-                    subLabel="Last 7 Days Trend"
-                    data={graphs.enquiries} 
-                    color="stroke-orange-500" 
-                />
-                <MiniChart 
-                    label="New Admissions" 
-                    value={`+${graphs.admissions[6]}`} 
-                    subLabel="Last 7 Days Trend"
-                    data={graphs.admissions} 
-                    color="stroke-blue-500" 
-                />
-                <MiniChart 
-                    label="Fee Collection" 
-                    value={`₹${graphs.fees[6].toLocaleString()}`} 
-                    subLabel="Last 7 Days Trend"
-                    data={graphs.fees} 
-                    color="stroke-emerald-500" 
-                />
+                <MiniChart label="New Enquiries" value={`+${graphs.enquiries[6]}`} subLabel="Last 7 Days Trend" data={graphs.enquiries} color="stroke-orange-500" />
+                <MiniChart label="New Admissions" value={`+${graphs.admissions[6]}`} subLabel="Last 7 Days Trend" data={graphs.admissions} color="stroke-blue-500" />
+                <MiniChart label="Fee Collection" value={`₹${graphs.fees[6].toLocaleString()}`} subLabel="Last 7 Days Trend" data={graphs.fees} color="stroke-emerald-500" />
             </div>
 
-            {/* 3. Action Centers */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-[450px]">
-                
-                {/* Due Fees Tab */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-112.5">
                 <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col overflow-hidden">
                     <div className="p-5 border-b border-slate-100 bg-red-50/40 flex justify-between items-center backdrop-blur-sm">
                         <h3 className="font-bold text-red-900 flex items-center gap-2">
@@ -188,7 +165,6 @@ const DashboardHome = ({
                     </div>
                 </div>
 
-                {/* Pending Enquiries Tab */}
                 <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col overflow-hidden">
                     <div className="p-5 border-b border-slate-100 bg-orange-50/40 flex justify-between items-center backdrop-blur-sm">
                         <h3 className="font-bold text-orange-900 flex items-center gap-2">
@@ -229,13 +205,11 @@ const DashboardHome = ({
                         ))}
                     </div>
                 </div>
-
             </div>
         </div>
     );
 };
 
-// --- LOGIN COMPONENT ---
 const DirectorLogin = ({ onUnlock }: { onUnlock: () => void }) => {
   const [creds, setCreds] = useState({ id: '', password: '' });
   const [error, setError] = useState('');
@@ -246,8 +220,6 @@ const DirectorLogin = ({ onUnlock }: { onUnlock: () => void }) => {
     e.preventDefault(); setLoading(true); setError('');
     try { 
         const data = await directorApi.login(creds.id, creds.password); 
-        
-        // SECURE TOKEN MAPPING FIX
         const secureToken = data.access_token || data.token || data.accessToken;
         
         if (secureToken) { 
@@ -266,7 +238,7 @@ const DirectorLogin = ({ onUnlock }: { onUnlock: () => void }) => {
   return (
     <div className="min-h-screen w-full flex flex-col justify-center items-center bg-slate-50 relative py-10">
       <DirectorBackground />
-      <div className="relative z-10 w-full max-w-sm bg-gradient-to-br from-red-900 to-red-800 backdrop-blur-xl border border-red-700/50 rounded-3xl shadow-2xl p-8">
+      <div className="relative z-10 w-full max-w-sm bg-linear-to-br from-red-900 to-red-800 backdrop-blur-xl border border-red-700/50 rounded-3xl shadow-2xl p-8">
          <div className="text-center mb-6">
              <div className="relative h-14 w-48 mx-auto mb-4">
                  <Image src="/whitelogo.png" alt="Logo" fill className="object-contain object-center" unoptimized/>
@@ -283,11 +255,7 @@ const DirectorLogin = ({ onUnlock }: { onUnlock: () => void }) => {
                 <label className="text-xs font-bold text-red-200 uppercase tracking-wider ml-1">Password</label>
                 <div className="relative">
                     <input type={showPassword ? "text" : "password"} className="w-full p-4 bg-red-950/30 border border-red-700/50 rounded-xl text-white placeholder:text-red-300/50 outline-none focus:ring-2 focus:ring-white/30 transition pr-12" placeholder="••••••••" value={creds.password} onChange={e => setCreds({...creds, password: e.target.value})}/>
-                    <button 
-                        type="button" 
-                        onClick={() => setShowPassword(!showPassword)} 
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-red-200 hover:text-white transition-colors focus:outline-none"
-                    >
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-red-200 hover:text-white transition-colors focus:outline-none">
                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                 </div>
@@ -302,40 +270,38 @@ const DirectorLogin = ({ onUnlock }: { onUnlock: () => void }) => {
   );
 };
 
-// --- MAIN PAGE ---
 export default function DirectorPage() {
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [activeTab, setActiveTab] = useState('home'); 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   
-  // Data States
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
   const [feeHistory, setFeeHistory] = useState<any[]>([]);
-  const [branches, setBranches] = useState<any[]>([]); // ✨ NEW BRANCHES STATE
+  const [branches, setBranches] = useState<any[]>([]);
 
-  // Derived Metrics
   const [todayMetrics, setTodayMetrics] = useState({ admissions: 0, enquiries: 0, fees: 0 });
   const [graphs, setGraphs] = useState({ admissions: [0,0,0,0,0,0,0], enquiries: [0,0,0,0,0,0,0], fees: [0,0,0,0,0,0,0] });
   const [dueInstallments, setDueInstallments] = useState<any[]>([]);
   const [pendingEnquiries, setPendingEnquiries] = useState<any[]>([]);
 
-  // ✨ UPDATED: Added branchId to enquiryForm
   const [enquiryForm, setEnquiryForm] = useState({ studentName: '', mobile: '', course: '', allotedTo: '', remarks: '', branchId: '' });
   const [enquirySearch, setEnquirySearch] = useState('');
   const [enquiryDateFilter, setEnquiryDateFilter] = useState('');
-  const [enquiryBranchFilter, setEnquiryBranchFilter] = useState(''); // ✨ NEW BRANCH FILTER
+  const [enquiryBranchFilter, setEnquiryBranchFilter] = useState(''); 
   const [enquiryPage, setEnquiryPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
   
+  const [selectedEnquiry, setSelectedEnquiry] = useState<Enquiry | null>(null);
+  const [logForm, setLogForm] = useState({ status: 'PENDING', followUpCount: 0, newRemark: '' });
+
   const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl transition-all duration-300";
   const inputStyle = "w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:ring-2 focus:ring-[#c1121f] outline-none transition";
   const labelStyle = "block text-[10px] font-bold text-slate-500 uppercase mb-1";
 
-  // AUTO-SANITIZER LOGIC ON MOUNT
   useEffect(() => {
       if (typeof window !== 'undefined') {
           const sessionString = localStorage.getItem('director_session');
@@ -356,7 +322,6 @@ export default function DirectorPage() {
       }
   }, []);
 
-  // DATA REFRESH LOGIC (FULLY SECURED AGAINST 401 CRASHES)
   const refreshData = useCallback(async () => {
       if (!isUnlocked) return;
       setIsLoading(true);
@@ -366,7 +331,7 @@ export default function DirectorPage() {
               directorApi.getBatches(),
               directorApi.getEnquiries(),
               directorApi.getFeeHistory(),
-              directorApi.getBranches() // ✨ FETCH BRANCHES
+              directorApi.getBranches()
           ]);
           
           const sts = rawStsRes?.data || [];
@@ -379,50 +344,30 @@ export default function DirectorPage() {
           setBatches(bts);
           setEnquiries(enqs);
           setFeeHistory(fees);
-          setBranches(brs); // Set branches
+          setBranches(brs);
 
-          // Calculate Dashboard Metrics
           const today = new Date().toISOString().split('T')[0];
           
-          // 1. Live Counters
           const admToday = sts.filter((s: any) => s.joinedAt && s.joinedAt.startsWith(today)).length;
           const enqToday = enqs.filter((e: any) => e.createdAt && e.createdAt.startsWith(today)).length;
           const feesToday = fees.filter((f: any) => f.date && f.date.startsWith(today)).reduce((sum: number, f: any) => sum + Number(f.amount), 0);
           setTodayMetrics({ admissions: admToday, enquiries: enqToday, fees: feesToday });
 
-          // 2. Action Items
           setPendingEnquiries(enqs.filter((e: any) => e.status === 'PENDING').slice(0, 10));
 
-          // 🚨 CRITICAL FIX: Smart Accounting for Pending Dues (Strict 3-Day Window)
           const pendingDues: any[] = [];
           sts.forEach((s: any) => {
               if (s.feeRemaining > 0 && s.installments) {
                   let cumulativeInst = 0;
-                  
                   s.installments.forEach((inst: any) => {
                       cumulativeInst += inst.amount;
-                      
-                      // 1. Check if this specific installment has an unpaid balance
                       if (cumulativeInst > s.feePaid) {
-                          
-                          // 2. Strict 3-Day Window Logic
                           const threeDaysFromNow = new Date(Date.now() + 3 * 86400000);
                           const dueDate = new Date(inst.dueDate);
-                          
-                          // Include if it is OVERDUE or upcoming within exactly 3 days
                           if (dueDate <= threeDaysFromNow) {
-                              
-                              // 3. Calculate EXACT remainder for this specific installment
                               const remainder = cumulativeInst - Math.max(s.feePaid, cumulativeInst - inst.amount);
-                              
                               if (remainder > 0) {
-                                  pendingDues.push({ 
-                                      name: s.name, 
-                                      batch: s.batch, 
-                                      mobile: s.parentMobile, 
-                                      amount: remainder, // Exact remaining (e.g. ₹1)
-                                      date: inst.dueDate 
-                                  });
+                                  pendingDues.push({ name: s.name, batch: s.batch, mobile: s.parentMobile, amount: remainder, date: inst.dueDate });
                               }
                           }
                       }
@@ -431,7 +376,6 @@ export default function DirectorPage() {
           });
           setDueInstallments(pendingDues.sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime()).slice(0, 10));
 
-          // 3. Trend Graphs (Last 7 Days)
           const genGraph = (arr: any[], dKey: string, vKey?: string) => {
               const res = [0,0,0,0,0,0,0];
               for(let i=6; i>=0; i--) {
@@ -441,13 +385,8 @@ export default function DirectorPage() {
               }
               return res;
           };
-          setGraphs({ 
-              admissions: genGraph(sts, 'joinedAt'), 
-              enquiries: genGraph(enqs, 'createdAt'), 
-              fees: genGraph(fees, 'date', 'amount') 
-          });
+          setGraphs({ admissions: genGraph(sts, 'joinedAt'), enquiries: genGraph(enqs, 'createdAt'), fees: genGraph(fees, 'date', 'amount') });
 
-          // Lazy load low-priority data safely
           if (activeTab === 'academics') {
               const fetchedExams = await directorApi.getExams();
               setExams(fetchedExams || []);
@@ -466,44 +405,40 @@ export default function DirectorPage() {
 
   const handleLogout = () => { if(typeof window !== 'undefined') localStorage.removeItem('director_session'); setIsUnlocked(false); };
 
-  // --- Handlers for Inline Tabs ---
   const handleAddEnquiry = async (e: React.FormEvent) => { 
       e.preventDefault(); 
       await directorApi.createEnquiry(enquiryForm); 
       setEnquiryForm({ studentName: '', mobile: '', course: '', allotedTo: '', remarks: '', branchId: '' }); 
       refreshData(); 
   };
-  const handleUpdateEnquiryStatus = async (id: string, s: string, f?: number) => { 
-      await directorApi.updateEnquiryStatus(id, s, f); 
+  
+  const handleUpdateEnquiryStatus = async (id: string, s: string, f?: number, r?: string) => { 
+      await directorApi.updateEnquiryStatus(id, s, f, r); 
       refreshData(); 
   };
+  
   const handlePhoneInput = (e: React.ChangeEvent<HTMLInputElement>, setter: any, field: string) => { 
       const val = e.target.value.replace(/\D/g, '').slice(0, 10); 
       setter((prev: any) => ({ ...prev, [field]: val })); 
   };
 
-  // ✨ NEW: Handle Enquiry Deletion
   const handleDeleteEnquiry = async (id: string, name: string) => {
       if (window.confirm(`Are you sure you want to delete the enquiry for ${name}?`)) {
           try {
-              // Ensure this API method exists in your directorApi.ts
               if ((directorApi as any).deleteEnquiry) {
                   await (directorApi as any).deleteEnquiry(id);
                   refreshData();
               } else {
                   alert("Please add the 'deleteEnquiry(id)' method to your directorApi.ts!");
               }
-          } catch (e) {
-              alert("Failed to delete enquiry.");
-          }
+          } catch (e) { alert("Failed to delete enquiry."); }
       }
   };
 
-  // --- Filter Logic ---
   const filteredEnquiries = enquiries.filter(enq => {
       const matchesSearch = enq.studentName.toLowerCase().includes(enquirySearch.toLowerCase()) || enq.mobile.includes(enquirySearch);
       const matchesDate = enquiryDateFilter ? new Date(enq.createdAt).toISOString().split('T')[0] === enquiryDateFilter : true;
-      const matchesBranch = enquiryBranchFilter ? enq.branchId === enquiryBranchFilter : true; // ✨ BRANCH FILTER
+      const matchesBranch = enquiryBranchFilter ? enq.branchId === enquiryBranchFilter : true;
       return matchesSearch && matchesDate && matchesBranch;
   });
   const paginatedEnquiries = filteredEnquiries.slice((enquiryPage - 1) * ITEMS_PER_PAGE, enquiryPage * ITEMS_PER_PAGE);
@@ -529,7 +464,7 @@ export default function DirectorPage() {
                  {!isSidebarCollapsed && "Dashboard"}
              </button>
              
-             {['users', 'batches', 'accounts', 'enquiries', 'directory', 'academics', 'content', 'carousel'].map(tab => (
+             {['users', 'batches', 'accounts', 'enquiries', 'directory', 'attendance', 'academics', 'content', 'carousel'].map(tab => (
                  <button key={tab} onClick={() => setActiveTab(tab)} 
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${activeTab === tab ? 'bg-[#c1121f] text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`}
                  >
@@ -538,6 +473,7 @@ export default function DirectorPage() {
                     {tab === 'accounts' && <Wallet size={18}/>}
                     {tab === 'enquiries' && <PhoneCall size={18}/>}
                     {tab === 'directory' && <Users size={18}/>}
+                    {tab === 'attendance' && <CheckCircle size={18}/>}
                     {tab === 'academics' && <GraduationCap size={18}/>}
                     {tab === 'content' && <BookOpen size={18}/>}
                     {tab === 'carousel' && <ImageIcon size={18}/>}
@@ -561,24 +497,26 @@ export default function DirectorPage() {
                 />
            )}
            
-           {/* REFACTORED PANELS */}
+           {/* PANELS */}
            {activeTab === 'users' && <AdmissionsPanel batches={batches} onRefresh={refreshData} />}
            {activeTab === 'accounts' && <AccountsPanel students={students} />}
            {activeTab === 'batches' && <BatchesPanel onRefresh={refreshData} />}
            {activeTab === 'directory' && <StudentDirectoryPanel students={students} batches={batches} onRefresh={refreshData} />}
            {activeTab === 'content' && <ContentPanel batches={batches} students={students} />}
            {activeTab === 'carousel' && <CarouselPanel />}
+           
+           {/* ✨ NEW ATTENDANCE PANEL */}
+           {activeTab === 'attendance' && <AttendancePanel batches={batches} students={students} />}
 
            {/* --- INLINE TABS (ENQUIRIES) --- */}
            {activeTab === 'enquiries' && (
-             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto p-8">
+             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto p-8 relative">
                <div className={`lg:col-span-1 h-fit ${glassPanel} p-6`}>
                  <h3 className="font-bold text-slate-800 mb-4 flex items-center border-b border-slate-200 pb-3 text-lg"><PhoneCall size={20} className="mr-2 text-[#c1121f]"/> New Enquiry</h3>
                  <form onSubmit={handleAddEnquiry} className="space-y-4">
                    <div><label className={labelStyle}>Student Name</label><input className={inputStyle} required placeholder="e.g. Amit Kumar" value={enquiryForm.studentName} onChange={e => setEnquiryForm({...enquiryForm, studentName: e.target.value})} /></div>
                    <div><label className={labelStyle}>Mobile (10 Digits)</label><input className={inputStyle} required placeholder="98765xxxxx" value={enquiryForm.mobile} onChange={e => handlePhoneInput(e, setEnquiryForm, 'mobile')} maxLength={10} /></div>
                    
-                   {/* ✨ NEW: Branch Dropdown */}
                    <div>
                        <label className={labelStyle}>Assign to Branch</label>
                        <select className={inputStyle} value={enquiryForm.branchId} onChange={e => setEnquiryForm({...enquiryForm, branchId: e.target.value})}>
@@ -594,13 +532,12 @@ export default function DirectorPage() {
                  </form>
                </div>
                
-               <div className={`lg:col-span-2 ${glassPanel} overflow-hidden flex flex-col h-[700px]`}>
+               <div className={`lg:col-span-2 ${glassPanel} overflow-hidden flex flex-col h-175`}>
                  <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex flex-col gap-4">
                      <div className="flex justify-between items-center"><h3 className="font-bold text-slate-800">Enquiries Directory</h3><span className="bg-[#c1121f] text-white text-xs font-bold px-2 py-1 rounded">{filteredEnquiries.length} Found</span></div>
                      <div className="flex flex-wrap gap-2">
-                         <div className="relative flex-1 min-w-[200px]"><input type="text" className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-[#c1121f] outline-none" placeholder="Search Name or Mobile..." value={enquirySearch} onChange={(e) => setEnquirySearch(e.target.value)} /><Search size={14} className="absolute left-3 top-3 text-slate-400"/></div>
+                         <div className="relative flex-1 min-w-50"><input type="text" className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-[#c1121f] outline-none" placeholder="Search Name or Mobile..." value={enquirySearch} onChange={(e) => setEnquirySearch(e.target.value)} /><Search size={14} className="absolute left-3 top-3 text-slate-400"/></div>
                          
-                         {/* ✨ NEW: Branch Filter */}
                          <select className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 focus:ring-2 focus:ring-[#c1121f] outline-none" value={enquiryBranchFilter} onChange={(e) => setEnquiryBranchFilter(e.target.value)}>
                             <option value="">All Branches</option>
                             {branches.map(br => <option key={br.id} value={br.id}>{br.name}</option>)}
@@ -626,7 +563,6 @@ export default function DirectorPage() {
                            <div className="flex flex-col gap-1 items-start">
                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200 mb-1"><User size={10}/> {enq.allotedTo || 'Unassigned'}</span>
                                <div className="text-xs text-slate-500 font-medium">{enq.course}</div>
-                               {/* ✨ NEW: Branch Badge */}
                                {enq.branchId && (
                                     <span className="text-[9px] font-bold text-blue-600 uppercase bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex items-center gap-1 w-fit mt-1">
                                         <MapPin size={8}/> {branches.find(b => b.id === enq.branchId)?.name || 'Branch'}
@@ -634,11 +570,28 @@ export default function DirectorPage() {
                                )}
                            </div>
                          </td>
-                         <td className="px-6 py-4"><div className="flex items-center gap-2"><select className="p-1 border rounded text-xs bg-white text-slate-900 outline-none" value={enq.followUpCount || 0} onChange={(e) => handleUpdateEnquiryStatus(enq.id, enq.status, parseInt(e.target.value))}>{[0,1,2,3,4,5].map(n => <option key={n} value={n}>{n} Follow-ups</option>)}</select></div></td>
+                         <td className="px-6 py-4">
+                             <div className="flex items-center gap-2">
+                                 <select className="p-1 border rounded text-xs bg-white text-slate-900 outline-none" value={enq.followUpCount || 0} onChange={(e) => handleUpdateEnquiryStatus(enq.id, enq.status, parseInt(e.target.value))}>
+                                     {[0,1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n} Follow-ups</option>)}
+                                 </select>
+                             </div>
+                         </td>
                          <td className="px-6 py-4 text-right">
                            <div className="flex items-center justify-end gap-2">
-                               <select className={`p-1.5 border rounded text-xs font-bold outline-none ${enq.status === 'ADMITTED' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-white text-slate-900'}`} value={enq.status} onChange={(e) => handleUpdateEnquiryStatus(enq.id, e.target.value as any, enq.followUpCount)}><option value="PENDING">Pending</option><option value="ADMITTED">Admitted</option><option value="PARTIALLY_ALLOCATED">Allocated</option><option value="UNALLOCATED">Unallocated</option><option value="CANCELLED">Cancel</option></select>
-                               {/* ✨ NEW: Delete Enquiry Button */}
+                               <select className={`p-1.5 border rounded text-xs font-bold outline-none ${enq.status === 'ADMITTED' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-white text-slate-900'}`} value={enq.status} onChange={(e) => handleUpdateEnquiryStatus(enq.id, e.target.value as any, enq.followUpCount)}>
+                                   <option value="PENDING">Pending</option><option value="ADMITTED">Admitted</option><option value="PARTIALLY_ALLOCATED">Allocated</option><option value="UNALLOCATED">Unallocated</option><option value="CANCELLED">Cancel</option>
+                               </select>
+                               <button 
+                                   onClick={() => {
+                                       setSelectedEnquiry(enq);
+                                       setLogForm({ status: enq.status, followUpCount: enq.followUpCount || 0, newRemark: '' });
+                                   }} 
+                                   className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition" 
+                                   title="View/Add Follow-up Log"
+                               >
+                                   <MessageSquare size={16}/>
+                               </button>
                                <button onClick={() => handleDeleteEnquiry(enq.id, enq.studentName)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition" title="Delete Enquiry"><Trash2 size={16}/></button>
                            </div>
                          </td>
@@ -647,6 +600,89 @@ export default function DirectorPage() {
                  </div>
                  {totalEnquiryPages > 1 && <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center text-xs"><span className="text-slate-500">Page {enquiryPage} of {totalEnquiryPages}</span><div className="flex gap-2"><button onClick={() => setEnquiryPage(p => Math.max(1, p - 1))} disabled={enquiryPage === 1} className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50"><ChevronLeft size={16}/></button><button onClick={() => setEnquiryPage(p => Math.min(totalEnquiryPages, p + 1))} disabled={enquiryPage === totalEnquiryPages} className="p-1.5 rounded border bg-white hover:bg-slate-100 disabled:opacity-50"><ChevronRight size={16}/></button></div></div>}
                </div>
+
+               {/* FOLLOW-UP LOGS MODAL */}
+               {selectedEnquiry && (
+                   <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
+                       <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200">
+                           
+                           <div className="p-6 border-b border-slate-100 flex justify-between items-start bg-slate-50">
+                              <div>
+                                  <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                      <User size={20} className="text-[#c1121f]"/> {selectedEnquiry.studentName}
+                                  </h3>
+                                  <div className="flex items-center gap-2 mt-1">
+                                      <span className="text-xs font-bold text-slate-500 bg-slate-200 px-2 py-0.5 rounded uppercase">{selectedEnquiry.course}</span>
+                                      <span className="text-xs text-slate-500 font-mono">{selectedEnquiry.mobile}</span>
+                                  </div>
+                              </div>
+                              <button onClick={() => setSelectedEnquiry(null)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-full transition"><X size={20}/></button>
+                           </div>
+
+                           <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
+                               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><History size={16}/> Conversation History</h4>
+                               <div className="space-y-4">
+                                   {(!selectedEnquiry.followUpLogs || selectedEnquiry.followUpLogs.length === 0) ? (
+                                       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">ORIGINAL</span>
+                                                <span className="text-xs text-slate-400 font-mono">{new Date(selectedEnquiry.createdAt).toLocaleString()}</span>
+                                            </div>
+                                            <p className="text-sm text-slate-700">{selectedEnquiry.remarks || 'No initial remarks provided.'}</p>
+                                        </div>
+                                   ) : (
+                                       selectedEnquiry.followUpLogs.map((log, idx) => (
+                                           <div key={idx} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative">
+                                               <div className="flex justify-between items-center mb-2">
+                                                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${log.status === 'ADMITTED' ? 'bg-green-100 text-green-700' : log.status === 'CANCELLED' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                       {log.status}
+                                                   </span>
+                                                   <span className="text-xs text-slate-400 font-mono">{new Date(log.date).toLocaleString()}</span>
+                                               </div>
+                                               <p className="text-sm text-slate-700 whitespace-pre-wrap">{log.remark}</p>
+                                           </div>
+                                       ))
+                                   )}
+                               </div>
+                           </div>
+
+                           <form onSubmit={async (e) => {
+                               e.preventDefault();
+                               await directorApi.updateEnquiryStatus(selectedEnquiry.id, logForm.status, logForm.followUpCount, logForm.newRemark);
+                               setSelectedEnquiry(null);
+                               refreshData();
+                           }} className="p-6 bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                               <h4 className="text-xs font-bold text-slate-800 uppercase tracking-widest mb-4">Add New Log</h4>
+                               <div className="grid grid-cols-2 gap-4 mb-4">
+                                   <div>
+                                       <label className={labelStyle}>Update Status</label>
+                                       <select className={inputStyle} value={logForm.status} onChange={e => setLogForm({...logForm, status: e.target.value})}>
+                                           <option value="PENDING">Pending</option>
+                                           <option value="ADMITTED">Admitted</option>
+                                           <option value="PARTIALLY_ALLOCATED">Allocated</option>
+                                           <option value="UNALLOCATED">Unallocated</option>
+                                           <option value="CANCELLED">Cancel</option>
+                                       </select>
+                                   </div>
+                                   <div>
+                                       <label className={labelStyle}>Follow-Up Count</label>
+                                       <select className={inputStyle} value={logForm.followUpCount} onChange={e => setLogForm({...logForm, followUpCount: parseInt(e.target.value)})}>
+                                           {[0,1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n} Follow-ups</option>)}
+                                       </select>
+                                   </div>
+                               </div>
+                               <div className="mb-4">
+                                   <label className={labelStyle}>Conversation Notes / Remarks</label>
+                                   <textarea required className={inputStyle} rows={2} placeholder="Type your follow-up discussion here..." value={logForm.newRemark} onChange={e => setLogForm({...logForm, newRemark: e.target.value})} />
+                               </div>
+                               <button type="submit" className="w-full bg-[#c1121f] hover:bg-red-800 text-white font-bold py-3 rounded-xl transition shadow-lg flex items-center justify-center gap-2">
+                                   <CheckCircle size={18}/> Save Log & Update
+                               </button>
+                           </form>
+                       </div>
+                   </div>
+               )}
+
              </div>
            )}
            
@@ -654,7 +690,7 @@ export default function DirectorPage() {
            {activeTab === 'academics' && (
              <div className="space-y-8 max-w-7xl mx-auto p-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className={glassPanel + " p-6 flex flex-col h-[600px]"}>
+                  <div className={glassPanel + " p-6 flex flex-col h-150"}>
                      <h3 className="font-bold text-slate-800 mb-4 flex items-center text-lg border-b border-slate-200 pb-2"><FileBarChart size={20} className="mr-2 text-blue-600"/> Exam Schedule</h3>
                      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3">
                         {exams.length === 0 ? <p className="text-slate-400 text-sm italic text-center py-10">No exams scheduled.</p> : exams.map(exam => (
@@ -665,7 +701,7 @@ export default function DirectorPage() {
                         ))}
                      </div>
                   </div>
-                  <div className={glassPanel + " p-6 flex flex-col h-[600px]"}>
+                  <div className={glassPanel + " p-6 flex flex-col h-150"}>
                      <h3 className="font-bold text-slate-800 mb-4 flex items-center text-lg border-b border-slate-200 pb-2"><Activity size={20} className="mr-2 text-green-600"/> Academic Performance</h3>
                      <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-center p-8"><div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4"><LayoutGrid size={32} className="text-slate-300"/></div><p className="text-sm">Select an exam to view detailed performance analytics.</p><p className="text-xs mt-2 text-slate-300">(Detailed Analytics Module connecting to Results)</p></div>
                   </div>

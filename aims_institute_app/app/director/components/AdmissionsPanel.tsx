@@ -18,14 +18,16 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
   // Track if user has manually edited the schedule to prevent auto-overwrite
   const [isManualSchedule, setIsManualSchedule] = useState(false);
 
-  // ✨ UPDATED: Added photoUrl and remarks to state
+  // ✨ UPDATED: Added all new SIS tracking fields to the state
   const [admissionData, setAdmissionData] = useState({
     studentName: '', studentId: '', studentPassword: '', studentPhone: '', 
     address: '', batchId: '', fees: 0, waiveOff: 0, penalty: 0, 
     installments: 1, installmentSchedule: [] as InstallmentPlan[], 
     parentId: '', parentPassword: '', parentPhone: '',
     agreedDate: new Date().toISOString().split('T')[0], withGst: false, dob: '',
-    photoUrl: '', remarks: '' 
+    photoUrl: '', remarks: '',
+    fatherName: '', motherName: '', parentEmail: '', // New Parent Details
+    lastSchool: '', lastPercentage: ''               // New Academic Details
   });
 
   // --- THEME STYLES ---
@@ -60,7 +62,8 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
       if (admissionData.batchId) {
           const selected = localBatches.find(b => b.id === admissionData.batchId);
           if (selected) {
-              setAdmissionData(prev => ({ ...prev, fees: selected.fee, installments: 1, isManualSchedule: false }));
+              setAdmissionData(prev => ({ ...prev, fees: selected.fee, installments: 1 }));
+              setIsManualSchedule(false); // Fixed: Reset manual schedule state independently
           }
       }
   }, [admissionData.batchId, localBatches]);
@@ -100,7 +103,7 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
       setAdmissionData(prev => ({ ...prev, installmentSchedule: updated }));
   };
 
-  // ✨ NEW: Handle Photo Upload (Convert to Base64 instantly)
+  // ✨ Handle Photo Upload (Convert to Base64 instantly)
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (file) {
@@ -140,14 +143,20 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
         await directorApi.registerStudent({ ...admissionData, fees: finalFee });
         
         setStatus('Success! Student Registered.');
-        // Reset fields
-        setAdmissionData(prev => ({ 
-            ...prev, 
+        
+        // Reset all fields including new SIS data
+        setAdmissionData({ 
             studentName: '', studentId: '', studentPassword: '', 
             parentId: '', parentPassword: '', studentPhone: '', parentPhone: '',
-            fees: 0, waiveOff: 0, installments: 1, isManualSchedule: false, batchId: '',
-            photoUrl: '', remarks: '', address: '', dob: ''
-        }));
+            fees: 0, waiveOff: 0, penalty: 0, installments: 1, batchId: '',
+            photoUrl: '', remarks: '', address: '', dob: '',
+            fatherName: '', motherName: '', parentEmail: '',
+            lastSchool: '', lastPercentage: '',
+            agreedDate: new Date().toISOString().split('T')[0], withGst: false,
+            installmentSchedule: []
+        });
+        setIsManualSchedule(false); // Fixed: Reset manual schedule properly
+        
         onRefresh();
     } catch (e: any) { 
         // 🚨 This gracefully catches our new duplicate ID error message!
@@ -186,7 +195,7 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
             <div className="lg:col-span-7 space-y-6">
                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2">Student Info</h3>
                
-               {/* ✨ NEW: Top Row with Photo & Name */}
+               {/* Top Row with Photo & Name */}
                <div className="flex gap-6 items-start">
                    {/* Photo Upload Box */}
                    <div className="flex flex-col items-center gap-2 shrink-0">
@@ -289,12 +298,24 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                        </div>
                    </div>
 
+                   {/* ✨ Academic History */}
+                   <div className="col-span-2 grid grid-cols-2 gap-4 pt-2 border-t border-slate-100 mt-2">
+                       <div>
+                           <label className={labelStyle}>Last School Attended</label>
+                           <input className={inputStyle} placeholder="e.g. DPS Pune" value={admissionData.lastSchool} onChange={e => setAdmissionData({...admissionData, lastSchool: e.target.value})} />
+                       </div>
+                       <div>
+                           <label className={labelStyle}>Last Percentage / Grade</label>
+                           <input className={inputStyle} placeholder="e.g. 85.5%" value={admissionData.lastPercentage} onChange={e => setAdmissionData({...admissionData, lastPercentage: e.target.value})} />
+                       </div>
+                   </div>
+
                    <div className="col-span-2">
                        <label className={labelStyle}>Residential Address</label>
                        <textarea className={inputStyle} rows={2} placeholder="Full address..." value={admissionData.address} onChange={(e) => setAdmissionData({...admissionData, address: e.target.value})} />
                    </div>
 
-                   {/* ✨ NEW: Internal Remarks */}
+                   {/* Internal Remarks */}
                    <div className="col-span-2">
                        <label className={labelStyle}>Internal Remarks / Academic Details</label>
                        <input className={inputStyle} placeholder="e.g. Needs extra attention in Physics / Scholarship 10%" value={admissionData.remarks} onChange={(e) => setAdmissionData({...admissionData, remarks: e.target.value})} />
@@ -302,10 +323,37 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                </div>
 
                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2 mt-8">Parent Details</h3>
-               <div className="grid grid-cols-3 gap-4">
-                    <input className={inputStyle} required placeholder="Parent ID" value={admissionData.parentId} onChange={e => setAdmissionData({...admissionData, parentId: e.target.value})} />
-                    <input className={inputStyle} required placeholder="Password" value={admissionData.parentPassword} onChange={e => setAdmissionData({...admissionData, parentPassword: e.target.value})} />
-                    <input className={inputStyle} required placeholder="Mobile" value={admissionData.parentPhone} onChange={e => setAdmissionData({...admissionData, parentPhone: e.target.value})} maxLength={10} />
+               <div className="space-y-4">
+                   {/* ✨ Expanded Parent Details */}
+                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label className={labelStyle}>Father's Name</label>
+                            <input className={inputStyle} placeholder="Full Name" value={admissionData.fatherName} onChange={e => setAdmissionData({...admissionData, fatherName: e.target.value})} />
+                        </div>
+                        <div>
+                            <label className={labelStyle}>Mother's Name</label>
+                            <input className={inputStyle} placeholder="Full Name" value={admissionData.motherName} onChange={e => setAdmissionData({...admissionData, motherName: e.target.value})} />
+                        </div>
+                        <div>
+                            <label className={labelStyle}>Parent Email</label>
+                            <input type="email" className={inputStyle} placeholder="email@example.com" value={admissionData.parentEmail} onChange={e => setAdmissionData({...admissionData, parentEmail: e.target.value})} />
+                        </div>
+                   </div>
+
+                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <div>
+                            <label className={labelStyle}>Parent Login ID</label>
+                            <input className={inputStyle} required placeholder="Parent ID" value={admissionData.parentId} onChange={e => setAdmissionData({...admissionData, parentId: e.target.value})} />
+                        </div>
+                        <div>
+                            <label className={labelStyle}>Password</label>
+                            <input className={inputStyle} required placeholder="Password" value={admissionData.parentPassword} onChange={e => setAdmissionData({...admissionData, parentPassword: e.target.value})} />
+                        </div>
+                        <div>
+                            <label className={labelStyle}>Primary Mobile</label>
+                            <input className={inputStyle} required placeholder="10-digit Mobile" value={admissionData.parentPhone} onChange={e => setAdmissionData({...admissionData, parentPhone: e.target.value})} maxLength={10} />
+                        </div>
+                   </div>
                </div>
             </div>
 
@@ -351,7 +399,7 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                            <div className="flex-1 pl-2">Due Date</div>
                            <div className="w-24 text-right pr-2">Amount (₹)</div>
                        </div>
-                       <div className="max-h-[250px] overflow-y-auto custom-scrollbar">
+                       <div className="max-h-62.5 overflow-y-auto custom-scrollbar">
                            {admissionData.installmentSchedule.map((inst, index) => (
                                <div key={index} className="flex border-b border-red-50 last:border-0 hover:bg-red-50/50 transition">
                                    <div className="w-10 py-2.5 text-center text-red-300 font-bold text-xs bg-red-50/30">
@@ -379,7 +427,7 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                    </div>
 
                    <div className="pt-2 border-t border-red-200 flex justify-between items-end">
-                       <div className="text-[10px] text-red-400 font-bold max-w-[150px]">
+                       <div className="text-[10px] text-red-400 font-bold max-w-37.5">
                            * Check schedule before confirming. Parents will see these exact dates.
                        </div>
                        <div className="text-right">

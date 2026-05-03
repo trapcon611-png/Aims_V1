@@ -44,10 +44,14 @@ model StudentProfile {
   parentId            String?
   parent              ParentProfile?  @relation(fields: [parentId], references: [id])
   
-  // ✨ NEW: SIS Fields
+  // SIS Fields
   dob                 DateTime?
   photoUrl            String?
   remarks             String?
+  
+  // ✨ NEW: Academic History
+  lastSchool          String?
+  lastPercentage      String?
 
   // Fee Agreement Fields
   feeAgreed           Float           @default(0)
@@ -68,6 +72,12 @@ model ParentProfile {
   user            User            @relation(fields: [userId], references: [id])
   mobile          String          @unique
   isMobileVisible Boolean         @default(false)
+  
+  // ✨ NEW: Parent Expanded Details
+  fatherName      String?
+  motherName      String?
+  email           String?
+
   children        StudentProfile[]
 }
 
@@ -139,7 +149,7 @@ model Exam {
   id          String        @id @default(uuid())
   title       String
   description String?
-  examType    String?       @default("General") // Track if it's JEE, NEET, etc.
+  examType    String?       @default("General")
   durationMin Int
   totalMarks  Int
   scheduledAt DateTime
@@ -167,8 +177,8 @@ model QuestionBank {
   topic           String?
   tags            String[]
   difficulty      String
-  type            String?         @default("MCQ") // Distinguish MCQ vs Numerical
-  examType        String?         @default("General") // Folder/Exam tracking
+  type            String?         @default("MCQ")
+  examType        String?         @default("General")
   marks           Int             @default(4)
   negative        Int             @default(-1)
   expectedTime    Int             @default(60) 
@@ -220,7 +230,7 @@ model TestAttempt {
   physics      Float         @default(0) 
   chemistry    Float         @default(0)
   maths        Float         @default(0)
-  biology      Float         @default(0) // Track Biology scores for NEET/CET
+  biology      Float         @default(0)
 
   scoreDetails Json?         
   correctCount Int           @default(0)
@@ -271,7 +281,7 @@ model FeeRecord {
   amount          Float
   date            DateTime       @default(now())
   remarks         String?
-  transactionId   String?        // We will store razorpayPaymentId here!
+  transactionId   String?        
   paymentMode     String?        @default("CASH")
   
   receiptNumber   String?        @unique
@@ -306,13 +316,18 @@ model Enquiry {
   id            String        @id @default(uuid())
   studentName   String
   mobile        String
-  branchId      String?
   course        String?       
   allotedTo     String?       
   source        String?       
   status        EnquiryStatus @default(PENDING)
   followUpCount Int           @default(0)
   remarks       String?
+  
+  // ✨ NEW: Logs for tracking conversation history
+  followUpLogs  Json?         @default("[]") 
+  
+  branchId      String?
+
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 }
@@ -331,8 +346,8 @@ model PushSubscription {
 
 model CarouselImage {
   id          String   @id @default(uuid())
-  imageUrl    String   // Stores the Base64 image
-  aspectRatio String   @default("16:9") // "16:9" (Landscape) or "9:16" (Portrait)
+  imageUrl    String   
+  aspectRatio String   @default("16:9") 
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
 }
@@ -345,6 +360,5 @@ model Branch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // A single branch can have multiple batches
   batches   Batch[]
 }

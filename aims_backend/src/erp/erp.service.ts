@@ -10,15 +10,13 @@ export class ErpService {
   private readonly logger = new Logger(ErpService.name);
 
   constructor(private prisma: PrismaService) {
-      // Initialize Web Push
       webPush.setVapidDetails(
         'mailto:aimsinstituteno1@gmail.com',
-        'BPIOFqW5EdW7LL-eYMHMdZ_1g0hdcgM093hpYAiqDL9jFyFoOI4gLT4Wu3zwgaVJBpZ9EufGagusvdL52CGL2lA', // Public Key
-        'yqOdQrSnKGOmQLRwtJvNEm0zi1AlYByvYDUBxIslr3U' // Private Key
+        'BPIOFqW5EdW7LL-eYMHMdZ_1g0hdcgM093hpYAiqDL9jFyFoOI4gLT4Wu3zwgaVJBpZ9EufGagusvdL52CGL2lA', 
+        'yqOdQrSnKGOmQLRwtJvNEm0zi1AlYByvYDUBxIslr3U' 
       );
   }
 
-  // --- HELPER: RECURSIVE SANITIZER ---
   private sanitize(data: any): any {
       if (typeof data === 'string') {
           return data.replace(/\0/g, '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, "").trim();
@@ -36,7 +34,6 @@ export class ErpService {
       return data;
   }
 
-  // --- PUSH NOTIFICATION HELPER ---
   async sendPushToUsers(userIds: string[], payload: any) {
       if (userIds.length === 0) return;
       const subscriptions = await this.prisma.pushSubscription.findMany({ where: { userId: { in: userIds } } });
@@ -58,7 +55,8 @@ export class ErpService {
       return this.prisma.branch.create({
           data: {
               name: data.name,
-              city: data.city || null
+              city: data.city || null,
+              address: data.address || null
           }
       });
   }
@@ -254,9 +252,13 @@ export class ErpService {
   
   async getFinancialSummary() { return this.getSummary(); }
 
-  async collectFee(data: { studentId: string; amount: number; remarks?: string; paymentMode?: string; transactionId?: string }) { 
+  // ✨ UPDATED: Accept manual date for Fee Collection
+  async collectFee(data: { studentId: string; amount: number; remarks?: string; paymentMode?: string; transactionId?: string; date?: string }) { 
     const student = await this.prisma.studentProfile.findUnique({ where: { id: data.studentId } }); 
     if (!student) throw new BadRequestException("Student not found"); 
+    
+    const paymentDate = data.date ? new Date(data.date) : new Date();
+
     return this.prisma.feeRecord.create({ 
       data: { 
         studentId: data.studentId, 
@@ -264,19 +266,23 @@ export class ErpService {
         remarks: data.remarks || "Fee Payment", 
         paymentMode: data.paymentMode || "CASH", 
         transactionId: data.transactionId || `TXN-${Date.now()}`, 
-        date: new Date() 
+        date: paymentDate 
       } 
     }); 
   }
 
-  // --- FEE HISTORY ---
+  // ✨ UPDATED: Include Deep Branch details for Fee Receipt Address
   async getAllFeeRecords() {
     const records = await this.prisma.feeRecord.findMany({
       include: {
         student: {
           include: {
             user: true,
-            batch: true
+            batch: {
+                include: {
+                    branch: true
+                }
+            }
           }
         }
       },
@@ -293,7 +299,10 @@ export class ErpService {
       remarks: r.remarks,
       paymentMode: r.paymentMode,
       transactionId: r.transactionId,
-      batch: r.student.batch?.name || 'Unassigned'
+      batch: r.student.batch?.name || 'Unassigned',
+      branchName: r.student.batch?.branch?.name || null,
+      branchAddress: r.student.batch?.branch?.address || null,
+      branchCity: r.student.batch?.branch?.city || null
     }));
   }
 
@@ -425,6 +434,12 @@ export class ErpService {
           parentId: s.parent?.user?.username || 'N/A', 
           parentPassword: s.parent?.user?.visiblePassword || '******', 
           parentMobile: s.parent?.mobile || 'N/A', 
+          
+          // ✨ Expanded Parent Details
+          fatherName: s.parent?.fatherName || null,
+          motherName: s.parent?.motherName || null,
+          parentEmail: s.parent?.email || null,
+
           isMobileMasked: !(s.parent?.isMobileVisible), 
           batch: s.batch?.name || 'Unassigned', 
           address: s.address, 
@@ -436,7 +451,11 @@ export class ErpService {
           
           dob: s.dob,
           photoUrl: s.photoUrl,
-          remarks: s.remarks
+          remarks: s.remarks,
+
+          // ✨ Expanded Academic Details
+          lastSchool: s.lastSchool || null,
+          lastPercentage: s.lastPercentage || null
       };
     });
 
@@ -482,7 +501,7 @@ export class ErpService {
       return { success: true, message: 'Student and all related records successfully deleted' };
   }
 
-  // ✨ FULL SIS UPDATE METHOD
+  // ✨ FULL SIS UPDATE METHOD (Updated with new fields)
   async updateStudent(studentProfileId: string, data: any) {
     const student = await this.prisma.studentProfile.findUnique({
       where: { id: studentProfileId },
@@ -501,31 +520,35 @@ export class ErpService {
         });
       }
 
-      // 2. Update Parent Password
-      if (data.parentPassword && student.parent?.userId && data.parentPassword !== student.parent.user.visiblePassword) {
-        const hashedParentPass = await bcrypt.hash(data.parentPassword, 10);
-        await tx.user.update({
-          where: { id: student.parent.userId },
-          data: { password: hashedParentPass, visiblePassword: data.parentPassword }
-        });
+      // 2. Update Parent Password & Details
+      if (student.parentId) {
+          if (data.parentPassword && student.parent?.userId && data.parentPassword !== student.parent.user.visiblePassword) {
+            const hashedParentPass = await bcrypt.hash(data.parentPassword, 10);
+            await tx.user.update({
+              where: { id: student.parent.userId },
+              data: { password: hashedParentPass, visiblePassword: data.parentPassword }
+            });
+          }
+
+          await tx.parentProfile.update({
+            where: { id: student.parentId },
+            data: { 
+                mobile: data.parentMobile !== undefined ? data.parentMobile : student.parent?.mobile,
+                fatherName: data.fatherName !== undefined ? data.fatherName : student.parent?.fatherName,
+                motherName: data.motherName !== undefined ? data.motherName : student.parent?.motherName,
+                email: data.parentEmail !== undefined ? data.parentEmail : student.parent?.email
+            }
+          });
       }
 
-      // 3. Update Parent Mobile
-      if (data.parentMobile && student.parentId) {
-        await tx.parentProfile.update({
-          where: { id: student.parentId },
-          data: { mobile: data.parentMobile }
-        });
-      }
-
-      // 4. Resolve Batch ID if Name was passed from frontend Dropdown
+      // 3. Resolve Batch ID if Name was passed from frontend Dropdown
       let targetBatchId = student.batchId;
       if (data.batch) {
           const batchRecord = await tx.batch.findFirst({ where: { name: data.batch } });
           if (batchRecord) targetBatchId = batchRecord.id;
       }
 
-      // 5. Update the Core Profile Data
+      // 4. Update the Core Profile Data
       const updatedProfile = await tx.studentProfile.update({
         where: { id: studentProfileId },
         data: {
@@ -534,6 +557,8 @@ export class ErpService {
           dob: data.dob ? new Date(data.dob) : student.dob,
           photoUrl: data.photoUrl !== undefined ? data.photoUrl : student.photoUrl,
           remarks: data.remarks !== undefined ? data.remarks : student.remarks,
+          lastSchool: data.lastSchool !== undefined ? data.lastSchool : student.lastSchool,
+          lastPercentage: data.lastPercentage !== undefined ? data.lastPercentage : student.lastPercentage,
           batchId: targetBatchId,
         }
       });
@@ -542,7 +567,7 @@ export class ErpService {
     });
   }
 
-  // 🚨 ADMISSION ROUTE
+  // ✨ UPDATED ADMISSION ROUTE (Captures all new fields)
   async registerStudent(dto: any) {
     const input = dto; 
     
@@ -578,7 +603,15 @@ export class ErpService {
         if (parentProfile) {
             parentProfileId = parentProfile.id;
         } else {
-            const newProfile = await tx.parentProfile.create({ data: { userId: existingParentUser.id, mobile: input.parentPhone || '000' } });
+            const newProfile = await tx.parentProfile.create({ 
+                data: { 
+                    userId: existingParentUser.id, 
+                    mobile: input.parentPhone || '000',
+                    fatherName: input.fatherName || null,
+                    motherName: input.motherName || null,
+                    email: input.parentEmail || null
+                } 
+            });
             parentProfileId = newProfile.id;
         }
       } else {
@@ -588,7 +621,14 @@ export class ErpService {
                 password: hashedParentPass, 
                 visiblePassword: input.parentPassword, 
                 role: Role.PARENT, 
-                parentProfile: { create: { mobile: input.parentPhone || '000' } } 
+                parentProfile: { 
+                    create: { 
+                        mobile: input.parentPhone || '000',
+                        fatherName: input.fatherName || null,
+                        motherName: input.motherName || null,
+                        email: input.parentEmail || null
+                    } 
+                } 
             }, 
             include: { parentProfile: true } 
         });
@@ -617,7 +657,9 @@ export class ErpService {
                     installmentSchedule: JSON.parse(JSON.stringify(schedule)),
                     dob: input.dob ? new Date(input.dob) : null,
                     photoUrl: input.photoUrl || null,
-                    remarks: input.remarks || null
+                    remarks: input.remarks || null,
+                    lastSchool: input.lastSchool || null,
+                    lastPercentage: input.lastPercentage || null
                 } as any 
             } 
         }
@@ -662,9 +704,28 @@ export class ErpService {
     }); 
   }
   
-  async getAttendanceStats(batchId: string) { 
+  // ✨ UPDATED: Supports Monthly Reports
+  async getAttendanceStats(batchId: string, month?: number, year?: number) { 
     if (!batchId) return []; 
-    const students = await this.prisma.studentProfile.findMany({ where: { batchId }, include: { attendance: true } }); 
+    
+    const whereClause: any = { batchId };
+    if (month && year) {
+        // Month from JS Date is 0-indexed (Jan=0, Feb=1)
+        // If passing from frontend as 1-12, subtract 1. Assuming frontend sends 1 for Jan.
+        const start = new Date(year, month - 1, 1);
+        const end = new Date(year, month, 0, 23, 59, 59); // Last day of month
+        whereClause.date = { gte: start, lte: end };
+    }
+
+    const students = await this.prisma.studentProfile.findMany({ 
+        where: { batchId }, 
+        include: { 
+            attendance: {
+                where: whereClause.date ? { date: whereClause.date } : undefined
+            } 
+        } 
+    }); 
+    
     return students.map((s: any) => { 
       const total = s.attendance ? s.attendance.length : 0; 
       const present = s.attendance ? s.attendance.filter((a: any) => a.isPresent).length : 0; 
@@ -698,7 +759,6 @@ export class ErpService {
   // --- CRM ---
   async getEnquiries() { return this.prisma.enquiry.findMany({ orderBy: { createdAt: 'desc' } }); }
   
-  // ✨ ENQUIRY CREATION WITH BRANCH
   async createEnquiry(data: any) { 
       return this.prisma.enquiry.create({ 
           data: { 
@@ -713,9 +773,35 @@ export class ErpService {
       }); 
   }
   
-  async updateEnquiryStatus(id: string, status: any, followUpCount?: number) { return this.prisma.enquiry.update({ where: { id }, data: { status, followUpCount: followUpCount !== undefined ? Number(followUpCount) : undefined } }); }
+  // ✨ UPDATED: Enquiry Log tracking
+  async updateEnquiryStatus(id: string, status: any, followUpCount?: number, newRemark?: string) { 
+      const enquiry = await this.prisma.enquiry.findUnique({ where: { id }});
+      if (!enquiry) throw new NotFoundException('Enquiry not found');
 
-  // ✨ DELETE ENQUIRY
+      let logs: any[] = [];
+      if (enquiry.followUpLogs && Array.isArray(enquiry.followUpLogs)) {
+          logs = [...enquiry.followUpLogs];
+      }
+      
+      if (newRemark || status !== enquiry.status) {
+          logs.push({
+              date: new Date().toISOString(),
+              status: status,
+              remark: newRemark || `Status updated to ${status}`
+          });
+      }
+
+      return this.prisma.enquiry.update({ 
+          where: { id }, 
+          data: { 
+              status, 
+              followUpCount: followUpCount !== undefined ? Number(followUpCount) : undefined,
+              followUpLogs: logs,
+              remarks: newRemark ? newRemark : enquiry.remarks
+          } 
+      }); 
+  }
+
   async deleteEnquiry(id: string) {
       return this.prisma.enquiry.delete({ where: { id } });
   }

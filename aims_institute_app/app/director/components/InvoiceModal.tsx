@@ -35,9 +35,22 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
               </div>
               <div className="text-right text-xs text-slate-600">
                 <h2 className="text-xl font-bold text-slate-800 mb-2">FEE RECEIPT</h2>
-                <p>Royal Tranquil, 3rd Floor,</p>
-                <p>Above Chitale Bandhu, Pimple Saudagar,</p>
-                <p>Pune, MH 411027</p>
+                
+                {/* ✨ DYNAMIC BRANCH ADDRESS LOGIC */}
+                {data.branchName ? (
+                    <>
+                        <p className="font-bold text-slate-800 text-sm mb-0.5">{data.branchName}</p>
+                        <p>{data.branchAddress || 'Royal Tranquil, 3rd Floor, Above Chitale Bandhu, Pimple Saudagar,'}</p>
+                        <p>{data.branchCity || 'Pune, MH 411027'}</p>
+                    </>
+                ) : (
+                    <>
+                        <p>Royal Tranquil, 3rd Floor,</p>
+                        <p>Above Chitale Bandhu, Pimple Saudagar,</p>
+                        <p>Pune, MH 411027</p>
+                    </>
+                )}
+                
                 <div className="mt-2 font-mono">
                   <p>+91 87889 40143</p>
                   <p>+91 87676 50590</p>
@@ -58,6 +71,7 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
             <div className="text-right">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Receipt Info</p>
               <p className="text-sm font-bold text-slate-900">#: {data.id ? data.id.slice(0, 8).toUpperCase() : 'N/A'}</p>
+              {/* ✨ Ensure the manual date from AccountsPanel is used here */}
               <p className="text-sm text-slate-600">Date: {new Date(data.date || Date.now()).toLocaleDateString()}</p>
               <div className="mt-1 inline-block bg-white px-2 py-0.5 rounded text-xs font-bold text-[#dc2626] uppercase border border-[#dc2626]">
                 {data.paymentMode}

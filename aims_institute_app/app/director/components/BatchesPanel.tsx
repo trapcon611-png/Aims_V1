@@ -13,7 +13,8 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
   const [activeTab, setActiveTab] = useState<'BATCHES' | 'BRANCHES'>('BATCHES');
   
   // Create Form States
-  const [newBranch, setNewBranch] = useState({ name: '', city: '' });
+  // ✨ UPDATED: Added "address" to the branch state
+  const [newBranch, setNewBranch] = useState({ name: '', city: '', address: '' });
   const [newBatch, setNewBatch] = useState({ name: '', startYear: '', fee: 0, branchId: '' });
 
   // Inline Edit State
@@ -44,9 +45,9 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
       e.preventDefault();
       try {
           await directorApi.createBranch(newBranch);
-          setNewBranch({ name: '', city: '' });
+          setNewBranch({ name: '', city: '', address: '' }); // Reset
           fetchData();
-          setActiveTab('BRANCHES'); // Switch to see the new branch
+          setActiveTab('BRANCHES'); 
       } catch (e) { alert("Failed to create branch"); }
   };
 
@@ -66,7 +67,7 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
           setNewBatch({ name: '', startYear: '', fee: 0, branchId: '' });
           fetchData();
           setActiveTab('BATCHES');
-          onRefresh(); // Refresh parent/other tabs if needed
+          onRefresh(); 
       } catch (e) { alert("Failed to create batch"); }
   };
 
@@ -93,14 +94,12 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
       } catch (e) { alert("Update failed"); }
   };
 
-  // Helper to map branch ID to name on the frontend if backend doesn't populate the relation immediately
   const getBranchName = (bId?: string) => {
       if (!bId) return 'Unassigned';
       const branch = branches.find(br => br.id === bId);
       return branch ? branch.name : 'Unassigned';
   };
 
-  // Filters
   const filteredBatches = batches.filter(b => 
       b.name.toLowerCase().includes(search.toLowerCase()) || 
       b.startYear.includes(search)
@@ -131,6 +130,17 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
                  <div>
                      <label className={labelStyle}>City</label>
                      <input className={inputStyle} placeholder="e.g. Pune" value={newBranch.city} onChange={(e) => setNewBranch({...newBranch, city: e.target.value})} />
+                 </div>
+                 {/* ✨ NEW: Branch Address Field */}
+                 <div className="col-span-2">
+                     <label className={labelStyle}>Full Address (Prints on Fee Receipts)</label>
+                     <textarea 
+                        className={inputStyle} 
+                        rows={2} 
+                        placeholder="e.g. Royal Tranquil, 3rd Floor, Above Chitale Bandhu..." 
+                        value={newBranch.address} 
+                        onChange={(e) => setNewBranch({...newBranch, address: e.target.value})} 
+                     />
                  </div>
                </div>
                <button className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition shadow-md flex items-center justify-center gap-2 mt-2">
@@ -274,14 +284,18 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
                   <div className="text-center text-slate-400 py-10 italic">No branches found.</div>
               ) : (
                   filteredBranches.map(br => (
-                      <div key={br.id} className="bg-white p-4 rounded-xl border border-slate-200 hover:border-blue-300 transition flex justify-between items-center group">
-                          <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+                      <div key={br.id} className="bg-white p-4 rounded-xl border border-slate-200 hover:border-blue-300 transition flex justify-between items-start group">
+                          <div className="flex items-start gap-3">
+                              <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 mt-1">
                                   <MapPin size={18}/>
                               </div>
                               <div>
                                   <h4 className="font-bold text-slate-800 text-base">{br.name}</h4>
-                                  <p className="text-xs text-slate-500 mt-0.5">{br.city || 'Location not specified'}</p>
+                                  <p className="text-xs text-slate-500 mt-0.5 font-medium">{br.city || 'Location not specified'}</p>
+                                  {/* ✨ Show Address Below */}
+                                  {br.address && (
+                                      <p className="text-[10px] text-slate-400 mt-1 max-w-xs">{br.address}</p>
+                                  )}
                               </div>
                           </div>
                           

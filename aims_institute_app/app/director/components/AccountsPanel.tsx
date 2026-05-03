@@ -11,13 +11,18 @@ import InvoiceModal from './InvoiceModal';
 export default function AccountsPanel({ students }: { students: any[] }) {
   // --- STATE ---
   // Forms
-  const [feeForm, setFeeForm] = useState({ studentId: '', amount: 0, remarks: '', paymentMode: 'CASH', transactionId: '', withGst: false });
+  // ✨ UPDATED: Added "date" to the feeForm state, defaulting to today
+  const [feeForm, setFeeForm] = useState({ 
+      studentId: '', amount: 0, remarks: '', paymentMode: 'CASH', 
+      transactionId: '', withGst: false, 
+      date: new Date().toISOString().split('T')[0] 
+  });
   const [newExpense, setNewExpense] = useState({ title: '', amount: 0, category: 'General' });
   
   // Student Search State (For Collect Fee Form)
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
-  const [feeCollectBranchFilter, setFeeCollectBranchFilter] = useState(''); // ✨ NEW: Branch filter for Collect Fee
-  const [feeCollectBatchFilter, setFeeCollectBatchFilter] = useState('');   // Batch filter for Collect Fee
+  const [feeCollectBranchFilter, setFeeCollectBranchFilter] = useState(''); 
+  const [feeCollectBatchFilter, setFeeCollectBatchFilter] = useState('');   
   const [showStudentDropdown, setShowStudentDropdown] = useState(false);
 
   // Data
@@ -67,23 +72,19 @@ export default function AccountsPanel({ students }: { students: any[] }) {
 
   // --- STUDENT AUTOCOMPLETE LOGIC ---
   const filteredStudentOptions = useMemo(() => {
-      // If no search and no filters, show nothing.
       if (!studentSearchQuery && !feeCollectBatchFilter && !feeCollectBranchFilter) return [];
       
       let filtered = students;
       
-      // 1. Filter by Branch (Find all batches in this branch, then filter students)
       if (feeCollectBranchFilter && !feeCollectBatchFilter) {
           const validBatchNames = batches.filter(b => b.branchId === feeCollectBranchFilter).map(b => b.name);
           filtered = filtered.filter(s => validBatchNames.includes(s.batch));
       }
 
-      // 2. Filter by exact Batch
       if (feeCollectBatchFilter) {
           filtered = filtered.filter(s => s.batch === feeCollectBatchFilter);
       }
 
-      // 3. Filter by Search Query
       if (studentSearchQuery) {
           const lower = studentSearchQuery.toLowerCase();
           filtered = filtered.filter(s => 
@@ -92,7 +93,6 @@ export default function AccountsPanel({ students }: { students: any[] }) {
           );
       }
       
-      // If only branch/batch is selected, show up to 10 students. If search is used, show 5.
       return filtered.slice(0, studentSearchQuery ? 5 : 10); 
   }, [students, studentSearchQuery, feeCollectBatchFilter, feeCollectBranchFilter, batches]);
 
@@ -177,7 +177,8 @@ export default function AccountsPanel({ students }: { students: any[] }) {
               batch: student.batch, 
               studentId: student.id, 
               displayId: student.studentId,
-              date: new Date().toISOString()
+              // ✨ Use the manual date chosen by the user for the invoice preview
+              date: feeForm.date ? new Date(feeForm.date).toISOString() : new Date().toISOString()
           };
           
           setCurrentInvoice({ 
@@ -187,8 +188,13 @@ export default function AccountsPanel({ students }: { students: any[] }) {
           setShowInvoice(true);
           
           refreshData(); 
-          setFeeForm({ studentId: '', amount: 0, remarks: '', paymentMode: 'CASH', transactionId: '', withGst: false });
-          setStudentSearchQuery(''); // Clear search box
+          // Reset form including the date back to today
+          setFeeForm({ 
+              studentId: '', amount: 0, remarks: '', paymentMode: 'CASH', 
+              transactionId: '', withGst: false, 
+              date: new Date().toISOString().split('T')[0] 
+          });
+          setStudentSearchQuery(''); 
       } catch (e) { alert("Failed to record fee"); }
   };
 
@@ -259,7 +265,7 @@ export default function AccountsPanel({ students }: { students: any[] }) {
               </h3>
               <form onSubmit={handleCollectFee} className="space-y-5">
                   
-                  {/* ✨ SEARCHABLE STUDENT INPUT WITH DUAL FILTERS */}
+                  {/* SEARCHABLE STUDENT INPUT WITH DUAL FILTERS */}
                   <div className="relative z-20">
                       <div className="flex flex-col md:flex-row gap-4">
                           
@@ -356,7 +362,8 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                       )}
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-4">
+                  {/* ✨ UPDATED: Added Payment Date input using a 3-column grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                           <label className={labelStyle}>Amount (₹)</label>
                           <input type="number" className={inputStyle} placeholder="0" value={feeForm.amount} onChange={e => setFeeForm({...feeForm, amount: +e.target.value})} required/>
@@ -369,6 +376,16 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                               <option>CHEQUE</option>
                               <option>NEFT</option>
                           </select>
+                      </div>
+                      <div>
+                          <label className={labelStyle}>Payment Date</label>
+                          <input 
+                              type="date" 
+                              className={inputStyle} 
+                              value={feeForm.date} 
+                              onChange={e => setFeeForm({...feeForm, date: e.target.value})} 
+                              required
+                          />
                       </div>
                   </div>
 
@@ -531,7 +548,6 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                                       <div className="text-xs text-slate-400">{t.displayId || t.studentId}</div>
                                   </td>
                                   <td className="px-6 py-4 text-slate-600 text-xs">
-                                      {/* ✨ BATCH DISPLAYED CLEARLY */}
                                       <span className="bg-blue-50 text-blue-700 font-bold px-2 py-1 rounded border border-blue-200">
                                           {t.batch || 'N/A'}
                                       </span>

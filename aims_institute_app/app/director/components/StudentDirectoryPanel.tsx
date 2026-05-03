@@ -13,6 +13,12 @@ interface StudentRecord {
   batch: string; address?: string; dob?: string; feeTotal: number; feePaid: number; feeRemaining: number;
   photoUrl?: string; 
   remarks?: string;  
+  // ✨ NEW: SIS Fields
+  fatherName?: string;
+  motherName?: string;
+  parentEmail?: string;
+  lastSchool?: string;
+  lastPercentage?: string;
 }
 
 interface Branch { id: string; name: string; }
@@ -313,7 +319,7 @@ export default function StudentDirectoryPanel({
                                             <td className="px-4 py-2 align-middle">
                                                 <div className="font-medium text-slate-700 text-xs">Parent of {s.name.split(' ')[0]}</div>
                                                 {s.address && (
-                                                    <div className="text-[10px] text-slate-400 mt-0.5 leading-tight max-w-45 truncate" title={s.address}>
+                                                    <div className="text-[10px] text-slate-400 mt-0.5 leading-tight truncate max-w-45" title={s.address}>
                                                         {s.address}
                                                     </div>
                                                 )}
@@ -406,16 +412,16 @@ export default function StudentDirectoryPanel({
                 )}
             </div>
 
-            {/* ✨ DARK MODE EDIT MODAL */}
+            {/* ✨ DARK MODE EDIT MODAL (Expanded for full SIS tracking) */}
             {editingStudent && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl text-slate-100 shadow-2xl relative my-8">
-                        <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl text-slate-100 shadow-2xl relative my-8">
+                        <div className="p-6 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-slate-900/90 backdrop-blur-md z-10 rounded-t-2xl">
                             <h3 className="text-xl font-bold flex items-center gap-2"><Edit size={20} className="text-blue-500"/> Edit Student Record</h3>
                             <button onClick={() => setEditingStudent(null)} className="text-slate-400 hover:text-white p-2 bg-slate-800 rounded-full transition"><X size={18}/></button>
                         </div>
                         
-                        <form onSubmit={submitEdit} className="p-6 space-y-5">
+                        <form onSubmit={submitEdit} className="p-6 space-y-6">
                             
                             <div className="flex flex-col sm:flex-row gap-6 items-start">
                                 {/* Photo Upload */}
@@ -467,26 +473,64 @@ export default function StudentDirectoryPanel({
                                 </div>
                             </div>
 
-                            <div className="border-t border-slate-800 pt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Parent Mobile</label>
-                                    <input className={darkInputStyle} value={editingStudent.parentMobile} onChange={e => setEditingStudent({...editingStudent, parentMobile: e.target.value})} maxLength={10} />
+                            {/* Academic History */}
+                            <div className="border-t border-slate-800 pt-5">
+                                <h4 className="text-xs font-bold text-slate-300 uppercase mb-3">Academic Background</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Last School Attended</label>
+                                        <input className={darkInputStyle} value={editingStudent.lastSchool || ''} onChange={e => setEditingStudent({...editingStudent, lastSchool: e.target.value})} placeholder="e.g. DPS Pune" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Last Percentage / Grade</label>
+                                        <input className={darkInputStyle} value={editingStudent.lastPercentage || ''} onChange={e => setEditingStudent({...editingStudent, lastPercentage: e.target.value})} placeholder="e.g. 85.5%" />
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Parent Password</label>
-                                    <input className={darkInputStyle} value={editingStudent.parentPassword || ''} onChange={e => setEditingStudent({...editingStudent, parentPassword: e.target.value})} />
+                            </div>
+
+                            {/* Parent Details */}
+                            <div className="border-t border-slate-800 pt-5">
+                                <h4 className="text-xs font-bold text-slate-300 uppercase mb-3">Parent / Guardian Details</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Father's Name</label>
+                                        <input className={darkInputStyle} value={editingStudent.fatherName || ''} onChange={e => setEditingStudent({...editingStudent, fatherName: e.target.value})} placeholder="Full Name" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Mother's Name</label>
+                                        <input className={darkInputStyle} value={editingStudent.motherName || ''} onChange={e => setEditingStudent({...editingStudent, motherName: e.target.value})} placeholder="Full Name" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Parent Email</label>
+                                        <input type="email" className={darkInputStyle} value={editingStudent.parentEmail || ''} onChange={e => setEditingStudent({...editingStudent, parentEmail: e.target.value})} placeholder="email@example.com" />
+                                    </div>
                                 </div>
-                                <div className="sm:col-span-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Parent Mobile (Login ID)</label>
+                                        <input className={darkInputStyle} required value={editingStudent.parentMobile} onChange={e => setEditingStudent({...editingStudent, parentMobile: e.target.value})} maxLength={10} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Parent Password</label>
+                                        <input className={darkInputStyle} value={editingStudent.parentPassword || ''} onChange={e => setEditingStudent({...editingStudent, parentPassword: e.target.value})} />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Contact & Remarks */}
+                            <div className="border-t border-slate-800 pt-5 grid grid-cols-1 gap-4">
+                                <div>
                                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Residential Address</label>
                                     <textarea className={darkInputStyle} rows={2} value={editingStudent.address || ''} onChange={e => setEditingStudent({...editingStudent, address: e.target.value})} />
                                 </div>
-                                <div className="sm:col-span-2">
+                                <div>
                                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Internal Remarks</label>
                                     <input className={darkInputStyle} value={editingStudent.remarks || ''} onChange={e => setEditingStudent({...editingStudent, remarks: e.target.value})} placeholder="Any internal notes or tags..." />
                                 </div>
                             </div>
 
-                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
+                            {/* Actions */}
+                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-800 sticky bottom-0 bg-slate-900 mt-4">
                                 <button type="button" onClick={() => setEditingStudent(null)} className="px-5 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 font-bold transition text-sm">Cancel</button>
                                 <button type="submit" disabled={isFetching} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold shadow-lg transition flex items-center gap-2 text-sm disabled:opacity-50">
                                     {isFetching ? <Loader2 size={16} className="animate-spin"/> : <CheckCircle size={16}/>} Save Changes
@@ -497,7 +541,7 @@ export default function StudentDirectoryPanel({
                 </div>
             )}
 
-            {/* ✨ PRINTABLE ADMISSION RECORD MODAL */}
+            {/* ✨ PRINTABLE ADMISSION RECORD MODAL (Fully Expanded) */}
             {printStudent && (
                 <div className="fixed inset-0 z-100 flex items-start justify-center bg-slate-900/80 backdrop-blur-sm overflow-y-auto print:bg-white print:fixed print:inset-0 print:z-9999 print:block">
                     <style jsx global>{`
@@ -512,7 +556,7 @@ export default function StudentDirectoryPanel({
                     <div className="print-a4 bg-white w-[210mm] min-h-[297mm] p-[15mm] relative shadow-2xl my-8 mx-auto flex flex-col text-slate-900">
                         
                         {/* Print Header */}
-                        <div className="flex justify-between items-start border-b-4 border-[#c1121f] pb-6 mb-8">
+                        <div className="flex justify-between items-start border-b-4 border-[#c1121f] pb-6 mb-6">
                             <div className="flex flex-col gap-2 justify-center mt-2">
                                 <div className="relative w-64 h-16">
                                     <Image src="/mainpage.png" alt="AIMS Logo" fill className="object-contain object-left" unoptimized />
@@ -538,13 +582,17 @@ export default function StudentDirectoryPanel({
                         <div className="flex-1">
                             
                             <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b-2 border-slate-200 pb-1 mb-4">Academic & Personal Details</h3>
-                            <div className="grid grid-cols-2 gap-6 mb-8">
+                            <div className="grid grid-cols-2 gap-6 mb-6">
                                 <div className="space-y-4">
                                     <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Full Name</span><span className="text-base font-bold">{printStudent.name}</span></div>
                                     <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Date of Birth</span><span className="text-base font-bold">{printStudent.dob ? new Date(printStudent.dob).toLocaleDateString() : 'Not Provided'}</span></div>
+                                    <div className="flex gap-4">
+                                        <div className="flex-1"><span className="text-[10px] font-bold text-slate-500 uppercase block">Last School Attended</span><span className="text-sm font-medium">{printStudent.lastSchool || 'Not Provided'}</span></div>
+                                        <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Grade / %</span><span className="text-sm font-medium">{printStudent.lastPercentage || 'N/A'}</span></div>
+                                    </div>
                                     <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Residential Address</span><span className="text-sm font-medium">{printStudent.address || 'Not Provided'}</span></div>
                                 </div>
-                                <div className="space-y-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
+                                <div className="space-y-4 bg-slate-50 p-4 rounded-lg border border-slate-200 h-fit">
                                     <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Student ID / Username</span><span className="text-lg font-mono font-black text-[#c1121f]">{printStudent.studentId}</span></div>
                                     <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Student Password</span><span className="text-sm font-mono font-bold text-slate-700">{printStudent.studentPassword || '******'}</span></div>
                                     <div>
@@ -555,16 +603,21 @@ export default function StudentDirectoryPanel({
                             </div>
 
                             <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b-2 border-slate-200 pb-1 mb-4">Parent / Guardian Details</h3>
-                            <div className="grid grid-cols-2 gap-6 mb-8">
-                                <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Guardian Mobile</span><span className="text-base font-bold font-mono">{printStudent.parentMobile}</span></div>
-                                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 flex justify-between items-center">
+                            <div className="grid grid-cols-2 gap-6 mb-6">
+                                <div className="space-y-4">
+                                    <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Father's Name</span><span className="text-sm font-bold">{printStudent.fatherName || 'Not Provided'}</span></div>
+                                    <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Mother's Name</span><span className="text-sm font-bold">{printStudent.motherName || 'Not Provided'}</span></div>
+                                    <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Parent Email</span><span className="text-sm font-medium">{printStudent.parentEmail || 'Not Provided'}</span></div>
+                                    <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Guardian Mobile</span><span className="text-base font-bold font-mono">{printStudent.parentMobile}</span></div>
+                                </div>
+                                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 flex flex-col justify-center gap-4 h-fit">
                                     <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Parent Login ID</span><span className="text-lg font-mono font-black text-purple-700">{printStudent.parentId}</span></div>
-                                    <div className="text-right"><span className="text-[10px] font-bold text-slate-500 uppercase block">Password</span><span className="text-sm font-mono font-bold text-slate-700">{printStudent.parentPassword || '******'}</span></div>
+                                    <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Parent Password</span><span className="text-sm font-mono font-bold text-slate-700">{printStudent.parentPassword || '******'}</span></div>
                                 </div>
                             </div>
 
                             <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b-2 border-slate-200 pb-1 mb-4">Financial Summary</h3>
-                            <div className="grid grid-cols-3 gap-4 mb-8">
+                            <div className="grid grid-cols-3 gap-4 mb-6">
                                 <div className="p-4 border-2 border-slate-200 rounded-lg text-center">
                                     <span className="text-[10px] font-bold text-slate-500 uppercase block">Total Agreed Fee</span>
                                     <span className="text-xl font-black text-slate-800">₹{printStudent.feeTotal.toLocaleString()}</span>
@@ -582,21 +635,21 @@ export default function StudentDirectoryPanel({
                             {/* Remarks Section */}
                             {printStudent.remarks && (
                                 <>
-                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b-2 border-slate-200 pb-1 mb-2 mt-8">Internal Remarks</h3>
+                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b-2 border-slate-200 pb-1 mb-2 mt-4">Internal Remarks</h3>
                                     <p className="text-sm text-slate-700 italic border-l-4 border-yellow-400 pl-3 py-1 bg-yellow-50">{printStudent.remarks}</p>
                                 </>
                             )}
                         </div>
 
                         {/* Print Footer */}
-                        <div className="border-t-2 border-slate-300 pt-6 mt-12 flex justify-between items-end">
-                            <div className="text-xs text-slate-500">
+                        <div className="border-t-2 border-slate-300 pt-4 mt-8 flex justify-between items-end">
+                            <div className="text-[10px] text-slate-500 leading-tight">
                                 <p><strong>Note:</strong> This is a computer-generated admission record.</p>
                                 <p>Please keep your login credentials safe and secure.</p>
                             </div>
                             <div className="text-center">
-                                <div className="w-40 border-b border-slate-400 mb-2"></div>
-                                <p className="text-xs font-bold text-slate-800 uppercase">Authorized Signature</p>
+                                <div className="w-40 border-b border-slate-400 mb-1"></div>
+                                <p className="text-[10px] font-bold text-slate-800 uppercase">Authorized Signature</p>
                             </div>
                         </div>
 

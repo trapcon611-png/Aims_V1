@@ -316,17 +316,18 @@ export const directorApi = {
       return await parseJsonSafely(res); 
   },
 
-  async updateEnquiryStatus(id: string, status: string, followUpCount?: number) { 
+  // ✨ UPDATED: Added newRemark parameter to support Logs
+  async updateEnquiryStatus(id: string, status: string, followUpCount?: number, newRemark?: string) { 
       const res = await fetchWithAuth(`${API_URL}/erp/enquiries/${id}/status`, { 
           method: 'PATCH', 
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` }, 
-          body: JSON.stringify({ status, followUpCount }) 
+          body: JSON.stringify({ status, followUpCount, newRemark }) 
       }); 
       if (!res.ok) throw new Error('Failed to update enquiry'); 
       return await parseJsonSafely(res); 
   },
 
-  // ✨ NEW: DELETE ENQUIRY API CALL
+  // ✨ DELETE ENQUIRY API CALL
   async deleteEnquiry(id: string) {
       const res = await fetchWithAuth(`${API_URL}/erp/enquiries/${id}`, {
           method: 'DELETE',
@@ -369,6 +370,7 @@ export const directorApi = {
       }); 
   },
 
+  // --- NOTICES ---
   async getNotices() { 
       try { 
           const res = await fetchWithAuth(`${API_URL}/erp/notices`, { 
@@ -398,7 +400,7 @@ export const directorApi = {
       }); 
   },
 
-  // --- ACADEMICS ---
+  // --- ACADEMICS & ATTENDANCE ---
   async getExams() { 
       try { 
           const res = await fetchWithAuth(`${API_URL}/erp/exams`, { 
@@ -409,5 +411,32 @@ export const directorApi = {
       } catch (e) { 
           return []; 
       } 
+  },
+
+  // ✨ NEW: Added support for the upcoming Attendance Panel
+  async getAttendanceStats(batchId: string, month?: number, year?: number) {
+      try {
+          let url = `${API_URL}/erp/academics/attendance?batchId=${batchId}`;
+          if (month) url += `&month=${month}`;
+          if (year) url += `&year=${year}`;
+
+          const res = await fetchWithAuth(url, {
+              headers: { 'Authorization': `Bearer ${this.getToken()}` }
+          });
+          if (!res.ok) return [];
+          return await parseJsonSafely(res, []);
+      } catch (e) {
+          return [];
+      }
+  },
+
+  async saveAttendance(data: any) {
+      const res = await fetchWithAuth(`${API_URL}/erp/attendance`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` },
+          body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('Failed to save attendance');
+      return await parseJsonSafely(res);
   }
 };

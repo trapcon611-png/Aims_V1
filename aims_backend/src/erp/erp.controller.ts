@@ -79,13 +79,13 @@ export class ErpController {
     return this.erpService.getFinancialSummary();
   }
 
+  // ✨ UPDATED: Accept manual dates for fee collection
   @Post('fees')
   @Roles('SUPER_ADMIN')
-  collectFee(@Body() data: { studentId: string; amount: number; remarks?: string; paymentMode?: string; transactionId?: string }) {
+  collectFee(@Body() data: { studentId: string; amount: number; remarks?: string; paymentMode?: string; transactionId?: string; date?: string }) {
     return this.erpService.collectFee(data);
   }
 
-  // --- FEE HISTORY ---
   @Get('fees')
   @Roles('SUPER_ADMIN')
   getAllFees() {
@@ -135,17 +135,26 @@ export class ErpController {
     return this.erpService.createQuestionInBank(dto);
   }
 
-  // --- ACADEMICS ---
+  // --- ACADEMICS & ATTENDANCE ---
   @Get('academics/results')
   @Roles('SUPER_ADMIN', 'TEACHER')
   getExamResults(@Query('examId') examId: string, @Query('batchId') batchId: string) {
     return this.erpService.getExamResults(examId, batchId);
   }
 
+  // ✨ UPDATED: Supports Monthly Reporting via Queries
   @Get('academics/attendance')
   @Roles('SUPER_ADMIN', 'TEACHER')
-  getAttendanceStats(@Query('batchId') batchId: string) {
-    return this.erpService.getAttendanceStats(batchId);
+  getAttendanceStats(
+      @Query('batchId') batchId: string,
+      @Query('month') month?: string,
+      @Query('year') year?: string
+  ) {
+    return this.erpService.getAttendanceStats(
+        batchId, 
+        month ? parseInt(month) : undefined, 
+        year ? parseInt(year) : undefined
+    );
   }
 
   @Post('marks')
@@ -249,13 +258,13 @@ export class ErpController {
     return this.erpService.createEnquiry(data);
   }
 
+  // ✨ UPDATED: Accept newRemark in the body for the logs
   @Patch('enquiries/:id/status')
   @Roles('SUPER_ADMIN', 'TEACHER')
-  updateEnquiryStatus(@Param('id') id: string, @Body() body: { status: string, followUpCount?: number }) {
-    return this.erpService.updateEnquiryStatus(id, body.status, body.followUpCount);
+  updateEnquiryStatus(@Param('id') id: string, @Body() body: { status: string, followUpCount?: number, newRemark?: string }) {
+    return this.erpService.updateEnquiryStatus(id, body.status, body.followUpCount, body.newRemark);
   }
 
-  // ✨ DELETE ENQUIRY
   @Delete('enquiries/:id')
   @Roles('SUPER_ADMIN', 'TEACHER')
   deleteEnquiry(@Param('id') id: string) {
