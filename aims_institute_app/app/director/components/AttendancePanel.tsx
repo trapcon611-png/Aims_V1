@@ -1,18 +1,20 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Users, CheckCircle, Loader2, CalendarDays, BarChart3, Clock, BookOpen, AlertCircle, Check, X } from 'lucide-react';
+import { Users, CheckCircle, Loader2, CalendarDays, BarChart3, Clock, BookOpen, AlertCircle, Check, X, MapPin } from 'lucide-react';
 import { directorApi } from '../services/directorApi';
 
 interface AttendancePanelProps {
+  branches: any[]; // ✨ NEW: Branch Support
   batches: any[];
-  students: any[]; // We pass students directly so we don't have to fetch them again!
+  students: any[];
 }
 
-export default function AttendancePanel({ batches, students }: AttendancePanelProps) {
+export default function AttendancePanel({ branches, batches, students }: AttendancePanelProps) {
   // --- TABS ---
   const [activeTab, setActiveTab] = useState<'MARK' | 'REPORT'>('MARK');
 
   // --- MARK ATTENDANCE STATE ---
+  const [markBranchId, setMarkBranchId] = useState(''); // ✨ NEW
   const [markBatchId, setMarkBatchId] = useState('');
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
   const [attendanceSubject, setAttendanceSubject] = useState('General');
@@ -21,6 +23,7 @@ export default function AttendancePanel({ batches, students }: AttendancePanelPr
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // --- MONTHLY REPORT STATE ---
+  const [reportBranchId, setReportBranchId] = useState(''); // ✨ NEW
   const [reportBatchId, setReportBatchId] = useState('');
   const [reportMonth, setReportMonth] = useState(new Date().getMonth() + 1); // 1-12
   const [reportYear, setReportYear] = useState(new Date().getFullYear());
@@ -150,13 +153,36 @@ export default function AttendancePanel({ batches, students }: AttendancePanelPr
                         <Users size={18} className="text-[#c1121f]"/> Setup Register
                     </h3>
                     <div className="space-y-4">
+                        
+                        {/* ✨ NEW: Filter by Branch */}
+                        <div>
+                            <label className={labelStyle}>Filter by Branch</label>
+                            <div className="relative">
+                                <MapPin size={14} className="absolute left-3 top-3.5 text-blue-500"/>
+                                <select 
+                                    className={inputStyle + " pl-9 font-bold text-blue-700 bg-blue-50/50"} 
+                                    value={markBranchId} 
+                                    onChange={e => {
+                                        setMarkBranchId(e.target.value);
+                                        setMarkBatchId(''); // Reset batch when branch changes
+                                    }}
+                                >
+                                    <option value="">-- All Branches --</option>
+                                    {branches.map(br => <option key={br.id} value={br.id}>{br.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
+
                         <div>
                             <label className={labelStyle}>Select Batch</label>
-                            <select className={inputStyle + " font-bold text-blue-700 bg-blue-50"} value={markBatchId} onChange={e => setMarkBatchId(e.target.value)}>
+                            <select className={inputStyle + " font-bold text-slate-800 bg-slate-50"} value={markBatchId} onChange={e => setMarkBatchId(e.target.value)}>
                                 <option value="">-- Choose Batch --</option>
-                                {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                {batches
+                                    .filter(b => markBranchId ? b.branchId === markBranchId : true)
+                                    .map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                             </select>
                         </div>
+
                         <div>
                             <label className={labelStyle}>Date of Class</label>
                             <input type="date" className={inputStyle} value={attendanceDate} onChange={e => setAttendanceDate(e.target.value)} />
@@ -164,14 +190,14 @@ export default function AttendancePanel({ batches, students }: AttendancePanelPr
                         <div>
                             <label className={labelStyle}>Subject / Topic</label>
                             <div className="relative">
-                                <BookOpen size={14} className="absolute left-3 top-3 text-slate-400"/>
+                                <BookOpen size={14} className="absolute left-3 top-3.5 text-slate-400"/>
                                 <input type="text" className={inputStyle + " pl-9"} placeholder="e.g. Physics - Thermodynamics" value={attendanceSubject} onChange={e => setAttendanceSubject(e.target.value)} />
                             </div>
                         </div>
                         <div>
                             <label className={labelStyle}>Class Timing</label>
                             <div className="relative">
-                                <Clock size={14} className="absolute left-3 top-3 text-slate-400"/>
+                                <Clock size={14} className="absolute left-3 top-3.5 text-slate-400"/>
                                 <input type="text" className={inputStyle + " pl-9"} placeholder="e.g. 10:00 AM - 12:00 PM" value={attendanceTime} onChange={e => setAttendanceTime(e.target.value)} />
                             </div>
                         </div>
@@ -250,13 +276,33 @@ export default function AttendancePanel({ batches, students }: AttendancePanelPr
                 
                 {/* Report Filters */}
                 <div className="p-6 border-b border-slate-200 bg-slate-50 flex flex-wrap gap-4 items-end">
-                    <div className="flex-1 min-w-[200px]">
-                        <label className={labelStyle}>Select Batch</label>
-                        <select className={inputStyle + " font-bold text-blue-700 bg-white"} value={reportBatchId} onChange={e => setReportBatchId(e.target.value)}>
-                            <option value="">-- Choose Batch --</option>
-                            {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    
+                    {/* ✨ NEW: Filter by Branch for Reports */}
+                    <div className="w-full md:w-48">
+                        <label className={labelStyle}>Filter by Branch</label>
+                        <select 
+                            className={inputStyle + " font-bold text-blue-700 bg-blue-50/50"} 
+                            value={reportBranchId} 
+                            onChange={e => {
+                                setReportBranchId(e.target.value);
+                                setReportBatchId(''); // Reset batch when branch changes
+                            }}
+                        >
+                            <option value="">-- All Branches --</option>
+                            {branches.map(br => <option key={br.id} value={br.id}>{br.name}</option>)}
                         </select>
                     </div>
+
+                    <div className="flex-1 min-w-[200px]">
+                        <label className={labelStyle}>Select Batch</label>
+                        <select className={inputStyle + " font-bold text-slate-800 bg-white"} value={reportBatchId} onChange={e => setReportBatchId(e.target.value)}>
+                            <option value="">-- Choose Batch --</option>
+                            {batches
+                                .filter(b => reportBranchId ? b.branchId === reportBranchId : true)
+                                .map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                        </select>
+                    </div>
+                    
                     <div className="w-48">
                         <label className={labelStyle}>Select Month</label>
                         <select className={inputStyle} value={reportMonth} onChange={e => setReportMonth(Number(e.target.value))}>
@@ -266,6 +312,7 @@ export default function AttendancePanel({ batches, students }: AttendancePanelPr
                             ].map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
                         </select>
                     </div>
+                    
                     <div className="w-32">
                         <label className={labelStyle}>Select Year</label>
                         <select className={inputStyle} value={reportYear} onChange={e => setReportYear(Number(e.target.value))}>

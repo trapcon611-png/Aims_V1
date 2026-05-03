@@ -505,9 +505,8 @@ export default function DirectorPage() {
            {activeTab === 'content' && <ContentPanel batches={batches} students={students} />}
            {activeTab === 'carousel' && <CarouselPanel />}
            
-           {/* ✨ NEW ATTENDANCE PANEL */}
-           {activeTab === 'attendance' && <AttendancePanel batches={batches} students={students} />}
-
+          {/* ✨ NEW ATTENDANCE PANEL */}
+{activeTab === 'attendance' && <AttendancePanel branches={branches} batches={batches} students={students} />}
            {/* --- INLINE TABS (ENQUIRIES) --- */}
            {activeTab === 'enquiries' && (
              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto p-8 relative">
