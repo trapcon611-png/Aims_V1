@@ -18,6 +18,7 @@ interface StudentRecord {
   parentEmail?: string;
   lastSchool?: string;
   lastPercentage?: string;
+  joinedAt?: string; // ✨ Ensures joinedAt is typed correctly
 }
 
 interface Branch { id: string; name: string; }
@@ -50,6 +51,7 @@ export default function StudentDirectoryPanel({
     // --- MODAL STATES ---
     const [printStudent, setPrintStudent] = useState<StudentRecord | null>(null);
     const [editingStudent, setEditingStudent] = useState<StudentRecord | null>(null);
+    const [editBranchFilter, setEditBranchFilter] = useState(''); // ✨ NEW: Branch Filter for the Edit Modal
 
     // --- STYLES ---
     const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl transition-all duration-300 overflow-hidden";
@@ -121,6 +123,14 @@ export default function StudentDirectoryPanel({
     const handleEditClick = (student: StudentRecord, e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent opening print modal
         setEditingStudent({ ...student });
+        
+        // Auto-detect the branch of the student's current batch
+        const batchObj = batches.find(b => b.name === student.batch);
+        if (batchObj && batchObj.branchId) {
+            setEditBranchFilter(batchObj.branchId);
+        } else {
+            setEditBranchFilter('');
+        }
     };
 
     const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -462,16 +472,32 @@ export default function StudentDirectoryPanel({
                                         </div>
 
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            {/* ✨ NEW: Filter Batches by Branch inside Edit Modal */}
                                             <div>
-                                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Student Password</label>
-                                                <input className={darkInputStyle} value={editingStudent.studentPassword || ''} onChange={e => setEditingStudent({...editingStudent, studentPassword: e.target.value})} />
+                                                <label className="block text-[10px] font-bold text-blue-400 uppercase mb-1">Filter Batch by Branch</label>
+                                                <select className={darkInputStyle + " border-blue-800 bg-blue-950/30"} value={editBranchFilter} onChange={e => {
+                                                    setEditBranchFilter(e.target.value);
+                                                    setEditingStudent({...editingStudent, batch: ''}); // clear batch when branch changes
+                                                }}>
+                                                    <option value="">-- All Branches --</option>
+                                                    {branches.map(br => <option key={br.id} value={br.id}>{br.name}</option>)}
+                                                </select>
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Batch Assignment</label>
                                                 <select className={darkInputStyle} value={editingStudent.batch} onChange={e => setEditingStudent({...editingStudent, batch: e.target.value})}>
-                                                    {batches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+                                                    <option value="">-- Select Batch --</option>
+                                                    {batches
+                                                        .filter(b => editBranchFilter ? b.branchId === editBranchFilter : true)
+                                                        .map(b => <option key={b.id} value={b.name}>{b.name}</option>)
+                                                    }
                                                 </select>
                                             </div>
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Student Password</label>
+                                            <input className={darkInputStyle} value={editingStudent.studentPassword || ''} onChange={e => setEditingStudent({...editingStudent, studentPassword: e.target.value})} />
                                         </div>
                                     </div>
                                 </div>
@@ -545,7 +571,7 @@ export default function StudentDirectoryPanel({
                 </div>
             )}
 
-            {/* ✨ PRINTABLE ADMISSION RECORD MODAL (Mobile Removed) */}
+            {/* ✨ PRINTABLE ADMISSION RECORD MODAL */}
             {printStudent && (
                 <div className="fixed inset-0 z-100 flex items-start justify-center bg-slate-900/80 backdrop-blur-sm overflow-y-auto print:bg-white print:fixed print:inset-0 print:z-9999 print:block">
                     <style jsx global>{`
@@ -590,6 +616,8 @@ export default function StudentDirectoryPanel({
                                 <div className="space-y-4">
                                     <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Full Name</span><span className="text-base font-bold">{printStudent.name}</span></div>
                                     <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Date of Birth</span><span className="text-base font-bold">{printStudent.dob ? new Date(printStudent.dob).toLocaleDateString() : 'Not Provided'}</span></div>
+                                    {/* ✨ NEW: Date of Admission */}
+                                    <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Date of Admission</span><span className="text-base font-bold">{printStudent.joinedAt ? new Date(printStudent.joinedAt).toLocaleDateString() : 'Not Available'}</span></div>
                                     <div className="flex gap-4">
                                         <div className="flex-1"><span className="text-[10px] font-bold text-slate-500 uppercase block">Last School Attended</span><span className="text-sm font-medium">{printStudent.lastSchool || 'Not Provided'}</span></div>
                                         <div><span className="text-[10px] font-bold text-slate-500 uppercase block">Grade / %</span><span className="text-sm font-medium">{printStudent.lastPercentage || 'N/A'}</span></div>
@@ -606,7 +634,6 @@ export default function StudentDirectoryPanel({
                                 </div>
                             </div>
 
-                            {/* ✨ REMOVED GUARDIAN MOBILE FROM PRINT VIEW */}
                             <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b-2 border-slate-200 pb-1 mb-4">Parent / Guardian Details</h3>
                             <div className="grid grid-cols-2 gap-6 mb-6">
                                 <div className="space-y-4">

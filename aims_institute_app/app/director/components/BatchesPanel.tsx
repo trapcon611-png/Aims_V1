@@ -13,13 +13,13 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
   const [activeTab, setActiveTab] = useState<'BATCHES' | 'BRANCHES'>('BATCHES');
   
   // Create Form States
-  // ✨ UPDATED: Added "address" to the branch state
   const [newBranch, setNewBranch] = useState({ name: '', city: '', address: '' });
   const [newBatch, setNewBatch] = useState({ name: '', startYear: '', fee: 0, branchId: '' });
 
   // Inline Edit State
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editFee, setEditFee] = useState(0);
+  const [editBranchId, setEditBranchId] = useState<string>(''); // ✨ NEW: Inline edit branch state
 
   const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl transition-all duration-300";
   const inputStyle = "w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:ring-2 focus:ring-[#c1121f] outline-none transition";
@@ -80,17 +80,24 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
       } catch (e) { alert("Failed to delete batch."); }
   };
 
+  // ✨ UPDATED: Now captures the branchId when editing starts
   const startEdit = (b: any) => {
       setEditingId(b.id);
       setEditFee(b.fee);
+      setEditBranchId(b.branchId || '');
   };
 
+  // ✨ UPDATED: Now sends both fee and branchId to the backend
   const saveEdit = async () => {
       if (!editingId) return;
       try {
-          await directorApi.updateBatch(editingId, { fee: editFee });
+          await directorApi.updateBatch(editingId, { 
+              fee: editFee, 
+              branchId: editBranchId === '' ? null : editBranchId 
+          });
           setEditingId(null);
           fetchData();
+          onRefresh(); // Refresh parent to push branch changes globally
       } catch (e) { alert("Update failed"); }
   };
 
@@ -131,7 +138,6 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
                      <label className={labelStyle}>City</label>
                      <input className={inputStyle} placeholder="e.g. Pune" value={newBranch.city} onChange={(e) => setNewBranch({...newBranch, city: e.target.value})} />
                  </div>
-                 {/* ✨ NEW: Branch Address Field */}
                  <div className="col-span-2">
                      <label className={labelStyle}>Full Address (Prints on Fee Receipts)</label>
                      <textarea 
@@ -228,13 +234,26 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
                           <div className="flex justify-between items-start pr-8">
                               <div>
                                   <h4 className="font-bold text-slate-800 text-base">{b.name}</h4>
-                                  <div className="flex gap-2 mt-1">
+                                  <div className="flex gap-2 mt-1 items-center">
                                       <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded uppercase">
                                           Year: {b.startYear}
                                       </span>
-                                      <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded uppercase border border-blue-100 flex items-center gap-1">
-                                          <MapPin size={10}/> {b.branch?.name || getBranchName(b.branchId)}
-                                      </span>
+                                      
+                                      {/* ✨ NEW: Inline Branch Editing Dropdown */}
+                                      {editingId === b.id ? (
+                                          <select 
+                                              className="text-[10px] font-bold text-blue-700 bg-white border border-[#c1121f] rounded px-1 py-0.5 outline-none"
+                                              value={editBranchId}
+                                              onChange={e => setEditBranchId(e.target.value)}
+                                          >
+                                              <option value="">Global / Unassigned</option>
+                                              {branches.map(br => <option key={br.id} value={br.id}>{br.name}</option>)}
+                                          </select>
+                                      ) : (
+                                          <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded uppercase border border-blue-100 flex items-center gap-1">
+                                              <MapPin size={10}/> {b.branch?.name || getBranchName(b.branchId)}
+                                          </span>
+                                      )}
                                   </div>
                               </div>
                               <div className="text-right">
@@ -292,14 +311,12 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
                               <div>
                                   <h4 className="font-bold text-slate-800 text-base">{br.name}</h4>
                                   <p className="text-xs text-slate-500 mt-0.5 font-medium">{br.city || 'Location not specified'}</p>
-                                  {/* ✨ Show Address Below */}
                                   {br.address && (
                                       <p className="text-[10px] text-slate-400 mt-1 max-w-xs">{br.address}</p>
                                   )}
                               </div>
                           </div>
                           
-                          {/* DELETE BRANCH BUTTON */}
                           <button 
                               onClick={() => handleDeleteBranch(br.id)} 
                               className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition opacity-0 group-hover:opacity-100"

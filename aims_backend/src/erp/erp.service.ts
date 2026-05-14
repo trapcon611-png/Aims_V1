@@ -94,7 +94,10 @@ export class ErpService {
   async updateBatch(id: string, data: any) {
       return this.prisma.batch.update({
           where: { id },
-          data: { fee: data.fee ? Number(data.fee) : undefined }
+          data: { 
+              fee: data.fee !== undefined ? Number(data.fee) : undefined,
+              branchId: data.branchId !== undefined ? data.branchId : undefined // ✨ Now accepts branch changes
+          }
       });
   }
 
