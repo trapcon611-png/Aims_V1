@@ -96,7 +96,8 @@ export class ErpService {
           where: { id },
           data: { 
               fee: data.fee !== undefined ? Number(data.fee) : undefined,
-              branchId: data.branchId !== undefined ? data.branchId : undefined // ✨ Now accepts branch changes
+              // ✨ Now accepts branch changes from the frontend
+              branchId: data.branchId !== undefined ? (data.branchId === '' ? null : data.branchId) : undefined 
           }
       });
   }

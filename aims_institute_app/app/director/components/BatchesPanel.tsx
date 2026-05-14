@@ -19,7 +19,7 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
   // Inline Edit State
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editFee, setEditFee] = useState(0);
-  const [editBranchId, setEditBranchId] = useState<string>(''); // ✨ NEW: Inline edit branch state
+  const [editBranchId, setEditBranchId] = useState<string>(''); // ✨ NEW: State to hold the branch being edited
 
   const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl transition-all duration-300";
   const inputStyle = "w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:ring-2 focus:ring-[#c1121f] outline-none transition";
@@ -80,21 +80,17 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
       } catch (e) { alert("Failed to delete batch."); }
   };
 
-  // ✨ UPDATED: Now captures the branchId when editing starts
   const startEdit = (b: any) => {
       setEditingId(b.id);
       setEditFee(b.fee);
-      setEditBranchId(b.branchId || '');
+      setEditBranchId(b.branchId || ''); // ✨ Capture current branch when editing starts
   };
 
-  // ✨ UPDATED: Now sends both fee and branchId to the backend
   const saveEdit = async () => {
       if (!editingId) return;
       try {
-          await directorApi.updateBatch(editingId, { 
-              fee: editFee, 
-              branchId: editBranchId === '' ? null : editBranchId 
-          });
+          // ✨ Send both the fee and the newly selected branch to the API
+          await directorApi.updateBatch(editingId, { fee: editFee, branchId: editBranchId });
           setEditingId(null);
           fetchData();
           onRefresh(); // Refresh parent to push branch changes globally
@@ -271,9 +267,10 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
                                           <button onClick={() => setEditingId(null)} className="p-1 bg-red-100 text-red-700 rounded hover:bg-red-200"><X size={14}/></button>
                                       </div>
                                   ) : (
-                                      <div className="flex items-center gap-2 justify-end group/edit">
-                                          <span className="text-lg font-black text-green-600">₹{b.fee.toLocaleString()}</span>
-                                          <button onClick={() => startEdit(b)} className="text-slate-300 hover:text-blue-600 opacity-0 group-hover/edit:opacity-100 transition">
+                                      <div className="flex items-center gap-2 justify-end">
+                                          <span className="text-lg font-black text-green-600">₹{b.fee?.toLocaleString()}</span>
+                                          {/* Keep edit button visible */}
+                                          <button onClick={() => startEdit(b)} className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition" title="Edit Batch">
                                               <Edit2 size={14}/>
                                           </button>
                                       </div>
