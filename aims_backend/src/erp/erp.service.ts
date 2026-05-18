@@ -645,6 +645,7 @@ export class ErpService {
             password: hashedStudentPass, 
             visiblePassword: input.studentPassword, 
             role: Role.STUDENT, 
+            createdAt: input.joinedAt ? new Date(input.joinedAt) : undefined,
             studentProfile: { 
                 create: { 
                     fullName: input.studentName, 

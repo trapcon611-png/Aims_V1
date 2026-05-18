@@ -18,16 +18,17 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
   // Track if user has manually edited the schedule to prevent auto-overwrite
   const [isManualSchedule, setIsManualSchedule] = useState(false);
 
-  // ✨ UPDATED: Added all new SIS tracking fields to the state
+  // ✨ UPDATED: Added joinedAt for Date of Admission
   const [admissionData, setAdmissionData] = useState({
     studentName: '', studentId: '', studentPassword: '', studentPhone: '', 
     address: '', batchId: '', fees: 0, waiveOff: 0, penalty: 0, 
     installments: 1, installmentSchedule: [] as InstallmentPlan[], 
     parentId: '', parentPassword: '', parentPhone: '',
-    agreedDate: new Date().toISOString().split('T')[0], withGst: false, dob: '',
+    joinedAt: new Date().toISOString().split('T')[0], // ✨ New: Admission Date
+    withGst: false, dob: '',
     photoUrl: '', remarks: '',
-    fatherName: '', motherName: '', parentEmail: '', // New Parent Details
-    lastSchool: '', lastPercentage: ''               // New Academic Details
+    fatherName: '', motherName: '', parentEmail: '', 
+    lastSchool: '', lastPercentage: ''               
   });
 
   // --- THEME STYLES ---
@@ -63,14 +64,13 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
           const selected = localBatches.find(b => b.id === admissionData.batchId);
           if (selected) {
               setAdmissionData(prev => ({ ...prev, fees: selected.fee, installments: 1 }));
-              setIsManualSchedule(false); // Fixed: Reset manual schedule state independently
+              setIsManualSchedule(false); // Reset manual schedule state independently
           }
       }
   }, [admissionData.batchId, localBatches]);
 
-  // Fee Calculation Logic (Auto-Generate Schedule)
+  // Fee Calculation Logic (Auto-Generate Schedule based on Admission Date)
   useEffect(() => {
-    // Only auto-calculate if user hasn't manually edited specific rows
     if (isManualSchedule) return;
 
     let basePayable = Math.max(0, admissionData.fees - admissionData.waiveOff);
@@ -81,7 +81,8 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
     const remainder = basePayable % count;
     
     const newSchedule: InstallmentPlan[] = [];
-    const startDate = new Date(admissionData.agreedDate);
+    // ✨ Use joinedAt (Admission Date) as the start date for the fee schedule
+    const startDate = new Date(admissionData.joinedAt);
     
     for (let i = 0; i < count; i++) {
         const date = new Date(startDate);
@@ -93,7 +94,7 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
         });
     }
     setAdmissionData(prev => ({ ...prev, installmentSchedule: newSchedule }));
-  }, [admissionData.fees, admissionData.waiveOff, admissionData.installments, admissionData.agreedDate, admissionData.withGst, isManualSchedule]);
+  }, [admissionData.fees, admissionData.waiveOff, admissionData.installments, admissionData.joinedAt, admissionData.withGst, isManualSchedule]);
 
   // Handle Manual Edit of Schedule
   const handleScheduleEdit = (index: number, field: 'amount' | 'dueDate', value: any) => {
@@ -103,7 +104,7 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
       setAdmissionData(prev => ({ ...prev, installmentSchedule: updated }));
   };
 
-  // ✨ Handle Photo Upload (Convert to Base64 instantly)
+  // Handle Photo Upload (Convert to Base64 instantly)
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (file) {
@@ -134,17 +135,17 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
         }
     }
 
-    // 🚨 Lock the button to prevent double-click submissions
     setIsProcessing(true);
     setStatus('Processing...');
     
     try {
         const finalFee = admissionData.withGst ? Math.round(admissionData.fees * 1.18) : admissionData.fees;
-        await directorApi.registerStudent({ ...admissionData, fees: finalFee });
+        // Pass agreedDate as joinedAt just in case backend expects it for fee agreement logic
+        await directorApi.registerStudent({ ...admissionData, fees: finalFee, agreedDate: admissionData.joinedAt });
         
         setStatus('Success! Student Registered.');
         
-        // Reset all fields including new SIS data
+        // Reset all fields
         setAdmissionData({ 
             studentName: '', studentId: '', studentPassword: '', 
             parentId: '', parentPassword: '', studentPhone: '', parentPhone: '',
@@ -152,17 +153,17 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
             photoUrl: '', remarks: '', address: '', dob: '',
             fatherName: '', motherName: '', parentEmail: '',
             lastSchool: '', lastPercentage: '',
-            agreedDate: new Date().toISOString().split('T')[0], withGst: false,
+            joinedAt: new Date().toISOString().split('T')[0], // Reset Date
+            withGst: false,
             installmentSchedule: []
         });
-        setIsManualSchedule(false); // Fixed: Reset manual schedule properly
+        setIsManualSchedule(false); 
         
         onRefresh();
     } catch (e: any) { 
-        // 🚨 This gracefully catches our new duplicate ID error message!
         setStatus(`Error: ${e.message}`); 
     } finally {
-        setIsProcessing(false); // Unlock the button
+        setIsProcessing(false); 
     }
   };
 
@@ -217,15 +218,22 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                        </div>
                    </div>
 
-                   {/* Name & DOB right next to Photo */}
+                   {/* Name, DOB & ADMISSION DATE */}
                    <div className="flex-1 space-y-4">
                        <div>
                            <label className={labelStyle}>Full Name</label>
                            <input className={inputStyle} required placeholder="Enter Name" value={admissionData.studentName} onChange={e => setAdmissionData({...admissionData, studentName: e.target.value})} />
                        </div>
-                       <div>
-                            <label className={labelStyle}>Date of Birth</label>
-                            <input type="date" className={inputStyle} value={admissionData.dob} onChange={e => setAdmissionData({...admissionData, dob: e.target.value})} />
+                       <div className="grid grid-cols-2 gap-4">
+                           <div>
+                                <label className={labelStyle}>Date of Birth</label>
+                                <input type="date" className={inputStyle} value={admissionData.dob} onChange={e => setAdmissionData({...admissionData, dob: e.target.value})} />
+                           </div>
+                           {/* ✨ NEW: Date of Admission */}
+                           <div>
+                                <label className={labelStyle}>Date of Admission</label>
+                                <input type="date" className={inputStyle} required value={admissionData.joinedAt} onChange={e => setAdmissionData({...admissionData, joinedAt: e.target.value})} />
+                           </div>
                        </div>
                    </div>
                </div>
@@ -298,7 +306,7 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                        </div>
                    </div>
 
-                   {/* ✨ Academic History */}
+                   {/* Academic History */}
                    <div className="col-span-2 grid grid-cols-2 gap-4 pt-2 border-t border-slate-100 mt-2">
                        <div>
                            <label className={labelStyle}>Last School Attended</label>
@@ -315,7 +323,6 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                        <textarea className={inputStyle} rows={2} placeholder="Full address..." value={admissionData.address} onChange={(e) => setAdmissionData({...admissionData, address: e.target.value})} />
                    </div>
 
-                   {/* Internal Remarks */}
                    <div className="col-span-2">
                        <label className={labelStyle}>Internal Remarks / Academic Details</label>
                        <input className={inputStyle} placeholder="e.g. Needs extra attention in Physics / Scholarship 10%" value={admissionData.remarks} onChange={(e) => setAdmissionData({...admissionData, remarks: e.target.value})} />
@@ -324,7 +331,6 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
 
                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2 mt-8">Parent Details</h3>
                <div className="space-y-4">
-                   {/* ✨ Expanded Parent Details */}
                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label className={labelStyle}>Father's Name</label>
