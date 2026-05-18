@@ -7,37 +7,33 @@ interface InstallmentPlan { id: number; amount: number; dueDate: string; }
 
 export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[], onRefresh: () => void }) {
   const [status, setStatus] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false); // 🚨 The Loading Lock
+  const [isProcessing, setIsProcessing] = useState(false); 
   
   const [localBatches, setLocalBatches] = useState<any[]>(batches || []);
-  const [branches, setBranches] = useState<any[]>([]); // ✨ Branches state
+  const [branches, setBranches] = useState<any[]>([]); 
   const [isLoadingData, setIsLoadingData] = useState(false);
   
-  const [branchFilter, setBranchFilter] = useState(''); // Selected Branch Filter
+  const [branchFilter, setBranchFilter] = useState(''); 
   
-  // Track if user has manually edited the schedule to prevent auto-overwrite
   const [isManualSchedule, setIsManualSchedule] = useState(false);
 
-  // ✨ UPDATED: Added joinedAt for Date of Admission
   const [admissionData, setAdmissionData] = useState({
     studentName: '', studentId: '', studentPassword: '', studentPhone: '', 
     address: '', batchId: '', fees: 0, waiveOff: 0, penalty: 0, 
     installments: 1, installmentSchedule: [] as InstallmentPlan[], 
     parentId: '', parentPassword: '', parentPhone: '',
-    joinedAt: new Date().toISOString().split('T')[0], // ✨ New: Admission Date
+    joinedAt: new Date().toISOString().split('T')[0], 
     withGst: false, dob: '',
     photoUrl: '', remarks: '',
     fatherName: '', motherName: '', parentEmail: '', 
     lastSchool: '', lastPercentage: ''               
   });
 
-  // --- THEME STYLES ---
   const inputStyle = "w-full p-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-[#c1121f] focus:border-[#c1121f] outline-none transition font-medium text-sm";
   const redInputStyle = "w-full p-2.5 bg-white border border-red-200 rounded-lg text-red-900 focus:ring-2 focus:ring-[#c1121f] outline-none transition font-bold placeholder:text-red-300 text-sm";
   const labelStyle = "block text-[10px] font-bold text-slate-500 uppercase mb-1 tracking-wide";
   const redLabelStyle = "block text-[10px] font-bold text-red-700 uppercase mb-1 tracking-wide";
 
-  // --- DATA FETCHING ---
   const fetchData = async () => {
       setIsLoadingData(true);
       try {
@@ -58,13 +54,12 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
       fetchData();
   }, []);
 
-  // Update Fees when Batch is selected
   useEffect(() => {
       if (admissionData.batchId) {
           const selected = localBatches.find(b => b.id === admissionData.batchId);
           if (selected) {
               setAdmissionData(prev => ({ ...prev, fees: selected.fee, installments: 1 }));
-              setIsManualSchedule(false); // Reset manual schedule state independently
+              setIsManualSchedule(false); 
           }
       }
   }, [admissionData.batchId, localBatches]);
@@ -81,8 +76,12 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
     const remainder = basePayable % count;
     
     const newSchedule: InstallmentPlan[] = [];
-    // ✨ Use joinedAt (Admission Date) as the start date for the fee schedule
-    const startDate = new Date(admissionData.joinedAt);
+    
+    // ✨ BUG FIX: Prevent crash if user is typing an incomplete date!
+    let startDate = new Date(admissionData.joinedAt);
+    if (isNaN(startDate.getTime())) {
+        startDate = new Date(); // Fallback to today safely without crashing
+    }
     
     for (let i = 0; i < count; i++) {
         const date = new Date(startDate);
@@ -96,15 +95,13 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
     setAdmissionData(prev => ({ ...prev, installmentSchedule: newSchedule }));
   }, [admissionData.fees, admissionData.waiveOff, admissionData.installments, admissionData.joinedAt, admissionData.withGst, isManualSchedule]);
 
-  // Handle Manual Edit of Schedule
   const handleScheduleEdit = (index: number, field: 'amount' | 'dueDate', value: any) => {
-      setIsManualSchedule(true); // Lock auto-calc
+      setIsManualSchedule(true); 
       const updated = [...admissionData.installmentSchedule];
       updated[index] = { ...updated[index], [field]: value };
       setAdmissionData(prev => ({ ...prev, installmentSchedule: updated }));
   };
 
-  // Handle Photo Upload (Convert to Base64 instantly)
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (file) {
@@ -124,7 +121,6 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
         return;
     }
 
-    // Validation: Ensure installments sum up to total
     const totalScheduled = admissionData.installmentSchedule.reduce((sum, item) => sum + Number(item.amount), 0);
     let expectedTotal = Math.max(0, admissionData.fees - admissionData.waiveOff);
     if (admissionData.withGst) expectedTotal = Math.round(expectedTotal * 1.18);
@@ -140,12 +136,10 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
     
     try {
         const finalFee = admissionData.withGst ? Math.round(admissionData.fees * 1.18) : admissionData.fees;
-        // Pass agreedDate as joinedAt just in case backend expects it for fee agreement logic
         await directorApi.registerStudent({ ...admissionData, fees: finalFee, agreedDate: admissionData.joinedAt });
         
         setStatus('Success! Student Registered.');
         
-        // Reset all fields
         setAdmissionData({ 
             studentName: '', studentId: '', studentPassword: '', 
             parentId: '', parentPassword: '', studentPhone: '', parentPhone: '',
@@ -153,7 +147,7 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
             photoUrl: '', remarks: '', address: '', dob: '',
             fatherName: '', motherName: '', parentEmail: '',
             lastSchool: '', lastPercentage: '',
-            joinedAt: new Date().toISOString().split('T')[0], // Reset Date
+            joinedAt: new Date().toISOString().split('T')[0], 
             withGst: false,
             installmentSchedule: []
         });
@@ -171,7 +165,6 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
     <div className="max-w-5xl mx-auto py-8 px-4">
       <div className="bg-white border border-slate-200 shadow-xl rounded-2xl overflow-hidden">
         
-        {/* Header */}
         <div className="bg-slate-900 p-5 flex justify-between items-center text-white">
             <h2 className="text-lg font-bold flex items-center gap-2">
                 <UserPlus className="text-[#c1121f]" size={20} /> New Admission
@@ -181,7 +174,6 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
             </div>
         </div>
 
-        {/* Status Banner */}
         {status && (
             <div className={`mx-6 mt-6 p-3 rounded-lg text-sm font-bold border flex items-center gap-2 ${status.includes('Error') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
                 {status.includes('Success') ? <CheckCircle size={16}/> : <AlertCircle size={16}/>}
@@ -192,13 +184,10 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
         <form onSubmit={handleAdmission} className="p-6 md:p-8">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             
-            {/* LEFT COLUMN: Student Details */}
             <div className="lg:col-span-7 space-y-6">
                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2">Student Info</h3>
                
-               {/* Top Row with Photo & Name */}
                <div className="flex gap-6 items-start">
-                   {/* Photo Upload Box */}
                    <div className="flex flex-col items-center gap-2 shrink-0">
                        <div className="w-24 h-28 bg-slate-50 border-2 border-dashed border-slate-300 rounded-lg overflow-hidden relative group flex items-center justify-center transition-colors hover:border-blue-400">
                            {admissionData.photoUrl ? (
@@ -218,7 +207,6 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                        </div>
                    </div>
 
-                   {/* Name, DOB & ADMISSION DATE */}
                    <div className="flex-1 space-y-4">
                        <div>
                            <label className={labelStyle}>Full Name</label>
@@ -229,7 +217,6 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                                 <label className={labelStyle}>Date of Birth</label>
                                 <input type="date" className={inputStyle} value={admissionData.dob} onChange={e => setAdmissionData({...admissionData, dob: e.target.value})} />
                            </div>
-                           {/* ✨ NEW: Date of Admission */}
                            <div>
                                 <label className={labelStyle}>Date of Admission</label>
                                 <input type="date" className={inputStyle} required value={admissionData.joinedAt} onChange={e => setAdmissionData({...admissionData, joinedAt: e.target.value})} />
@@ -254,7 +241,6 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                         <input className={inputStyle} required placeholder="Set Password" value={admissionData.studentPassword} onChange={e => setAdmissionData({...admissionData, studentPassword: e.target.value})} />
                    </div>
 
-                   {/* DYNAMIC BRANCH & BATCH ASSIGNMENT */}
                    <div className="col-span-2 grid grid-cols-2 gap-4">
                        <div>
                            <label className={labelStyle}>Filter by Branch</label>
@@ -264,7 +250,7 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                                   value={branchFilter} 
                                   onChange={e => {
                                       setBranchFilter(e.target.value);
-                                      setAdmissionData({...admissionData, batchId: ''}); // Reset batch on branch change
+                                      setAdmissionData({...admissionData, batchId: ''});
                                   }}
                                >
                                    <option value="">-- All Branches --</option>
@@ -306,7 +292,6 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                        </div>
                    </div>
 
-                   {/* Academic History */}
                    <div className="col-span-2 grid grid-cols-2 gap-4 pt-2 border-t border-slate-100 mt-2">
                        <div>
                            <label className={labelStyle}>Last School Attended</label>
@@ -363,7 +348,6 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                </div>
             </div>
 
-            {/* RIGHT COLUMN: Fees & Installments */}
             <div className="lg:col-span-5 space-y-6">
                 <div className="bg-red-50 p-6 rounded-xl border-2 border-red-100 shadow-inner relative overflow-hidden h-full flex flex-col">
                    
