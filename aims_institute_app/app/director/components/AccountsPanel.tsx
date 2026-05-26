@@ -12,10 +12,22 @@ export default function AccountsPanel({ students }: { students: any[] }) {
   // --- STATE ---
   // Forms
   const [feeForm, setFeeForm] = useState({ 
-      studentId: '', amount: 0, remarks: '', paymentMode: 'CASH', 
-      transactionId: '', withGst: false, 
-      date: new Date().toISOString().split('T')[0] 
+      studentId: '', 
+      amount: 0, 
+      remarks: '', 
+      paymentMode: 'CASH', 
+      transactionId: '', 
+      withGst: false, 
+      date: new Date().toISOString().split('T')[0],
+      
+      // ✨ AUTO-BREAKDOWN FIELDS
+      tuitionFee: 0, 
+      dressFee: 0, 
+      booksFee: 0,
+      extraFeeName: '', 
+      extraFeeAmount: 0
   });
+
   const [newExpense, setNewExpense] = useState({ title: '', amount: 0, category: 'General' });
   
   // Student Search State (For Collect Fee Form)
@@ -47,7 +59,9 @@ export default function AccountsPanel({ students }: { students: any[] }) {
   // Styles
   const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl transition-all duration-300";
   const inputStyle = "w-full p-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-[#c1121f] focus:border-[#c1121f] outline-none transition font-medium text-sm";
+  const redInputStyle = "w-full p-2.5 bg-white border border-red-200 rounded-lg text-red-900 focus:ring-2 focus:ring-[#c1121f] outline-none transition font-bold placeholder:text-red-300 text-sm";
   const labelStyle = "block text-[10px] font-bold text-slate-500 uppercase mb-1 tracking-wide";
+  const redLabelStyle = "block text-[10px] font-bold text-red-700 uppercase mb-1 tracking-wide";
 
   // --- DATA LOADING ---
   const refreshData = async () => {
@@ -158,6 +172,28 @@ export default function AccountsPanel({ students }: { students: any[] }) {
       currentPage * ITEMS_PER_PAGE
   );
 
+  // ✨ AUTO-BREAKDOWN LOGIC (80/10/10 Split)
+  const handleAmountChange = (val: number) => {
+      const tuition = Math.round(val * 0.8);
+      const books = Math.round(val * 0.1);
+      const dress = val - tuition - books; // Remainder to guarantee 100% match
+      setFeeForm(prev => ({ 
+          ...prev, 
+          amount: val, 
+          tuitionFee: tuition, 
+          booksFee: books, 
+          dressFee: dress 
+      }));
+  };
+
+  const handleBreakdownChange = (field: string, val: number) => {
+      setFeeForm(prev => {
+          const updated = { ...prev, [field]: val };
+          updated.amount = (updated.tuitionFee || 0) + (updated.dressFee || 0) + (updated.booksFee || 0) + (updated.extraFeeAmount || 0);
+          return updated;
+      });
+  };
+
   // --- HANDLERS ---
   const handleCollectFee = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -169,7 +205,28 @@ export default function AccountsPanel({ students }: { students: any[] }) {
       if (!student) return;
       
       try {
-          const res = await directorApi.collectFee(feeForm);
+          // ✨ TIME FIX: Keep current exact time when generating the date string
+          const paymentDate = new Date();
+          if (feeForm.date) {
+              const [y, m, d] = feeForm.date.split('-');
+              paymentDate.setFullYear(Number(y), Number(m) - 1, Number(d));
+          }
+
+          const feeBreakdown = {
+              tuition: feeForm.tuitionFee,
+              dress: feeForm.dressFee,
+              books: feeForm.booksFee,
+              extraName: feeForm.extraFeeName,
+              extraAmount: feeForm.extraFeeAmount
+          };
+
+          const payload = {
+              ...feeForm,
+              date: paymentDate.toISOString(),
+              feeBreakdown
+          };
+
+          const res = await directorApi.collectFee(payload);
           
           // ✨ DYNAMIC BRANCH ADDRESS LOOKUP FOR INSTANT RECEIPT
           const studentBatch = batches.find(b => b.name === student.batch);
@@ -181,9 +238,10 @@ export default function AccountsPanel({ students }: { students: any[] }) {
               batch: student.batch, 
               studentId: student.id, 
               displayId: student.studentId,
-              date: feeForm.date ? new Date(feeForm.date).toISOString() : new Date().toISOString(),
+              date: paymentDate.toISOString(),
+              feeBreakdown: feeBreakdown,
               branchName: studentBranch?.name || null,
-              branchAddress: studentBranch?.address || null, 
+              branchAddress: studentBranch?.address || null,
               branchCity: studentBranch?.city || null
           };
           
@@ -194,10 +252,12 @@ export default function AccountsPanel({ students }: { students: any[] }) {
           setShowInvoice(true);
           
           refreshData(); 
+          // Reset form including the date back to today
           setFeeForm({ 
               studentId: '', amount: 0, remarks: '', paymentMode: 'CASH', 
               transactionId: '', withGst: false, 
-              date: new Date().toISOString().split('T')[0] 
+              date: new Date().toISOString().split('T')[0],
+              tuitionFee: 0, dressFee: 0, booksFee: 0, extraFeeName: '', extraFeeAmount: 0 
           });
           setStudentSearchQuery(''); 
       } catch (e) { alert("Failed to record fee"); }
@@ -213,12 +273,12 @@ export default function AccountsPanel({ students }: { students: any[] }) {
       } catch(e) { alert("Failed to log expense"); }
   };
 
-  // ✨ SECURE DAILY EXPENSE DELETION
+  // ✨ SECURE WORKING EXPENSE DELETION
   const handleDeleteExpense = async (id: string) => {
-      if (!window.confirm("Are you sure you want to delete this expense?")) return;
+      if (!window.confirm("Are you sure you want to delete this expense log?")) return;
       try {
           await directorApi.deleteExpense(id);
-          setExpenses(prev => prev.filter(exp => exp.id !== id));
+          setExpenses(prev => prev.filter(e => e.id !== id));
           refreshData(); 
       } catch (e) { alert("Failed to delete expense."); }
   };
@@ -377,15 +437,84 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                       )}
                   </div>
                   
-                  {/* ✨ UPDATED: Added Payment Date input using a 3-column grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                          <label className={labelStyle}>Amount (₹)</label>
-                          <input type="number" className={inputStyle} placeholder="0" value={feeForm.amount} onChange={e => setFeeForm({...feeForm, amount: +e.target.value})} required/>
-                      </div>
+                  {/* ✨ FEE BREAKDOWN FORM */}
+                  <div className="mb-2">
+                       <label className={labelStyle}>Total Amount Received (₹)</label>
+                       <input 
+                           type="number" 
+                           className={`${inputStyle} bg-emerald-50 border-emerald-200 font-black text-emerald-800`} 
+                           placeholder="0" 
+                           value={feeForm.amount || ''} 
+                           onChange={e => handleAmountChange(+e.target.value)} 
+                           required
+                       />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3 mb-2">
+                       <div>
+                           <label className={labelStyle}>Tuition (₹)</label>
+                           <input 
+                               type="number" 
+                               className={inputStyle} 
+                               placeholder="0" 
+                               value={feeForm.tuitionFee || ''} 
+                               onChange={e => handleBreakdownChange('tuitionFee', +e.target.value)}
+                           />
+                       </div>
+                       <div>
+                           <label className={labelStyle}>Dress (₹)</label>
+                           <input 
+                               type="number" 
+                               className={inputStyle} 
+                               placeholder="0" 
+                               value={feeForm.dressFee || ''} 
+                               onChange={e => handleBreakdownChange('dressFee', +e.target.value)}
+                           />
+                       </div>
+                       <div>
+                           <label className={labelStyle}>Books (₹)</label>
+                           <input 
+                               type="number" 
+                               className={inputStyle} 
+                               placeholder="0" 
+                               value={feeForm.booksFee || ''} 
+                               onChange={e => handleBreakdownChange('booksFee', +e.target.value)}
+                           />
+                       </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                       <div>
+                           <label className={labelStyle}>Extra Fee Name (Opt.)</label>
+                           <input 
+                               type="text" 
+                               className={inputStyle} 
+                               placeholder="e.g. Fines" 
+                               value={feeForm.extraFeeName} 
+                               onChange={e => setFeeForm({...feeForm, extraFeeName: e.target.value})}
+                           />
+                       </div>
+                       <div>
+                           <label className={labelStyle}>Extra Amount (₹)</label>
+                           <input 
+                               type="number" 
+                               className={inputStyle} 
+                               placeholder="0" 
+                               value={feeForm.extraFeeAmount || ''} 
+                               onChange={e => handleBreakdownChange('extraFeeAmount', +e.target.value)}
+                           />
+                       </div>
+                  </div>
+
+                  {/* REST OF THE FORM */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                           <label className={labelStyle}>Payment Mode</label>
-                          <select className={inputStyle} value={feeForm.paymentMode} onChange={e => setFeeForm({...feeForm, paymentMode: e.target.value})}>
+                          <select 
+                              className={inputStyle} 
+                              value={feeForm.paymentMode} 
+                              onChange={e => setFeeForm({...feeForm, paymentMode: e.target.value})}
+                          >
                               <option>CASH</option>
                               <option>ONLINE</option>
                               <option>CHEQUE</option>
@@ -406,11 +535,23 @@ export default function AccountsPanel({ students }: { students: any[] }) {
 
                   <div>
                       <label className={labelStyle}>Transaction Ref / Remarks</label>
-                      <input type="text" className={inputStyle} placeholder="e.g. UPI Ref No..." value={feeForm.remarks} onChange={e => setFeeForm({...feeForm, remarks: e.target.value})}/>
+                      <input 
+                          type="text" 
+                          className={inputStyle} 
+                          placeholder="e.g. UPI Ref No..." 
+                          value={feeForm.remarks} 
+                          onChange={e => setFeeForm({...feeForm, remarks: e.target.value})}
+                      />
                   </div>
 
                   <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                      <input type="checkbox" id="gstToggle" checked={feeForm.withGst} onChange={e => setFeeForm({...feeForm, withGst: e.target.checked})} className="w-4 h-4 accent-[#c1121f]" />
+                      <input 
+                          type="checkbox" 
+                          id="gstToggle" 
+                          checked={feeForm.withGst} 
+                          onChange={e => setFeeForm({...feeForm, withGst: e.target.checked})} 
+                          className="w-4 h-4 accent-[#c1121f]" 
+                      />
                       <label htmlFor="gstToggle" className="text-xs font-bold text-slate-600 flex items-center gap-2 cursor-pointer select-none">
                           <Percent size={14} className="text-[#c1121f]"/> Generate GST Invoice (+18%)
                       </label>
@@ -430,17 +571,34 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                <form onSubmit={handleAddExpense} className="space-y-5">
                    <div>
                        <label className={labelStyle}>Expense Title / Description</label>
-                       <input className={inputStyle} placeholder="e.g. Electricity Bill" value={newExpense.title} onChange={e => setNewExpense({...newExpense, title: e.target.value})} required/>
+                       <input 
+                           className={inputStyle} 
+                           placeholder="e.g. Electricity Bill" 
+                           value={newExpense.title} 
+                           onChange={e => setNewExpense({...newExpense, title: e.target.value})} 
+                           required
+                       />
                    </div>
                    
                    <div className="grid grid-cols-2 gap-4">
                        <div>
                            <label className={labelStyle}>Amount (₹)</label>
-                           <input type="number" className={inputStyle} placeholder="0" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: +e.target.value})} required/>
+                           <input 
+                               type="number" 
+                               className={inputStyle} 
+                               placeholder="0" 
+                               value={newExpense.amount} 
+                               onChange={e => setNewExpense({...newExpense, amount: +e.target.value})} 
+                               required
+                           />
                        </div>
                        <div>
                            <label className={labelStyle}>Category</label>
-                           <select className={inputStyle} value={newExpense.category} onChange={e => setNewExpense({...newExpense, category: e.target.value})}>
+                           <select 
+                               className={inputStyle} 
+                               value={newExpense.category} 
+                               onChange={e => setNewExpense({...newExpense, category: e.target.value})}
+                           >
                                <option>General</option>
                                <option>Salary</option>
                                <option>Infrastructure</option>
@@ -459,24 +617,31 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                <div className="mt-8">
                    <h4 className="text-xs font-bold text-slate-400 uppercase mb-3 tracking-widest">Recent Expenses</h4>
                    <div className="max-h-56 overflow-y-auto custom-scrollbar space-y-2">
-                       {expenses.length === 0 ? <p className="text-xs text-slate-400 italic text-center py-4">No expenses logged.</p> : expenses.map(exp => (
-                           <div key={exp.id} className="flex justify-between items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100 hover:border-red-100 transition group">
-                               <div>
-                                   <div className="font-bold text-slate-700">{exp.title}</div>
-                                   <div className="text-[10px] text-slate-400">{new Date(exp.date).toLocaleDateString()} • {exp.category}</div>
+                       {expenses.length === 0 ? (
+                           <p className="text-xs text-slate-400 italic text-center py-4">No expenses logged.</p>
+                       ) : (
+                           expenses.map(exp => (
+                               <div key={exp.id} className="flex justify-between items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100 hover:border-red-100 transition group">
+                                   <div>
+                                       <div className="font-bold text-slate-700">{exp.title}</div>
+                                       <div className="text-[10px] text-slate-400">
+                                           {new Date(exp.date).toLocaleDateString()} • {exp.category}
+                                       </div>
+                                   </div>
+                                   <div className="flex items-center gap-3">
+                                       <span className="font-mono font-bold text-slate-900">₹{exp.amount}</span>
+                                       {/* ✨ EXPENSE DELETION BUTTON */}
+                                       <button 
+                                           onClick={() => handleDeleteExpense(exp.id)}
+                                           className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                                           title="Delete Expense"
+                                       >
+                                           <Trash2 size={14}/>
+                                       </button>
+                                   </div>
                                </div>
-                               <div className="flex items-center gap-3">
-                                   <span className="font-mono font-bold text-slate-900">₹{exp.amount}</span>
-                                   <button 
-                                      onClick={() => handleDeleteExpense(exp.id)} 
-                                      className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100" 
-                                      title="Delete Expense"
-                                   >
-                                       <Trash2 size={14}/>
-                                   </button>
-                               </div>
-                           </div>
-                       ))}
+                           ))
+                       )}
                    </div>
                </div>
           </div>
@@ -501,7 +666,7 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                               className={inputStyle + " pl-9"} 
                               placeholder="Name, ID..." 
                               value={searchQuery}
-                              onChange={e => setSearchQuery(e.target.value)}
+                              onChange={e => setSearchQuery(e.target.value)} 
                           />
                           <Search size={16} className="absolute left-3 top-3.5 text-slate-400"/>
                       </div>
@@ -513,7 +678,7 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                           type="date" 
                           className={inputStyle} 
                           value={dateFilter}
-                          onChange={e => setDateFilter(e.target.value)}
+                          onChange={e => setDateFilter(e.target.value)} 
                       />
                   </div>
 
@@ -531,7 +696,7 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                   
                   <div>
                       <button 
-                          onClick={() => { setSearchQuery(''); setDateFilter(''); setBatchFilter(''); }}
+                          onClick={() => { setSearchQuery(''); setDateFilter(''); setBatchFilter(''); }} 
                           className="h-[42px] px-4 bg-slate-200 hover:bg-slate-300 rounded-lg text-slate-600 transition font-bold text-xs flex items-center gap-2"
                       >
                           <X size={14}/> Clear
@@ -554,9 +719,15 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm">
                       {isLoading ? (
-                           <tr><td colSpan={6} className="px-6 py-10 text-center text-slate-400 italic flex justify-center items-center gap-2"><Loader2 className="animate-spin"/> Loading records...</td></tr>
+                           <tr>
+                               <td colSpan={6} className="px-6 py-10 text-center text-slate-400 italic flex justify-center items-center gap-2">
+                                   <Loader2 className="animate-spin"/> Loading records...
+                               </td>
+                           </tr>
                       ) : paginatedTransactions.length === 0 ? (
-                          <tr><td colSpan={6} className="px-6 py-10 text-center text-slate-400 italic">No transactions found.</td></tr>
+                          <tr>
+                              <td colSpan={6} className="px-6 py-10 text-center text-slate-400 italic">No transactions found.</td>
+                          </tr>
                       ) : (
                           paginatedTransactions.map(t => (
                               <tr key={t.id} className="hover:bg-slate-50 transition">
@@ -583,7 +754,6 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                                   <td className="px-6 py-4 text-center">
                                       <button 
                                           onClick={() => { 
-                                              // ✨ LIVE BRANCH LOOKUP FOR HISTORICAL RECEIPTS
                                               const studentBatch = batches.find(b => b.name === t.batch);
                                               const studentBranch = branches.find(br => br.id === studentBatch?.branchId);
                                               
@@ -608,7 +778,6 @@ export default function AccountsPanel({ students }: { students: any[] }) {
               </table>
           </div>
           
-          {/* ✨ PAGINATION FOOTER */}
           {totalPages > 1 && (
             <div className="p-4 border-t border-slate-200 bg-white flex justify-between items-center text-xs">
                 <span className="text-slate-500 font-bold">Page {currentPage} of {totalPages}</span>

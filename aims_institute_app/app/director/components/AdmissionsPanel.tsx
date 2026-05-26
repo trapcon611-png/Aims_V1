@@ -17,17 +17,13 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
   
   const [isManualSchedule, setIsManualSchedule] = useState(false);
 
-  // ✨ UPDATED: Added detailed fee breakdown fields
   const [admissionData, setAdmissionData] = useState({
     studentName: '', studentId: '', studentPassword: '', studentPhone: '', 
     address: '', batchId: '', 
     
-    // Fee Breakdown
-    tuitionFee: 0,
-    dressFee: 0,
-    booksFee: 0,
-    extraFeeName: '',
-    extraFeeAmount: 0,
+    fees: 0, // Master Total Fee
+    tuitionFee: 0, dressFee: 0, booksFee: 0, 
+    extraFeeName: '', extraFeeAmount: 0,
     
     waiveOff: 0, penalty: 0, 
     installments: 1, installmentSchedule: [] as InstallmentPlan[], 
@@ -38,9 +34,6 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
     fatherName: '', motherName: '', parentEmail: '', 
     lastSchool: '', lastPercentage: ''               
   });
-
-  // Calculate the live subtotal of all fee components
-  const totalCalculatedFee = (admissionData.tuitionFee || 0) + (admissionData.dressFee || 0) + (admissionData.booksFee || 0) + (admissionData.extraFeeAmount || 0);
 
   const inputStyle = "w-full p-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-[#c1121f] focus:border-[#c1121f] outline-none transition font-medium text-sm";
   const redInputStyle = "w-full p-2.5 bg-white border border-red-200 rounded-lg text-red-900 focus:ring-2 focus:ring-[#c1121f] outline-none transition font-bold placeholder:text-red-300 text-sm";
@@ -63,20 +56,42 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
       }
   };
 
-  useEffect(() => {
-      fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
-  // When Batch changes, reset fee breakdown and set Tuition to Standard Fee
+  // ✨ AUTO-BREAKDOWN LOGIC
+  const calculateBreakdown = (total: number) => {
+      const tuition = Math.round(total * 0.8);
+      const books = Math.round(total * 0.1);
+      const dress = total - tuition - books; // Remainder to ensure it equals exactly 100%
+      return { tuition, books, dress };
+  };
+
+  const handleTotalFeeChange = (val: number) => {
+      const { tuition, books, dress } = calculateBreakdown(val);
+      setAdmissionData(prev => ({
+          ...prev, fees: val, tuitionFee: tuition, booksFee: books, dressFee: dress
+      }));
+  };
+
+  const handleBreakdownChange = (field: string, val: number) => {
+      setAdmissionData(prev => {
+          const updated = { ...prev, [field]: val };
+          updated.fees = (updated.tuitionFee || 0) + (updated.dressFee || 0) + (updated.booksFee || 0) + (updated.extraFeeAmount || 0);
+          return updated;
+      });
+  };
+
   useEffect(() => {
       if (admissionData.batchId) {
           const selected = localBatches.find(b => b.id === admissionData.batchId);
           if (selected) {
+              const { tuition, books, dress } = calculateBreakdown(selected.fee);
               setAdmissionData(prev => ({ 
                   ...prev, 
-                  tuitionFee: selected.fee, 
-                  dressFee: 0,
-                  booksFee: 0,
+                  fees: selected.fee,
+                  tuitionFee: tuition, 
+                  dressFee: dress,
+                  booksFee: books,
                   extraFeeName: '',
                   extraFeeAmount: 0,
                   installments: 1 
@@ -86,11 +101,10 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
       }
   }, [admissionData.batchId, localBatches]);
 
-  // Fee Calculation Logic (Auto-Generate Schedule based on Breakdown & Admission Date)
   useEffect(() => {
     if (isManualSchedule) return;
 
-    let basePayable = Math.max(0, totalCalculatedFee - admissionData.waiveOff);
+    let basePayable = Math.max(0, admissionData.fees - admissionData.waiveOff);
     if (admissionData.withGst) { basePayable = Math.round(basePayable * 1.18); }
     
     const count = admissionData.installments || 1;
@@ -100,21 +114,15 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
     const newSchedule: InstallmentPlan[] = [];
     
     let startDate = new Date(admissionData.joinedAt);
-    if (isNaN(startDate.getTime())) {
-        startDate = new Date(); 
-    }
+    if (isNaN(startDate.getTime())) startDate = new Date(); 
     
     for (let i = 0; i < count; i++) {
         const date = new Date(startDate);
         date.setMonth(startDate.getMonth() + i);
-        newSchedule.push({ 
-            id: i + 1, 
-            amount: i === 0 ? baseAmount + remainder : baseAmount, 
-            dueDate: date.toISOString().split('T')[0] 
-        });
+        newSchedule.push({ id: i + 1, amount: i === 0 ? baseAmount + remainder : baseAmount, dueDate: date.toISOString().split('T')[0] });
     }
     setAdmissionData(prev => ({ ...prev, installmentSchedule: newSchedule }));
-  }, [totalCalculatedFee, admissionData.waiveOff, admissionData.installments, admissionData.joinedAt, admissionData.withGst, isManualSchedule]);
+  }, [admissionData.fees, admissionData.waiveOff, admissionData.installments, admissionData.joinedAt, admissionData.withGst, isManualSchedule]);
 
   const handleScheduleEdit = (index: number, field: 'amount' | 'dueDate', value: any) => {
       setIsManualSchedule(true); 
@@ -127,69 +135,57 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
       const file = e.target.files?.[0];
       if (file) {
           const reader = new FileReader();
-          reader.onloadend = () => {
-              setAdmissionData({ ...admissionData, photoUrl: reader.result as string });
-          };
+          reader.onloadend = () => { setAdmissionData({ ...admissionData, photoUrl: reader.result as string }); };
           reader.readAsDataURL(file);
       }
   };
 
   const handleAdmission = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!admissionData.batchId) {
-        setStatus('Error: Please select a batch.');
-        return;
-    }
+    if (!admissionData.batchId) { setStatus('Error: Please select a batch.'); return; }
 
     const totalScheduled = admissionData.installmentSchedule.reduce((sum, item) => sum + Number(item.amount), 0);
-    let expectedTotal = Math.max(0, totalCalculatedFee - admissionData.waiveOff);
+    let expectedTotal = Math.max(0, admissionData.fees - admissionData.waiveOff);
     if (admissionData.withGst) expectedTotal = Math.round(expectedTotal * 1.18);
 
     if (totalScheduled !== expectedTotal) {
-        if(!confirm(`Warning: The installment sum (₹${totalScheduled}) does not match the Total Payable (₹${expectedTotal}). Proceed anyway?`)) {
-            return;
-        }
+        if(!confirm(`Warning: The installment sum (₹${totalScheduled}) does not match the Total Payable (₹${expectedTotal}). Proceed anyway?`)) return;
     }
 
     setIsProcessing(true);
     setStatus('Processing...');
     
     try {
-        const finalFee = admissionData.withGst ? Math.round(totalCalculatedFee * 1.18) : totalCalculatedFee;
+        const finalFee = admissionData.withGst ? Math.round(admissionData.fees * 1.18) : admissionData.fees;
         
-        // Pass the new fee breakdown structure so backend can save it for the invoice!
+        // ✨ TIME FIX: Keep exact current time when backdating
+        const joinDate = new Date();
+        if (admissionData.joinedAt) {
+            const [y, m, d] = admissionData.joinedAt.split('-');
+            joinDate.setFullYear(Number(y), Number(m) - 1, Number(d));
+        }
+
         const feeBreakdown = {
-            tuition: admissionData.tuitionFee,
-            dress: admissionData.dressFee,
-            books: admissionData.booksFee,
-            extraName: admissionData.extraFeeName,
-            extraAmount: admissionData.extraFeeAmount
+            tuition: admissionData.tuitionFee, dress: admissionData.dressFee,
+            books: admissionData.booksFee, extraName: admissionData.extraFeeName, extraAmount: admissionData.extraFeeAmount
         };
 
         await directorApi.registerStudent({ 
             ...admissionData, 
             fees: finalFee, 
-            agreedDate: admissionData.joinedAt,
-            feeBreakdown: feeBreakdown // ✨ Sent to Backend
+            joinedAt: joinDate.toISOString(), // Preserves HH:MM:SS
+            agreedDate: joinDate.toISOString(),
+            feeBreakdown: feeBreakdown 
         });
         
         setStatus('Success! Student Registered.');
-        
         setAdmissionData({ 
-            studentName: '', studentId: '', studentPassword: '', 
-            parentId: '', parentPassword: '', studentPhone: '', parentPhone: '',
-            tuitionFee: 0, dressFee: 0, booksFee: 0, extraFeeName: '', extraFeeAmount: 0, 
-            waiveOff: 0, penalty: 0, installments: 1, batchId: '',
-            photoUrl: '', remarks: '', address: '', dob: '',
-            fatherName: '', motherName: '', parentEmail: '',
-            lastSchool: '', lastPercentage: '',
-            joinedAt: new Date().toISOString().split('T')[0], 
-            withGst: false,
-            installmentSchedule: []
+            studentName: '', studentId: '', studentPassword: '', parentId: '', parentPassword: '', studentPhone: '', parentPhone: '',
+            tuitionFee: 0, dressFee: 0, booksFee: 0, extraFeeName: '', extraFeeAmount: 0, fees: 0, waiveOff: 0, penalty: 0, installments: 1, batchId: '',
+            photoUrl: '', remarks: '', address: '', dob: '', fatherName: '', motherName: '', parentEmail: '', lastSchool: '', lastPercentage: '',
+            joinedAt: new Date().toISOString().split('T')[0], withGst: false, installmentSchedule: []
         });
         setIsManualSchedule(false); 
-        
         onRefresh();
     } catch (e: any) { 
         setStatus(`Error: ${e.message}`); 
@@ -201,29 +197,21 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
   return (
     <div className="max-w-5xl mx-auto py-8 px-4">
       <div className="bg-white border border-slate-200 shadow-xl rounded-2xl overflow-hidden">
-        
         <div className="bg-slate-900 p-5 flex justify-between items-center text-white">
-            <h2 className="text-lg font-bold flex items-center gap-2">
-                <UserPlus className="text-[#c1121f]" size={20} /> New Admission
-            </h2>
-            <div className="text-[10px] text-slate-400 font-mono bg-slate-800 px-2 py-1 rounded">
-                ACADEMIC YEAR {new Date().getFullYear()}
-            </div>
+            <h2 className="text-lg font-bold flex items-center gap-2"><UserPlus className="text-[#c1121f]" size={20} /> New Admission</h2>
+            <div className="text-[10px] text-slate-400 font-mono bg-slate-800 px-2 py-1 rounded">ACADEMIC YEAR {new Date().getFullYear()}</div>
         </div>
 
         {status && (
             <div className={`mx-6 mt-6 p-3 rounded-lg text-sm font-bold border flex items-center gap-2 ${status.includes('Error') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
-                {status.includes('Success') ? <CheckCircle size={16}/> : <AlertCircle size={16}/>}
-                {status}
+                {status.includes('Success') ? <CheckCircle size={16}/> : <AlertCircle size={16}/>} {status}
             </div>
         )}
 
         <form onSubmit={handleAdmission} className="p-6 md:p-8">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            
             <div className="lg:col-span-7 space-y-6">
                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2">Student Info</h3>
-               
                <div className="flex gap-6 items-start">
                    <div className="flex flex-col items-center gap-2 shrink-0">
                        <div className="w-24 h-28 bg-slate-50 border-2 border-dashed border-slate-300 rounded-lg overflow-hidden relative group flex items-center justify-center transition-colors hover:border-blue-400">
@@ -267,12 +255,10 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                         <label className={labelStyle}>Mobile</label>
                         <input className={inputStyle} required placeholder="10-digit Mobile" value={admissionData.studentPhone} onChange={e => setAdmissionData({...admissionData, studentPhone: e.target.value})} maxLength={10} />
                    </div>
-
                    <div>
                         <label className={labelStyle}>Student Login ID</label>
                         <input className={inputStyle} required placeholder="e.g. STU_001" value={admissionData.studentId} onChange={e => setAdmissionData({...admissionData, studentId: e.target.value})} />
                    </div>
-                   
                    <div>
                         <label className={labelStyle}>Password</label>
                         <input className={inputStyle} required placeholder="Set Password" value={admissionData.studentPassword} onChange={e => setAdmissionData({...admissionData, studentPassword: e.target.value})} />
@@ -291,41 +277,24 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                                   }}
                                >
                                    <option value="">-- All Branches --</option>
-                                   {branches.map(br => (
-                                       <option key={br.id} value={br.id}>{br.name}</option>
-                                   ))}
+                                   {branches.map(br => ( <option key={br.id} value={br.id}>{br.name}</option> ))}
                                </select>
                                <MapPin size={14} className="absolute left-3 top-3.5 text-blue-500" />
                            </div>
                        </div>
-
                        <div>
                            <label className={labelStyle}>Assign Batch</label>
                            <div className="flex gap-2">
                                <select className={inputStyle} required value={admissionData.batchId} onChange={e => setAdmissionData({...admissionData, batchId: e.target.value})}>
                                    <option value="">-- Select Batch --</option>
-                                   {localBatches
-                                        .filter(b => branchFilter ? b.branchId === branchFilter : true)
-                                        .map(b => (
-                                       <option key={b.id} value={b.id}>
-                                           {b.name} ({b.startYear})
-                                       </option>
+                                   {localBatches.filter(b => branchFilter ? b.branchId === branchFilter : true).map(b => (
+                                       <option key={b.id} value={b.id}>{b.name} ({b.startYear})</option>
                                    ))}
                                </select>
-                               <button 
-                                    type="button"
-                                    onClick={fetchData}
-                                    className="p-2.5 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 text-slate-600 transition"
-                                    title="Refresh Batches"
-                               >
+                               <button type="button" onClick={fetchData} className="p-2.5 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 text-slate-600 transition" title="Refresh Batches">
                                    <RefreshCw size={18} className={isLoadingData ? "animate-spin" : ""} />
                                </button>
                            </div>
-                           {!isLoadingData && localBatches.length === 0 && (
-                                <p className="text-[10px] text-red-500 mt-1 font-bold flex items-center gap-1">
-                                    <AlertCircle size={10}/> No batches found. Please create one in the Batches tab first.
-                                </p>
-                           )}
                        </div>
                    </div>
 
@@ -385,10 +354,8 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                </div>
             </div>
 
-            {/* RIGHT COLUMN: Detailed Fee Breakdown & Installments */}
             <div className="lg:col-span-5 space-y-6">
                 <div className="bg-red-50 p-6 rounded-xl border-2 border-red-100 shadow-inner relative overflow-hidden h-full flex flex-col">
-                   
                    <div className="flex justify-between items-center mb-4 border-b border-red-200 pb-2">
                        <label className="text-sm font-black text-[#c1121f]">FEE STRUCTURE</label>
                        <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1 rounded border border-red-100 shadow-sm transition hover:bg-red-50">
@@ -397,23 +364,26 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                        </label>
                    </div>
                    
-                   {/* ✨ DETAILED FEE BREAKDOWN GRID */}
+                   <div className="mb-4">
+                       <label className={redLabelStyle}>Total Combined Fee</label>
+                       <input type="number" className={redInputStyle} placeholder="₹ 0" value={admissionData.fees || ''} onChange={e => handleTotalFeeChange(+e.target.value)}/>
+                   </div>
+
                    <div className="grid grid-cols-3 gap-3 mb-4">
                        <div>
                            <label className={redLabelStyle}>Tuition Fee</label>
-                           <input type="number" className={redInputStyle} placeholder="₹ 0" value={admissionData.tuitionFee || ''} onChange={e => setAdmissionData({...admissionData, tuitionFee: +e.target.value})}/>
+                           <input type="number" className={redInputStyle} placeholder="₹ 0" value={admissionData.tuitionFee || ''} onChange={e => handleBreakdownChange('tuitionFee', +e.target.value)}/>
                        </div>
                        <div>
                            <label className={redLabelStyle}>Dress Fee</label>
-                           <input type="number" className={redInputStyle} placeholder="₹ 0" value={admissionData.dressFee || ''} onChange={e => setAdmissionData({...admissionData, dressFee: +e.target.value})}/>
+                           <input type="number" className={redInputStyle} placeholder="₹ 0" value={admissionData.dressFee || ''} onChange={e => handleBreakdownChange('dressFee', +e.target.value)}/>
                        </div>
                        <div>
                            <label className={redLabelStyle}>Books Fee</label>
-                           <input type="number" className={redInputStyle} placeholder="₹ 0" value={admissionData.booksFee || ''} onChange={e => setAdmissionData({...admissionData, booksFee: +e.target.value})}/>
+                           <input type="number" className={redInputStyle} placeholder="₹ 0" value={admissionData.booksFee || ''} onChange={e => handleBreakdownChange('booksFee', +e.target.value)}/>
                        </div>
                    </div>
 
-                   {/* EXTRA FEE HEADER */}
                    <div className="grid grid-cols-2 gap-3 mb-6 bg-red-100/50 p-3 rounded-lg border border-red-100">
                        <div>
                            <label className={redLabelStyle}>Extra Fee Name (Opt.)</label>
@@ -421,36 +391,23 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                        </div>
                        <div>
                            <label className={redLabelStyle}>Extra Amount</label>
-                           <input type="number" className={redInputStyle} placeholder="₹ 0" value={admissionData.extraFeeAmount || ''} onChange={e => setAdmissionData({...admissionData, extraFeeAmount: +e.target.value})}/>
+                           <input type="number" className={redInputStyle} placeholder="₹ 0" value={admissionData.extraFeeAmount || ''} onChange={e => handleBreakdownChange('extraFeeAmount', +e.target.value)}/>
                        </div>
                    </div>
 
-                   {/* TOTALS & DISCOUNTS */}
-                   <div className="grid grid-cols-3 gap-3 mb-6 pt-4 border-t border-red-200">
+                   <div className="grid grid-cols-2 gap-3 mb-6 pt-4 border-t border-red-200">
                        <div>
-                           <label className={redLabelStyle}>Subtotal</label>
-                           <input type="number" readOnly className={`${redInputStyle} bg-red-100 text-red-800 border-red-300`} value={totalCalculatedFee}/>
-                       </div>
-                       <div>
-                           <label className={redLabelStyle}>Waive Off</label>
+                           <label className={redLabelStyle}>Waive Off (Discount)</label>
                            <input type="number" className={redInputStyle} placeholder="₹ 0" value={admissionData.waiveOff || ''} onChange={e => setAdmissionData({...admissionData, waiveOff: +e.target.value})}/>
                        </div>
                        <div>
                            <label className={redLabelStyle}>Installments</label>
-                           <select 
-                                className={redInputStyle} 
-                                value={admissionData.installments} 
-                                onChange={e => {
-                                    setAdmissionData({...admissionData, installments: +e.target.value});
-                                    setIsManualSchedule(false);
-                                }}
-                            >
+                           <select className={redInputStyle} value={admissionData.installments} onChange={e => { setAdmissionData({...admissionData, installments: +e.target.value}); setIsManualSchedule(false); }}>
                                {[1,2,3,4,6,9,12].map(n => <option key={n} value={n}>{n} Installments</option>)}
                            </select>
                        </div>
                    </div>
 
-                   {/* SCHEDULE GENERATOR */}
                    <div className="flex-1 bg-white rounded-lg border border-red-200 overflow-hidden mb-4">
                        <div className="bg-red-100 px-3 py-2 flex text-[10px] font-bold text-red-800 uppercase tracking-wider">
                            <div className="w-10 text-center">#</div>
@@ -460,24 +417,12 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                        <div className="max-h-50 overflow-y-auto custom-scrollbar">
                            {admissionData.installmentSchedule.map((inst, index) => (
                                <div key={index} className="flex border-b border-red-50 last:border-0 hover:bg-red-50/50 transition">
-                                   <div className="w-10 py-2.5 text-center text-red-300 font-bold text-xs bg-red-50/30">
-                                       {index + 1}
-                                   </div>
+                                   <div className="w-10 py-2.5 text-center text-red-300 font-bold text-xs bg-red-50/30">{index + 1}</div>
                                    <div className="flex-1 p-1">
-                                       <input 
-                                           type="date" 
-                                           className="w-full h-full bg-transparent text-xs font-medium text-slate-700 outline-none px-2 cursor-pointer focus:bg-red-50 rounded"
-                                           value={inst.dueDate}
-                                           onChange={(e) => handleScheduleEdit(index, 'dueDate', e.target.value)}
-                                       />
+                                       <input type="date" className="w-full h-full bg-transparent text-xs font-medium text-slate-700 outline-none px-2 cursor-pointer focus:bg-red-50 rounded" value={inst.dueDate} onChange={(e) => handleScheduleEdit(index, 'dueDate', e.target.value)}/>
                                    </div>
                                    <div className="w-24 p-1 border-l border-red-50">
-                                       <input 
-                                           type="number" 
-                                           className="w-full h-full bg-transparent text-xs font-bold text-red-700 outline-none text-right px-2 focus:bg-red-50 rounded"
-                                           value={inst.amount}
-                                           onChange={(e) => handleScheduleEdit(index, 'amount', Number(e.target.value))}
-                                       />
+                                       <input type="number" className="w-full h-full bg-transparent text-xs font-bold text-red-700 outline-none text-right px-2 focus:bg-red-50 rounded" value={inst.amount} onChange={(e) => handleScheduleEdit(index, 'amount', Number(e.target.value))}/>
                                    </div>
                                </div>
                            ))}
@@ -485,14 +430,10 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                    </div>
 
                    <div className="pt-2 border-t border-red-200 flex justify-between items-end">
-                       <div className="text-[10px] text-red-400 font-bold max-w-37.5">
-                           * Check schedule before confirming. Parents will see these exact dates.
-                       </div>
+                       <div className="text-[10px] text-red-400 font-bold max-w-37.5">* Check schedule before confirming. Parents will see these exact dates.</div>
                        <div className="text-right">
                            <span className="text-xs font-bold text-red-700 block">Net Payable</span>
-                           <span className="text-2xl font-black text-[#c1121f]">
-                               ₹ {admissionData.installmentSchedule.reduce((a, b) => a + Number(b.amount), 0).toLocaleString()}
-                           </span>
+                           <span className="text-2xl font-black text-[#c1121f]">₹ {admissionData.installmentSchedule.reduce((a, b) => a + Number(b.amount), 0).toLocaleString()}</span>
                        </div>
                    </div>
                 </div>
@@ -500,10 +441,7 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
           </div>
 
           <div className="mt-8 pt-6 border-t border-slate-200 flex justify-end items-center gap-4">
-            <button 
-                disabled={isProcessing}
-                className="bg-[#c1121f] hover:bg-red-800 disabled:opacity-50 text-white px-10 py-4 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95 text-sm uppercase tracking-wider w-full md:w-auto"
-            >
+            <button disabled={isProcessing} className="bg-[#c1121f] hover:bg-red-800 disabled:opacity-50 text-white px-10 py-4 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95 text-sm uppercase tracking-wider w-full md:w-auto">
               {isProcessing ? "Processing..." : <><CheckCircle size={18} /> Confirm Admission</>}
             </button>
           </div>

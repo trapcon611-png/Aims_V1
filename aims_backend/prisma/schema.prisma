@@ -62,6 +62,9 @@ model StudentProfile {
   installmentSchedule Json?           
   feeAgreementDate    DateTime?       
 
+  // ✨ NEW: Saves the initial professional breakdown
+  feeBreakdown        Json?
+
   feesPaid            FeeRecord[]
   attendance          Attendance[]
 }
@@ -283,7 +286,10 @@ model FeeRecord {
   remarks         String?
   transactionId   String?        
   paymentMode     String?        @default("CASH")
-  
+
+  // ✨ NEW: Saves the live breakdown of this specific payment
+  feeBreakdown    Json?
+
   receiptNumber   String?        @unique
   razorpayOrderId String?
 }
