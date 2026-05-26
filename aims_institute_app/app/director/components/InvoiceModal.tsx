@@ -1,6 +1,5 @@
 'use client';
 import React from 'react';
-import Image from 'next/image';
 import { Printer, X } from 'lucide-react';
 
 const LOGO_PATH = '/mainpage.png';
@@ -11,7 +10,6 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
   const cgst = gstAmount / 2;
   const sgst = gstAmount / 2;
 
-  // ✨ Extract the fee breakdown if it was passed from the backend
   const breakdown = data.feeBreakdown || null;
 
   return (
@@ -32,7 +30,7 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
           <div className="flex justify-between items-start border-b-2 border-[#dc2626] pb-6 mb-6">
               <div className="flex flex-col gap-2 justify-center mt-2">
                 <div className="relative w-64 h-16">
-                   <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain object-left" unoptimized />
+                   <img src={LOGO_PATH} alt="AIMS Logo" className="object-contain object-left w-full h-full" />
                 </div>
               </div>
               <div className="text-right text-xs text-slate-600">
@@ -41,7 +39,6 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
                 {data.branchName ? (
                     <>
                         <p className="font-bold text-slate-800 text-sm mb-0.5">{data.branchName}</p>
-                        {/* ✨ ADDED whitespace-pre-wrap to properly render multi-line addresses */}
                         <p className="whitespace-pre-wrap">{data.branchAddress || 'Royal Tranquil, 3rd Floor, Above Chitale Bandhu, Pimple Saudagar,'}</p>
                         <p>{data.branchCity || 'Pune, MH 411027'}</p>
                     </>
@@ -91,30 +88,30 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
             <tbody>
               
               {/* ✨ ITEMIZED FEE BREAKDOWN RENDERING */}
-              {breakdown ? (
+              {breakdown && typeof breakdown === 'object' ? (
                   <>
                       {breakdown.tuition > 0 && (
                           <tr className="border-b border-slate-200">
                               <td className="py-3 px-4 font-bold text-slate-800">Tuition / Academic Fees</td>
-                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{breakdown.tuition.toLocaleString()}</td>
+                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{Number(breakdown.tuition).toLocaleString()}</td>
                           </tr>
                       )}
                       {breakdown.dress > 0 && (
                           <tr className="border-b border-slate-200">
                               <td className="py-3 px-4 font-bold text-slate-800">Dress / Uniform Fee</td>
-                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{breakdown.dress.toLocaleString()}</td>
+                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{Number(breakdown.dress).toLocaleString()}</td>
                           </tr>
                       )}
                       {breakdown.books > 0 && (
                           <tr className="border-b border-slate-200">
                               <td className="py-3 px-4 font-bold text-slate-800">Books & Study Material</td>
-                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{breakdown.books.toLocaleString()}</td>
+                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{Number(breakdown.books).toLocaleString()}</td>
                           </tr>
                       )}
                       {breakdown.extraAmount > 0 && (
                           <tr className="border-b border-slate-200">
                               <td className="py-3 px-4 font-bold text-slate-800">{breakdown.extraName || 'Additional Fee'}</td>
-                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{breakdown.extraAmount.toLocaleString()}</td>
+                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{Number(breakdown.extraAmount).toLocaleString()}</td>
                           </tr>
                       )}
                       <tr className="border-b border-slate-100">
