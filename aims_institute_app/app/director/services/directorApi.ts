@@ -256,16 +256,6 @@ export const directorApi = {
       if (!res.ok) throw new Error('Failed to delete expense'); 
       return await parseJsonSafely(res); 
   },
-  
-  async collectFee(data: any) { 
-      const res = await fetchWithAuth(`${API_URL}/erp/fees`, { 
-          method: 'POST', 
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` }, 
-          body: JSON.stringify(data) 
-      }); 
-      if (!res.ok) throw new Error('Failed to record fee'); 
-      return await parseJsonSafely(res); 
-  },
 
   async getSummary() { 
       try { 
@@ -278,6 +268,25 @@ export const directorApi = {
       } catch (e) { 
           return { revenue: 0, expenses: 0, profit: 0 }; 
       } 
+  },
+
+  async deleteFeeRecord(id: string) {
+      const res = await fetchWithAuth(`${API_URL}/erp/fees/${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${this.getToken()}` }
+      });
+      if (!res.ok) throw new Error('Failed to delete fee record');
+      return await parseJsonSafely(res);
+  },
+
+  async collectFee(data: { studentId: string; amount: number; remarks?: string; paymentMode?: string; transactionId?: string; date?: string; feeBreakdown?: any }) { 
+      const res = await fetchWithAuth(`${API_URL}/erp/fees`, { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` }, 
+          body: JSON.stringify(data) 
+      }); 
+      if (!res.ok) throw new Error('Failed to record fee'); 
+      return await parseJsonSafely(res); 
   },
 
   async getFeeHistory(token?: string) {
@@ -316,11 +325,12 @@ export const directorApi = {
       return await parseJsonSafely(res); 
   },
 
-  async updateEnquiryStatus(id: string, data: any) { 
+  // ✨ RESTORED: 4-argument signature to perfectly match page.tsx
+  async updateEnquiryStatus(id: string, status: string, followUpCount?: number, newRemark?: string) { 
       const res = await fetchWithAuth(`${API_URL}/erp/enquiries/${id}/status`, { 
           method: 'PATCH', 
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` }, 
-          body: JSON.stringify(data) 
+          body: JSON.stringify({ status, followUpCount, newRemark }) 
       }); 
       if (!res.ok) throw new Error('Failed to update enquiry'); 
       return await parseJsonSafely(res); 
