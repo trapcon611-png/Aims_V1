@@ -715,8 +715,6 @@ export class ErpService {
     
     const whereClause: any = { batchId };
     if (month && year) {
-        // Month from JS Date is 0-indexed (Jan=0, Feb=1)
-        // If passing from frontend as 1-12, subtract 1. Assuming frontend sends 1 for Jan.
         const start = new Date(year, month - 1, 1);
         const end = new Date(year, month, 0, 23, 59, 59); // Last day of month
         whereClause.date = { gte: start, lte: end };

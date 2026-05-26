@@ -11,7 +11,6 @@ import InvoiceModal from './InvoiceModal';
 export default function AccountsPanel({ students }: { students: any[] }) {
   // --- STATE ---
   // Forms
-  // ✨ UPDATED: Added "date" to the feeForm state, defaulting to today
   const [feeForm, setFeeForm] = useState({ 
       studentId: '', amount: 0, remarks: '', paymentMode: 'CASH', 
       transactionId: '', withGst: false, 
@@ -171,14 +170,21 @@ export default function AccountsPanel({ students }: { students: any[] }) {
       
       try {
           const res = await directorApi.collectFee(feeForm);
+          
+          // ✨ DYNAMIC BRANCH ADDRESS LOOKUP FOR INSTANT RECEIPT
+          const studentBatch = batches.find(b => b.name === student.batch);
+          const studentBranch = branches.find(br => br.id === studentBatch?.branchId);
+
           const record = { 
               ...res, 
               studentName: student.name, 
               batch: student.batch, 
               studentId: student.id, 
               displayId: student.studentId,
-              // ✨ Use the manual date chosen by the user for the invoice preview
-              date: feeForm.date ? new Date(feeForm.date).toISOString() : new Date().toISOString()
+              date: feeForm.date ? new Date(feeForm.date).toISOString() : new Date().toISOString(),
+              branchName: studentBranch?.name || null,
+              branchAddress: studentBranch?.address || null, 
+              branchCity: studentBranch?.city || null
           };
           
           setCurrentInvoice({ 
@@ -188,7 +194,6 @@ export default function AccountsPanel({ students }: { students: any[] }) {
           setShowInvoice(true);
           
           refreshData(); 
-          // Reset form including the date back to today
           setFeeForm({ 
               studentId: '', amount: 0, remarks: '', paymentMode: 'CASH', 
               transactionId: '', withGst: false, 
@@ -206,6 +211,16 @@ export default function AccountsPanel({ students }: { students: any[] }) {
           setNewExpense({ title: '', amount: 0, category: 'General' });
           refreshData();
       } catch(e) { alert("Failed to log expense"); }
+  };
+
+  // ✨ SECURE DAILY EXPENSE DELETION
+  const handleDeleteExpense = async (id: string) => {
+      if (!window.confirm("Are you sure you want to delete this expense?")) return;
+      try {
+          await directorApi.deleteExpense(id);
+          setExpenses(prev => prev.filter(exp => exp.id !== id));
+          refreshData(); 
+      } catch (e) { alert("Failed to delete expense."); }
   };
 
   return (
@@ -445,14 +460,20 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                    <h4 className="text-xs font-bold text-slate-400 uppercase mb-3 tracking-widest">Recent Expenses</h4>
                    <div className="max-h-56 overflow-y-auto custom-scrollbar space-y-2">
                        {expenses.length === 0 ? <p className="text-xs text-slate-400 italic text-center py-4">No expenses logged.</p> : expenses.map(exp => (
-                           <div key={exp.id} className="flex justify-between items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100 hover:border-red-100 transition">
+                           <div key={exp.id} className="flex justify-between items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100 hover:border-red-100 transition group">
                                <div>
                                    <div className="font-bold text-slate-700">{exp.title}</div>
                                    <div className="text-[10px] text-slate-400">{new Date(exp.date).toLocaleDateString()} • {exp.category}</div>
                                </div>
                                <div className="flex items-center gap-3">
                                    <span className="font-mono font-bold text-slate-900">₹{exp.amount}</span>
-                                   <button className="text-slate-300 hover:text-red-500"><Trash2 size={14}/></button>
+                                   <button 
+                                      onClick={() => handleDeleteExpense(exp.id)} 
+                                      className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100" 
+                                      title="Delete Expense"
+                                   >
+                                       <Trash2 size={14}/>
+                                   </button>
                                </div>
                            </div>
                        ))}
@@ -561,7 +582,19 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                                   </td>
                                   <td className="px-6 py-4 text-center">
                                       <button 
-                                          onClick={() => { setCurrentInvoice(t); setShowInvoice(true); }}
+                                          onClick={() => { 
+                                              // ✨ LIVE BRANCH LOOKUP FOR HISTORICAL RECEIPTS
+                                              const studentBatch = batches.find(b => b.name === t.batch);
+                                              const studentBranch = branches.find(br => br.id === studentBatch?.branchId);
+                                              
+                                              setCurrentInvoice({
+                                                  ...t,
+                                                  branchName: studentBranch?.name || t.branchName,
+                                                  branchAddress: studentBranch?.address || t.branchAddress,
+                                                  branchCity: studentBranch?.city || t.branchCity
+                                              }); 
+                                              setShowInvoice(true); 
+                                          }}
                                           className="p-2 hover:bg-slate-200 rounded-full text-slate-500 transition"
                                           title="Reprint Receipt"
                                       >

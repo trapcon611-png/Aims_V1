@@ -17,9 +17,19 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
   
   const [isManualSchedule, setIsManualSchedule] = useState(false);
 
+  // ✨ UPDATED: Added detailed fee breakdown fields
   const [admissionData, setAdmissionData] = useState({
     studentName: '', studentId: '', studentPassword: '', studentPhone: '', 
-    address: '', batchId: '', fees: 0, waiveOff: 0, penalty: 0, 
+    address: '', batchId: '', 
+    
+    // Fee Breakdown
+    tuitionFee: 0,
+    dressFee: 0,
+    booksFee: 0,
+    extraFeeName: '',
+    extraFeeAmount: 0,
+    
+    waiveOff: 0, penalty: 0, 
     installments: 1, installmentSchedule: [] as InstallmentPlan[], 
     parentId: '', parentPassword: '', parentPhone: '',
     joinedAt: new Date().toISOString().split('T')[0], 
@@ -28,6 +38,9 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
     fatherName: '', motherName: '', parentEmail: '', 
     lastSchool: '', lastPercentage: ''               
   });
+
+  // Calculate the live subtotal of all fee components
+  const totalCalculatedFee = (admissionData.tuitionFee || 0) + (admissionData.dressFee || 0) + (admissionData.booksFee || 0) + (admissionData.extraFeeAmount || 0);
 
   const inputStyle = "w-full p-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-[#c1121f] focus:border-[#c1121f] outline-none transition font-medium text-sm";
   const redInputStyle = "w-full p-2.5 bg-white border border-red-200 rounded-lg text-red-900 focus:ring-2 focus:ring-[#c1121f] outline-none transition font-bold placeholder:text-red-300 text-sm";
@@ -54,21 +67,30 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
       fetchData();
   }, []);
 
+  // When Batch changes, reset fee breakdown and set Tuition to Standard Fee
   useEffect(() => {
       if (admissionData.batchId) {
           const selected = localBatches.find(b => b.id === admissionData.batchId);
           if (selected) {
-              setAdmissionData(prev => ({ ...prev, fees: selected.fee, installments: 1 }));
+              setAdmissionData(prev => ({ 
+                  ...prev, 
+                  tuitionFee: selected.fee, 
+                  dressFee: 0,
+                  booksFee: 0,
+                  extraFeeName: '',
+                  extraFeeAmount: 0,
+                  installments: 1 
+              }));
               setIsManualSchedule(false); 
           }
       }
   }, [admissionData.batchId, localBatches]);
 
-  // Fee Calculation Logic (Auto-Generate Schedule based on Admission Date)
+  // Fee Calculation Logic (Auto-Generate Schedule based on Breakdown & Admission Date)
   useEffect(() => {
     if (isManualSchedule) return;
 
-    let basePayable = Math.max(0, admissionData.fees - admissionData.waiveOff);
+    let basePayable = Math.max(0, totalCalculatedFee - admissionData.waiveOff);
     if (admissionData.withGst) { basePayable = Math.round(basePayable * 1.18); }
     
     const count = admissionData.installments || 1;
@@ -77,10 +99,9 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
     
     const newSchedule: InstallmentPlan[] = [];
     
-    // ✨ BUG FIX: Prevent crash if user is typing an incomplete date!
     let startDate = new Date(admissionData.joinedAt);
     if (isNaN(startDate.getTime())) {
-        startDate = new Date(); // Fallback to today safely without crashing
+        startDate = new Date(); 
     }
     
     for (let i = 0; i < count; i++) {
@@ -93,7 +114,7 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
         });
     }
     setAdmissionData(prev => ({ ...prev, installmentSchedule: newSchedule }));
-  }, [admissionData.fees, admissionData.waiveOff, admissionData.installments, admissionData.joinedAt, admissionData.withGst, isManualSchedule]);
+  }, [totalCalculatedFee, admissionData.waiveOff, admissionData.installments, admissionData.joinedAt, admissionData.withGst, isManualSchedule]);
 
   const handleScheduleEdit = (index: number, field: 'amount' | 'dueDate', value: any) => {
       setIsManualSchedule(true); 
@@ -122,7 +143,7 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
     }
 
     const totalScheduled = admissionData.installmentSchedule.reduce((sum, item) => sum + Number(item.amount), 0);
-    let expectedTotal = Math.max(0, admissionData.fees - admissionData.waiveOff);
+    let expectedTotal = Math.max(0, totalCalculatedFee - admissionData.waiveOff);
     if (admissionData.withGst) expectedTotal = Math.round(expectedTotal * 1.18);
 
     if (totalScheduled !== expectedTotal) {
@@ -135,15 +156,31 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
     setStatus('Processing...');
     
     try {
-        const finalFee = admissionData.withGst ? Math.round(admissionData.fees * 1.18) : admissionData.fees;
-        await directorApi.registerStudent({ ...admissionData, fees: finalFee, agreedDate: admissionData.joinedAt });
+        const finalFee = admissionData.withGst ? Math.round(totalCalculatedFee * 1.18) : totalCalculatedFee;
+        
+        // Pass the new fee breakdown structure so backend can save it for the invoice!
+        const feeBreakdown = {
+            tuition: admissionData.tuitionFee,
+            dress: admissionData.dressFee,
+            books: admissionData.booksFee,
+            extraName: admissionData.extraFeeName,
+            extraAmount: admissionData.extraFeeAmount
+        };
+
+        await directorApi.registerStudent({ 
+            ...admissionData, 
+            fees: finalFee, 
+            agreedDate: admissionData.joinedAt,
+            feeBreakdown: feeBreakdown // ✨ Sent to Backend
+        });
         
         setStatus('Success! Student Registered.');
         
         setAdmissionData({ 
             studentName: '', studentId: '', studentPassword: '', 
             parentId: '', parentPassword: '', studentPhone: '', parentPhone: '',
-            fees: 0, waiveOff: 0, penalty: 0, installments: 1, batchId: '',
+            tuitionFee: 0, dressFee: 0, booksFee: 0, extraFeeName: '', extraFeeAmount: 0, 
+            waiveOff: 0, penalty: 0, installments: 1, batchId: '',
             photoUrl: '', remarks: '', address: '', dob: '',
             fatherName: '', motherName: '', parentEmail: '',
             lastSchool: '', lastPercentage: '',
@@ -348,6 +385,7 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                </div>
             </div>
 
+            {/* RIGHT COLUMN: Detailed Fee Breakdown & Installments */}
             <div className="lg:col-span-5 space-y-6">
                 <div className="bg-red-50 p-6 rounded-xl border-2 border-red-100 shadow-inner relative overflow-hidden h-full flex flex-col">
                    
@@ -359,14 +397,43 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                        </label>
                    </div>
                    
-                   <div className="grid grid-cols-2 gap-4 mb-6">
-                       <div className="col-span-2">
-                           <label className={redLabelStyle}>Total Fee</label>
-                           <input type="number" className={redInputStyle} placeholder="₹ 0" value={admissionData.fees} onChange={e => setAdmissionData({...admissionData, fees: +e.target.value})}/>
+                   {/* ✨ DETAILED FEE BREAKDOWN GRID */}
+                   <div className="grid grid-cols-3 gap-3 mb-4">
+                       <div>
+                           <label className={redLabelStyle}>Tuition Fee</label>
+                           <input type="number" className={redInputStyle} placeholder="₹ 0" value={admissionData.tuitionFee || ''} onChange={e => setAdmissionData({...admissionData, tuitionFee: +e.target.value})}/>
+                       </div>
+                       <div>
+                           <label className={redLabelStyle}>Dress Fee</label>
+                           <input type="number" className={redInputStyle} placeholder="₹ 0" value={admissionData.dressFee || ''} onChange={e => setAdmissionData({...admissionData, dressFee: +e.target.value})}/>
+                       </div>
+                       <div>
+                           <label className={redLabelStyle}>Books Fee</label>
+                           <input type="number" className={redInputStyle} placeholder="₹ 0" value={admissionData.booksFee || ''} onChange={e => setAdmissionData({...admissionData, booksFee: +e.target.value})}/>
+                       </div>
+                   </div>
+
+                   {/* EXTRA FEE HEADER */}
+                   <div className="grid grid-cols-2 gap-3 mb-6 bg-red-100/50 p-3 rounded-lg border border-red-100">
+                       <div>
+                           <label className={redLabelStyle}>Extra Fee Name (Opt.)</label>
+                           <input type="text" className={redInputStyle} placeholder="e.g. Transport" value={admissionData.extraFeeName} onChange={e => setAdmissionData({...admissionData, extraFeeName: e.target.value})}/>
+                       </div>
+                       <div>
+                           <label className={redLabelStyle}>Extra Amount</label>
+                           <input type="number" className={redInputStyle} placeholder="₹ 0" value={admissionData.extraFeeAmount || ''} onChange={e => setAdmissionData({...admissionData, extraFeeAmount: +e.target.value})}/>
+                       </div>
+                   </div>
+
+                   {/* TOTALS & DISCOUNTS */}
+                   <div className="grid grid-cols-3 gap-3 mb-6 pt-4 border-t border-red-200">
+                       <div>
+                           <label className={redLabelStyle}>Subtotal</label>
+                           <input type="number" readOnly className={`${redInputStyle} bg-red-100 text-red-800 border-red-300`} value={totalCalculatedFee}/>
                        </div>
                        <div>
                            <label className={redLabelStyle}>Waive Off</label>
-                           <input type="number" className={redInputStyle} placeholder="₹ 0" value={admissionData.waiveOff} onChange={e => setAdmissionData({...admissionData, waiveOff: +e.target.value})}/>
+                           <input type="number" className={redInputStyle} placeholder="₹ 0" value={admissionData.waiveOff || ''} onChange={e => setAdmissionData({...admissionData, waiveOff: +e.target.value})}/>
                        </div>
                        <div>
                            <label className={redLabelStyle}>Installments</label>
@@ -383,13 +450,14 @@ export default function AdmissionsPanel({ batches, onRefresh }: { batches: any[]
                        </div>
                    </div>
 
+                   {/* SCHEDULE GENERATOR */}
                    <div className="flex-1 bg-white rounded-lg border border-red-200 overflow-hidden mb-4">
                        <div className="bg-red-100 px-3 py-2 flex text-[10px] font-bold text-red-800 uppercase tracking-wider">
                            <div className="w-10 text-center">#</div>
                            <div className="flex-1 pl-2">Due Date</div>
                            <div className="w-24 text-right pr-2">Amount (₹)</div>
                        </div>
-                       <div className="max-h-62.5 overflow-y-auto custom-scrollbar">
+                       <div className="max-h-50 overflow-y-auto custom-scrollbar">
                            {admissionData.installmentSchedule.map((inst, index) => (
                                <div key={index} className="flex border-b border-red-50 last:border-0 hover:bg-red-50/50 transition">
                                    <div className="w-10 py-2.5 text-center text-red-300 font-bold text-xs bg-red-50/30">

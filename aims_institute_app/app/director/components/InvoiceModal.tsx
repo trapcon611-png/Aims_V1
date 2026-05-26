@@ -11,6 +11,9 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
   const cgst = gstAmount / 2;
   const sgst = gstAmount / 2;
 
+  // ✨ Extract the fee breakdown if it was passed from the backend
+  const breakdown = data.feeBreakdown || null;
+
   return (
     <div className="fixed inset-0 z-[100] flex items-start justify-center bg-slate-900/80 backdrop-blur-sm overflow-y-auto print:bg-white print:fixed print:inset-0 print:z-[9999] print:block">
       <style jsx global>{`
@@ -28,7 +31,6 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
         <div>
           <div className="flex justify-between items-start border-b-2 border-[#dc2626] pb-6 mb-6">
               <div className="flex flex-col gap-2 justify-center mt-2">
-                {/* ✨ RECTANGULAR LOGO CONTAINER */}
                 <div className="relative w-64 h-16">
                    <Image src={LOGO_PATH} alt="AIMS Logo" fill className="object-contain object-left" unoptimized />
                 </div>
@@ -36,11 +38,11 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
               <div className="text-right text-xs text-slate-600">
                 <h2 className="text-xl font-bold text-slate-800 mb-2">FEE RECEIPT</h2>
                 
-                {/* ✨ DYNAMIC BRANCH ADDRESS LOGIC */}
                 {data.branchName ? (
                     <>
                         <p className="font-bold text-slate-800 text-sm mb-0.5">{data.branchName}</p>
-                        <p>{data.branchAddress || 'Royal Tranquil, 3rd Floor, Above Chitale Bandhu, Pimple Saudagar,'}</p>
+                        {/* ✨ ADDED whitespace-pre-wrap to properly render multi-line addresses */}
+                        <p className="whitespace-pre-wrap">{data.branchAddress || 'Royal Tranquil, 3rd Floor, Above Chitale Bandhu, Pimple Saudagar,'}</p>
                         <p>{data.branchCity || 'Pune, MH 411027'}</p>
                     </>
                 ) : (
@@ -71,7 +73,6 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
             <div className="text-right">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Receipt Info</p>
               <p className="text-sm font-bold text-slate-900">#: {data.id ? data.id.slice(0, 8).toUpperCase() : 'N/A'}</p>
-              {/* ✨ Ensure the manual date from AccountsPanel is used here */}
               <p className="text-sm text-slate-600">Date: {new Date(data.date || Date.now()).toLocaleDateString()}</p>
               <div className="mt-1 inline-block bg-white px-2 py-0.5 rounded text-xs font-bold text-[#dc2626] uppercase border border-[#dc2626]">
                 {data.paymentMode}
@@ -88,16 +89,51 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
               </tr>
             </thead>
             <tbody>
-              <tr className="border-b border-slate-200">
-                <td className="py-4 px-4">
-                  <p className="font-bold text-slate-800">Tuition / Academic Fees</p>
-                  <p className="text-xs text-slate-500 italic mt-1">Txn Ref: {data.transactionId || 'N/A'}</p>
-                  <p className="text-xs text-slate-500">{data.remarks}</p>
-                </td>
-                <td className="py-4 px-4 text-right font-mono font-bold text-slate-800">
-                  ₹{baseAmount.toLocaleString()}
-                </td>
-              </tr>
+              
+              {/* ✨ ITEMIZED FEE BREAKDOWN RENDERING */}
+              {breakdown ? (
+                  <>
+                      {breakdown.tuition > 0 && (
+                          <tr className="border-b border-slate-200">
+                              <td className="py-3 px-4 font-bold text-slate-800">Tuition / Academic Fees</td>
+                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{breakdown.tuition.toLocaleString()}</td>
+                          </tr>
+                      )}
+                      {breakdown.dress > 0 && (
+                          <tr className="border-b border-slate-200">
+                              <td className="py-3 px-4 font-bold text-slate-800">Dress / Uniform Fee</td>
+                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{breakdown.dress.toLocaleString()}</td>
+                          </tr>
+                      )}
+                      {breakdown.books > 0 && (
+                          <tr className="border-b border-slate-200">
+                              <td className="py-3 px-4 font-bold text-slate-800">Books & Study Material</td>
+                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{breakdown.books.toLocaleString()}</td>
+                          </tr>
+                      )}
+                      {breakdown.extraAmount > 0 && (
+                          <tr className="border-b border-slate-200">
+                              <td className="py-3 px-4 font-bold text-slate-800">{breakdown.extraName || 'Additional Fee'}</td>
+                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{breakdown.extraAmount.toLocaleString()}</td>
+                          </tr>
+                      )}
+                      <tr className="border-b border-slate-100">
+                          <td colSpan={2} className="py-2 px-4 text-xs text-slate-500 italic">Txn Ref: {data.transactionId || 'N/A'} • Remarks: {data.remarks}</td>
+                      </tr>
+                  </>
+              ) : (
+                  <tr className="border-b border-slate-200">
+                    <td className="py-4 px-4">
+                      <p className="font-bold text-slate-800">Tuition / Academic Fees</p>
+                      <p className="text-xs text-slate-500 italic mt-1">Txn Ref: {data.transactionId || 'N/A'}</p>
+                      <p className="text-xs text-slate-500">{data.remarks}</p>
+                    </td>
+                    <td className="py-4 px-4 text-right font-mono font-bold text-slate-800">
+                      ₹{baseAmount.toLocaleString()}
+                    </td>
+                  </tr>
+              )}
+
               {isGstEnabled && (
                 <>
                   <tr className="border-b border-slate-100 text-xs">

@@ -12,14 +12,13 @@ const fetchWithAuth = async (url: string, options: any = {}) => {
   const res = await fetch(url, options);
   if (res.status === 401) {
     if (typeof window !== 'undefined') {
-      // Clear all possible token names just to be safe
       localStorage.removeItem('student_token');
       localStorage.removeItem('parent_token');
       localStorage.removeItem('admin_token');
       localStorage.removeItem('director_session');
       
       alert('Session Expired: Your security token is invalid or has expired. Please log in again.');
-      window.location.reload(); // ✅ THE FIX: Reloads the current page instead of kicking to root
+      window.location.reload(); 
     }
     throw new Error('Unauthorized');
   }
@@ -27,7 +26,6 @@ const fetchWithAuth = async (url: string, options: any = {}) => {
 };
 
 // --- BULLETPROOF JSON PARSER ---
-// Safely prevents "Unexpected end of JSON input" crashes system-wide
 const parseJsonSafely = async (res: Response, fallback: any = null) => {
     const text = await res.text();
     if (!text || text.trim() === '') return fallback;
@@ -74,7 +72,6 @@ export const directorApi = {
         body: JSON.stringify(data) 
     });
     
-    // 1. If backend correctly threw a 409 ConflictException, extract the real error message
     if (!res.ok) {
         const errorText = await res.text();
         let errorMessage = 'Admission failed. Please check the data and try again.';
@@ -87,8 +84,6 @@ export const directorApi = {
         throw new Error(errorMessage);
     }
 
-    // 2. CRITICAL FALLBACK: If the backend returned a 201 Success but the body is completely empty,
-    // it means a duplicate was caught but 'return null' was triggered! We catch the empty text here.
     const text = await res.text();
     if (!text || text.trim() === '') {
         throw new Error('Student ID or Parent ID already exists! Please use unique credentials.');
@@ -101,10 +96,8 @@ export const directorApi = {
     }
   },
   
-  // 🚀 UPGRADED: Server-Side Pagination & Search
   async getStudents(page: number = 1, limit: number = 20, search: string = '', batch: string = '') { 
       try { 
-          // Build the query string securely
           const queryParams = new URLSearchParams({
               page: page.toString(),
               limit: limit.toString(),
@@ -118,14 +111,12 @@ export const directorApi = {
           
           if (!res.ok) return { data: [], meta: { total: 0, totalPages: 0 } }; 
           
-          // Return the full paginated object (data + meta)
           return await parseJsonSafely(res, { data: [], meta: { total: 0, totalPages: 0 } }); 
       } catch (e) { 
           return { data: [], meta: { total: 0, totalPages: 0 } }; 
       } 
   },
 
-  // ✨ NEW: UPDATE STUDENT API CALL (For the Edit Modal)
   async updateStudent(id: string, data: any) {
     const res = await fetchWithAuth(`${API_URL}/erp/students/${id}`, {
         method: 'PATCH',
@@ -139,7 +130,6 @@ export const directorApi = {
     return await parseJsonSafely(res);
   },
 
-  // 🚨 DELETE STUDENT API CALL
   async deleteStudent(id: string) {
     const res = await fetchWithAuth(`${API_URL}/erp/students/${id}`, {
         method: 'DELETE',
@@ -170,6 +160,16 @@ export const directorApi = {
           body: JSON.stringify(data)
       });
       if (!res.ok) throw new Error('Failed to create branch');
+      return await parseJsonSafely(res);
+  },
+
+  async updateBranch(id: string, data: any) {
+      const res = await fetchWithAuth(`${API_URL}/erp/branches/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` },
+          body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('Failed to update branch');
       return await parseJsonSafely(res);
   },
 
@@ -316,18 +316,16 @@ export const directorApi = {
       return await parseJsonSafely(res); 
   },
 
-  // ✨ UPDATED: Added newRemark parameter to support Logs
-  async updateEnquiryStatus(id: string, status: string, followUpCount?: number, newRemark?: string) { 
+  async updateEnquiryStatus(id: string, data: any) { 
       const res = await fetchWithAuth(`${API_URL}/erp/enquiries/${id}/status`, { 
           method: 'PATCH', 
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` }, 
-          body: JSON.stringify({ status, followUpCount, newRemark }) 
+          body: JSON.stringify(data) 
       }); 
       if (!res.ok) throw new Error('Failed to update enquiry'); 
       return await parseJsonSafely(res); 
   },
 
-  // ✨ DELETE ENQUIRY API CALL
   async deleteEnquiry(id: string) {
       const res = await fetchWithAuth(`${API_URL}/erp/enquiries/${id}`, {
           method: 'DELETE',
@@ -413,7 +411,6 @@ export const directorApi = {
       } 
   },
 
-  // ✨ NEW: Added support for the upcoming Attendance Panel
   async getAttendanceStats(batchId: string, month?: number, year?: number) {
       try {
           let url = `${API_URL}/erp/academics/attendance?batchId=${batchId}`;
