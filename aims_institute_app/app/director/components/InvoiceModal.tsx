@@ -5,32 +5,46 @@ import { Printer, X } from 'lucide-react';
 const LOGO_PATH = '/mainpage.png';
 
 const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () => void, isGstEnabled: boolean }) => {
-  const baseAmount = isGstEnabled ? Math.round(data.amount / 1.18) : data.amount;
-  const gstAmount = isGstEnabled ? data.amount - baseAmount : 0;
+  // 1. Calculate Base Amounts securely
+  const rawAmount = Number(data.amount) || 0;
+  const baseAmount = isGstEnabled ? Math.round(rawAmount / 1.18) : Math.round(rawAmount);
+  const gstAmount = isGstEnabled ? rawAmount - baseAmount : 0;
   const cgst = gstAmount / 2;
   const sgst = gstAmount / 2;
 
-  // ✨ AUTO-BREAKDOWN LOGIC
-  // If the breakdown was left completely blank (0s), auto-generate the professional 80/10/10 split
-  let displayBreakdown = data.feeBreakdown;
-  const hasValidBreakdown = displayBreakdown && 
-      (Number(displayBreakdown.tuition) > 0 || 
-       Number(displayBreakdown.dress) > 0 || 
-       Number(displayBreakdown.books) > 0 || 
-       Number(displayBreakdown.extraAmount) > 0);
+  // 2. Safely parse the feeBreakdown (handles stringified JSON from database)
+  let parsedBreakdown = null;
+  try {
+    if (typeof data.feeBreakdown === 'string') {
+      parsedBreakdown = JSON.parse(data.feeBreakdown);
+    } else if (typeof data.feeBreakdown === 'object' && data.feeBreakdown !== null) {
+      parsedBreakdown = data.feeBreakdown;
+    }
+  } catch (e) {
+    parsedBreakdown = null;
+  }
 
-  if (!hasValidBreakdown && baseAmount > 0) {
-      const tuition = Math.round(baseAmount * 0.8);
-      const books = Math.round(baseAmount * 0.1);
-      const dress = baseAmount - tuition - books; // Covers exact remainder
-      
-      displayBreakdown = {
-          tuition,
-          dress,
-          books,
-          extraAmount: 0,
-          extraName: ''
-      };
+  // 3. Extract Values
+  const tuition = Number(parsedBreakdown?.tuition) || 0;
+  const dress = Number(parsedBreakdown?.dress) || 0;
+  const books = Number(parsedBreakdown?.books) || 0;
+  const extraAmount = Number(parsedBreakdown?.extraAmount) || 0;
+  const extraName = parsedBreakdown?.extraName || 'Additional Fee';
+
+  // 4. Validate if a real breakdown exists
+  const hasValidBreakdown = (tuition + dress + books + extraAmount) > 0;
+
+  // 5. Build the Final Display Object (with Automatic Fallback built-in!)
+  let displayBreakdown = { tuition: 0, dress: 0, books: 0, extraAmount: 0, extraName: '' };
+
+  if (hasValidBreakdown) {
+      // Use the exact values provided by the user
+      displayBreakdown = { tuition, dress, books, extraAmount, extraName };
+  } else if (baseAmount > 0) {
+      // ✨ The Auto-Fallback: Forces an 80/10/10 split if boxes were left blank or it's an old receipt!
+      displayBreakdown.tuition = Math.round(baseAmount * 0.8);
+      displayBreakdown.books = Math.round(baseAmount * 0.1);
+      displayBreakdown.dress = baseAmount - displayBreakdown.tuition - displayBreakdown.books; // Uses remainder to guarantee exact total
   }
 
   return (
@@ -109,49 +123,36 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
             <tbody>
               
               {/* ✨ ITEMIZED FEE BREAKDOWN RENDERING */}
-              {displayBreakdown ? (
-                  <>
-                      {Number(displayBreakdown.tuition) > 0 && (
-                          <tr className="border-b border-slate-200">
-                              <td className="py-3 px-4 font-bold text-slate-800">Tuition / Academic Fees</td>
-                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{Number(displayBreakdown.tuition).toLocaleString()}</td>
-                          </tr>
-                      )}
-                      {Number(displayBreakdown.dress) > 0 && (
-                          <tr className="border-b border-slate-200">
-                              <td className="py-3 px-4 font-bold text-slate-800">Dress / Uniform Fee</td>
-                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{Number(displayBreakdown.dress).toLocaleString()}</td>
-                          </tr>
-                      )}
-                      {Number(displayBreakdown.books) > 0 && (
-                          <tr className="border-b border-slate-200">
-                              <td className="py-3 px-4 font-bold text-slate-800">Books & Study Material</td>
-                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{Number(displayBreakdown.books).toLocaleString()}</td>
-                          </tr>
-                      )}
-                      {Number(displayBreakdown.extraAmount) > 0 && (
-                          <tr className="border-b border-slate-200">
-                              <td className="py-3 px-4 font-bold text-slate-800">{displayBreakdown.extraName || 'Additional Fee'}</td>
-                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{Number(displayBreakdown.extraAmount).toLocaleString()}</td>
-                          </tr>
-                      )}
-                      <tr className="border-b border-slate-100">
-                          <td colSpan={2} className="py-2 px-4 text-xs text-slate-500 italic">Txn Ref: {data.transactionId || 'N/A'} • Remarks: {data.remarks}</td>
-                      </tr>
-                  </>
-              ) : (
+              {displayBreakdown.tuition > 0 && (
                   <tr className="border-b border-slate-200">
-                    <td className="py-4 px-4">
-                      <p className="font-bold text-slate-800">Tuition / Academic Fees</p>
-                      <p className="text-xs text-slate-500 italic mt-1">Txn Ref: {data.transactionId || 'N/A'}</p>
-                      <p className="text-xs text-slate-500">{data.remarks}</p>
-                    </td>
-                    <td className="py-4 px-4 text-right font-mono font-bold text-slate-800">
-                      ₹{baseAmount.toLocaleString()}
-                    </td>
+                      <td className="py-3 px-4 font-bold text-slate-800">Tuition / Academic Fees</td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{displayBreakdown.tuition.toLocaleString()}</td>
                   </tr>
               )}
+              {displayBreakdown.dress > 0 && (
+                  <tr className="border-b border-slate-200">
+                      <td className="py-3 px-4 font-bold text-slate-800">Dress / Uniform Fee</td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{displayBreakdown.dress.toLocaleString()}</td>
+                  </tr>
+              )}
+              {displayBreakdown.books > 0 && (
+                  <tr className="border-b border-slate-200">
+                      <td className="py-3 px-4 font-bold text-slate-800">Books & Study Material</td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{displayBreakdown.books.toLocaleString()}</td>
+                  </tr>
+              )}
+              {displayBreakdown.extraAmount > 0 && (
+                  <tr className="border-b border-slate-200">
+                      <td className="py-3 px-4 font-bold text-slate-800">{displayBreakdown.extraName}</td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{displayBreakdown.extraAmount.toLocaleString()}</td>
+                  </tr>
+              )}
+              
+              <tr className="border-b border-slate-100">
+                  <td colSpan={2} className="py-2 px-4 text-xs text-slate-500 italic">Txn Ref: {data.transactionId || 'N/A'} • Remarks: {data.remarks || 'Fee Payment'}</td>
+              </tr>
 
+              {/* GST ROWS */}
               {isGstEnabled && (
                 <>
                   <tr className="border-b border-slate-100 text-xs">
@@ -172,7 +173,7 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
             <div className="w-1/2 border-t-2 border-slate-900 pt-2">
               <div className="flex justify-between items-center">
                 <span className="text-lg font-black text-slate-900 uppercase">Grand Total</span>
-                <span className="text-xl font-black text-[#dc2626]">₹{(data.amount || 0).toLocaleString()}</span>
+                <span className="text-xl font-black text-[#dc2626]">₹{rawAmount.toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center mt-1 text-slate-500 text-xs">
                 <span className="font-bold">Remaining Fee Balance</span>
