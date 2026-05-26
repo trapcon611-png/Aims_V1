@@ -10,7 +10,28 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
   const cgst = gstAmount / 2;
   const sgst = gstAmount / 2;
 
-  const breakdown = data.feeBreakdown || null;
+  // ✨ AUTO-BREAKDOWN LOGIC
+  // If the breakdown was left completely blank (0s), auto-generate the professional 80/10/10 split
+  let displayBreakdown = data.feeBreakdown;
+  const hasValidBreakdown = displayBreakdown && 
+      (Number(displayBreakdown.tuition) > 0 || 
+       Number(displayBreakdown.dress) > 0 || 
+       Number(displayBreakdown.books) > 0 || 
+       Number(displayBreakdown.extraAmount) > 0);
+
+  if (!hasValidBreakdown && baseAmount > 0) {
+      const tuition = Math.round(baseAmount * 0.8);
+      const books = Math.round(baseAmount * 0.1);
+      const dress = baseAmount - tuition - books; // Covers exact remainder
+      
+      displayBreakdown = {
+          tuition,
+          dress,
+          books,
+          extraAmount: 0,
+          extraName: ''
+      };
+  }
 
   return (
     <div className="fixed inset-0 z-[100] flex items-start justify-center bg-slate-900/80 backdrop-blur-sm overflow-y-auto print:bg-white print:fixed print:inset-0 print:z-[9999] print:block">
@@ -88,30 +109,30 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
             <tbody>
               
               {/* ✨ ITEMIZED FEE BREAKDOWN RENDERING */}
-              {breakdown && typeof breakdown === 'object' ? (
+              {displayBreakdown ? (
                   <>
-                      {breakdown.tuition > 0 && (
+                      {Number(displayBreakdown.tuition) > 0 && (
                           <tr className="border-b border-slate-200">
                               <td className="py-3 px-4 font-bold text-slate-800">Tuition / Academic Fees</td>
-                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{Number(breakdown.tuition).toLocaleString()}</td>
+                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{Number(displayBreakdown.tuition).toLocaleString()}</td>
                           </tr>
                       )}
-                      {breakdown.dress > 0 && (
+                      {Number(displayBreakdown.dress) > 0 && (
                           <tr className="border-b border-slate-200">
                               <td className="py-3 px-4 font-bold text-slate-800">Dress / Uniform Fee</td>
-                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{Number(breakdown.dress).toLocaleString()}</td>
+                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{Number(displayBreakdown.dress).toLocaleString()}</td>
                           </tr>
                       )}
-                      {breakdown.books > 0 && (
+                      {Number(displayBreakdown.books) > 0 && (
                           <tr className="border-b border-slate-200">
                               <td className="py-3 px-4 font-bold text-slate-800">Books & Study Material</td>
-                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{Number(breakdown.books).toLocaleString()}</td>
+                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{Number(displayBreakdown.books).toLocaleString()}</td>
                           </tr>
                       )}
-                      {breakdown.extraAmount > 0 && (
+                      {Number(displayBreakdown.extraAmount) > 0 && (
                           <tr className="border-b border-slate-200">
-                              <td className="py-3 px-4 font-bold text-slate-800">{breakdown.extraName || 'Additional Fee'}</td>
-                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{Number(breakdown.extraAmount).toLocaleString()}</td>
+                              <td className="py-3 px-4 font-bold text-slate-800">{displayBreakdown.extraName || 'Additional Fee'}</td>
+                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{Number(displayBreakdown.extraAmount).toLocaleString()}</td>
                           </tr>
                       )}
                       <tr className="border-b border-slate-100">
