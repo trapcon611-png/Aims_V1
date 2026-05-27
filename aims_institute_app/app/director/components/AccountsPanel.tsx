@@ -20,10 +20,16 @@ export default function AccountsPanel({ students }: { students: any[] }) {
       withGst: false, 
       date: new Date().toISOString().split('T')[0],
       
-      // ✨ AUTO-BREAKDOWN FIELDS
+      // ✨ CHECKBOX & BREAKDOWN FIELDS
       tuitionFee: 0, 
+      includeTuition: true,
+      
       dressFee: 0, 
+      includeDress: true,
+      
       booksFee: 0,
+      includeBooks: true,
+      
       extraFeeName: '', 
       extraFeeAmount: 0
   });
@@ -179,7 +185,22 @@ export default function AccountsPanel({ students }: { students: any[] }) {
       currentPage * ITEMS_PER_PAGE
   );
 
-  // ✨ MATH LOGIC: Ensures breakdown sums exactly to the Total Amount.
+  // ✨ MATH LOGIC: Checkboxes control the total
+  const handleCheckboxToggle = (fieldKey: 'includeTuition' | 'includeDress' | 'includeBooks') => {
+      setFeeForm(prev => {
+          const nextVal = !prev[fieldKey];
+          const updated = { ...prev, [fieldKey]: nextVal };
+
+          updated.amount = 
+              (updated.includeTuition ? Number(updated.tuitionFee) || 0 : 0) +
+              (updated.includeDress ? Number(updated.dressFee) || 0 : 0) +
+              (updated.includeBooks ? Number(updated.booksFee) || 0 : 0) +
+              (Number(updated.extraFeeAmount) || 0);
+
+          return updated;
+      });
+  };
+
   const handleAmountChange = (val: number) => {
       const tuition = Math.round(val * 0.8);
       const books = Math.round(val * 0.1);
@@ -187,17 +208,20 @@ export default function AccountsPanel({ students }: { students: any[] }) {
       setFeeForm(prev => ({ 
           ...prev, 
           amount: val, 
-          tuitionFee: tuition, 
-          booksFee: books, 
-          dressFee: dress 
+          tuitionFee: tuition, includeTuition: true,
+          booksFee: books, includeBooks: true,
+          dressFee: dress, includeDress: true
       }));
   };
 
   const handleBreakdownChange = (field: string, val: number) => {
       setFeeForm(prev => {
           const updated = { ...prev, [field]: val };
-          // If the user manually edits the breakdown, the Total Amount recalculates to match perfectly
-          updated.amount = (updated.tuitionFee || 0) + (updated.dressFee || 0) + (updated.booksFee || 0) + (updated.extraFeeAmount || 0);
+          updated.amount = 
+              (updated.includeTuition ? Number(updated.tuitionFee) || 0 : 0) +
+              (updated.includeDress ? Number(updated.dressFee) || 0 : 0) +
+              (updated.includeBooks ? Number(updated.booksFee) || 0 : 0) +
+              (Number(updated.extraFeeAmount) || 0);
           return updated;
       });
   };
@@ -220,12 +244,24 @@ export default function AccountsPanel({ students }: { students: any[] }) {
               paymentDate.setFullYear(Number(y), Number(m) - 1, Number(d));
           }
 
+          let finalTuition = feeForm.includeTuition ? (Number(feeForm.tuitionFee) || 0) : 0;
+          let finalDress = feeForm.includeDress ? (Number(feeForm.dressFee) || 0) : 0;
+          let finalBooks = feeForm.includeBooks ? (Number(feeForm.booksFee) || 0) : 0;
+          let finalExtra = Number(feeForm.extraFeeAmount) || 0;
+
+          // Ultimate Fallback: If user cleared all boxes but typed a Total Amount manually
+          if (finalTuition === 0 && finalDress === 0 && finalBooks === 0 && feeForm.amount > 0) {
+              finalTuition = Math.round(feeForm.amount * 0.8);
+              finalBooks = Math.round(feeForm.amount * 0.1);
+              finalDress = feeForm.amount - finalTuition - finalBooks;
+          }
+
           const feeBreakdown = {
-              tuition: feeForm.tuitionFee,
-              dress: feeForm.dressFee,
-              books: feeForm.booksFee,
-              extraName: feeForm.extraFeeName,
-              extraAmount: feeForm.extraFeeAmount
+              tuition: finalTuition,
+              dress: finalDress,
+              books: finalBooks,
+              extraName: feeForm.extraFeeName || '',
+              extraAmount: finalExtra
           };
 
           const payload = {
@@ -262,12 +298,15 @@ export default function AccountsPanel({ students }: { students: any[] }) {
           
           refreshData(); 
           
-          // Reset form including the date back to today
+          // Reset form
           setFeeForm({ 
               studentId: '', amount: 0, remarks: '', paymentMode: 'CASH', 
               transactionId: '', withGst: false, 
               date: new Date().toISOString().split('T')[0],
-              tuitionFee: 0, dressFee: 0, booksFee: 0, extraFeeName: '', extraFeeAmount: 0 
+              tuitionFee: 0, includeTuition: true,
+              dressFee: 0, includeDress: true,
+              booksFee: 0, includeBooks: true,
+              extraFeeName: '', extraFeeAmount: 0 
           });
           setStudentSearchQuery(''); 
       } catch (e) { alert("Failed to record fee"); }
@@ -283,7 +322,6 @@ export default function AccountsPanel({ students }: { students: any[] }) {
       } catch(e) { alert("Failed to log expense"); }
   };
 
-  // ✨ SECURE WORKING EXPENSE DELETION
   const handleDeleteExpense = async (id: string) => {
       if (!window.confirm("Are you sure you want to delete this expense log?")) return;
       try {
@@ -455,7 +493,6 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                       )}
                   </div>
                   
-                  {/* ✨ AUTO-BREAKDOWN FORM */}
                   <div className="mb-4">
                        <label className={labelStyle}>Total Amount Received (₹)</label>
                        <input 
@@ -468,42 +505,70 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                        />
                   </div>
 
+                  {/* ✨ CHECKBOX-CONTROLLED BREAKDOWN */}
                   <div className="grid grid-cols-3 gap-3 mb-4">
                        <div>
-                           <label className={labelStyle}>Tuition (₹)</label>
+                           <div className="flex items-center gap-1.5 mb-1">
+                               <input 
+                                   type="checkbox" 
+                                   checked={feeForm.includeTuition} 
+                                   onChange={() => handleCheckboxToggle('includeTuition')} 
+                                   className="w-3.5 h-3.5 accent-[#c1121f] cursor-pointer"
+                               />
+                               <label className={`${labelStyle} !mb-0 cursor-pointer`} onClick={() => handleCheckboxToggle('includeTuition')}>Tuition</label>
+                           </div>
                            <input 
                                type="number" 
-                               className={inputStyle} 
+                               className={`${inputStyle} ${!feeForm.includeTuition ? 'opacity-50 bg-slate-100' : ''}`} 
                                placeholder="0" 
                                value={feeForm.tuitionFee || ''} 
                                onChange={e => handleBreakdownChange('tuitionFee', +e.target.value)}
+                               disabled={!feeForm.includeTuition}
                            />
                        </div>
                        <div>
-                           <label className={labelStyle}>Dress (₹)</label>
+                           <div className="flex items-center gap-1.5 mb-1">
+                               <input 
+                                   type="checkbox" 
+                                   checked={feeForm.includeDress} 
+                                   onChange={() => handleCheckboxToggle('includeDress')} 
+                                   className="w-3.5 h-3.5 accent-[#c1121f] cursor-pointer"
+                               />
+                               <label className={`${labelStyle} !mb-0 cursor-pointer`} onClick={() => handleCheckboxToggle('includeDress')}>Dress</label>
+                           </div>
                            <input 
                                type="number" 
-                               className={inputStyle} 
+                               className={`${inputStyle} ${!feeForm.includeDress ? 'opacity-50 bg-slate-100' : ''}`} 
                                placeholder="0" 
                                value={feeForm.dressFee || ''} 
                                onChange={e => handleBreakdownChange('dressFee', +e.target.value)}
+                               disabled={!feeForm.includeDress}
                            />
                        </div>
                        <div>
-                           <label className={labelStyle}>Books (₹)</label>
+                           <div className="flex items-center gap-1.5 mb-1">
+                               <input 
+                                   type="checkbox" 
+                                   checked={feeForm.includeBooks} 
+                                   onChange={() => handleCheckboxToggle('includeBooks')} 
+                                   className="w-3.5 h-3.5 accent-[#c1121f] cursor-pointer"
+                               />
+                               <label className={`${labelStyle} !mb-0 cursor-pointer`} onClick={() => handleCheckboxToggle('includeBooks')}>Books</label>
+                           </div>
                            <input 
                                type="number" 
-                               className={inputStyle} 
+                               className={`${inputStyle} ${!feeForm.includeBooks ? 'opacity-50 bg-slate-100' : ''}`} 
                                placeholder="0" 
                                value={feeForm.booksFee || ''} 
                                onChange={e => handleBreakdownChange('booksFee', +e.target.value)}
+                               disabled={!feeForm.includeBooks}
                            />
                        </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
                        <div>
-                           <label className={labelStyle}>Extra Fee (Opt.)</label>
+                           <label className={labelStyle}>Extra Fee Name (Opt.)</label>
                            <input 
                                type="text" 
                                className={inputStyle} 
@@ -513,7 +578,7 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                            />
                        </div>
                        <div>
-                           <label className={labelStyle}>Extra (₹)</label>
+                           <label className={labelStyle}>Extra Amount (₹)</label>
                            <input 
                                type="number" 
                                className={inputStyle} 
