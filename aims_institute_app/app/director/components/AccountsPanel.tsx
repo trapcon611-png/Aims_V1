@@ -28,7 +28,11 @@ export default function AccountsPanel({ students }: { students: any[] }) {
       extraFeeAmount: 0
   });
 
-  const [newExpense, setNewExpense] = useState({ title: '', amount: 0, category: 'General' });
+  const [newExpense, setNewExpense] = useState({ 
+      title: '', 
+      amount: 0, 
+      category: 'General' 
+  });
   
   // Student Search State (For Collect Fee Form)
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
@@ -59,9 +63,7 @@ export default function AccountsPanel({ students }: { students: any[] }) {
   // Styles
   const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl transition-all duration-300";
   const inputStyle = "w-full p-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-[#c1121f] focus:border-[#c1121f] outline-none transition font-medium text-sm";
-  const redInputStyle = "w-full p-2.5 bg-white border border-red-200 rounded-lg text-red-900 focus:ring-2 focus:ring-[#c1121f] outline-none transition font-bold placeholder:text-red-300 text-sm";
   const labelStyle = "block text-[10px] font-bold text-slate-500 uppercase mb-1 tracking-wide";
-  const redLabelStyle = "block text-[10px] font-bold text-red-700 uppercase mb-1 tracking-wide";
 
   // --- DATA LOADING ---
   const refreshData = async () => {
@@ -77,11 +79,16 @@ export default function AccountsPanel({ students }: { students: any[] }) {
           setFeeHistory(feeData);
           setBatches(batchData);
           setBranches(branchData);
-      } catch(e) { console.error(e); }
-      finally { setIsLoading(false); }
+      } catch(e) { 
+          console.error(e); 
+      } finally { 
+          setIsLoading(false); 
+      }
   };
 
-  useEffect(() => { refreshData(); }, []);
+  useEffect(() => { 
+      refreshData(); 
+  }, []);
 
   // --- STUDENT AUTOCOMPLETE LOGIC ---
   const filteredStudentOptions = useMemo(() => {
@@ -172,11 +179,11 @@ export default function AccountsPanel({ students }: { students: any[] }) {
       currentPage * ITEMS_PER_PAGE
   );
 
-  // ✨ AUTO-BREAKDOWN LOGIC (80/10/10 Split)
+  // ✨ MATH LOGIC: Ensures breakdown sums exactly to the Total Amount.
   const handleAmountChange = (val: number) => {
       const tuition = Math.round(val * 0.8);
       const books = Math.round(val * 0.1);
-      const dress = val - tuition - books; // Remainder to guarantee 100% match
+      const dress = val - tuition - books; // Remainder to guarantee 100% exact match
       setFeeForm(prev => ({ 
           ...prev, 
           amount: val, 
@@ -189,6 +196,7 @@ export default function AccountsPanel({ students }: { students: any[] }) {
   const handleBreakdownChange = (field: string, val: number) => {
       setFeeForm(prev => {
           const updated = { ...prev, [field]: val };
+          // If the user manually edits the breakdown, the Total Amount recalculates to match perfectly
           updated.amount = (updated.tuitionFee || 0) + (updated.dressFee || 0) + (updated.booksFee || 0) + (updated.extraFeeAmount || 0);
           return updated;
       });
@@ -205,7 +213,7 @@ export default function AccountsPanel({ students }: { students: any[] }) {
       if (!student) return;
       
       try {
-          // ✨ TIME FIX: Keep current exact time when generating the date string
+          // TIME FIX: Keep current exact time when generating the date string
           const paymentDate = new Date();
           if (feeForm.date) {
               const [y, m, d] = feeForm.date.split('-');
@@ -228,12 +236,13 @@ export default function AccountsPanel({ students }: { students: any[] }) {
 
           const res = await directorApi.collectFee(payload);
           
-          // ✨ DYNAMIC BRANCH ADDRESS LOOKUP FOR INSTANT RECEIPT
+          // LIVE BRANCH ADDRESS LOOKUP FOR INSTANT RECEIPT
           const studentBatch = batches.find(b => b.name === student.batch);
           const studentBranch = branches.find(br => br.id === studentBatch?.branchId);
 
           const record = { 
               ...res, 
+              amount: feeForm.amount, 
               studentName: student.name, 
               batch: student.batch, 
               studentId: student.id, 
@@ -252,6 +261,7 @@ export default function AccountsPanel({ students }: { students: any[] }) {
           setShowInvoice(true);
           
           refreshData(); 
+          
           // Reset form including the date back to today
           setFeeForm({ 
               studentId: '', amount: 0, remarks: '', paymentMode: 'CASH', 
@@ -293,7 +303,9 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                   <div className="text-xs font-bold text-emerald-600 uppercase mb-1 flex items-center gap-2">
                       <TrendingUp size={14}/> Fees Collected Today
                   </div>
-                  <div className="text-3xl font-black text-emerald-900">₹ {todaysMetrics.collected.toLocaleString()}</div>
+                  <div className="text-3xl font-black text-emerald-900">
+                      ₹ {todaysMetrics.collected.toLocaleString()}
+                  </div>
                   <div className="text-[10px] text-emerald-600/70 font-mono mt-1 font-bold">
                       {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                   </div>
@@ -308,7 +320,9 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                   <div className="text-xs font-bold text-red-600 uppercase mb-1 flex items-center gap-2">
                       <TrendingDown size={14}/> Expenses Today
                   </div>
-                  <div className="text-3xl font-black text-red-900">₹ {todaysMetrics.spent.toLocaleString()}</div>
+                  <div className="text-3xl font-black text-red-900">
+                      ₹ {todaysMetrics.spent.toLocaleString()}
+                  </div>
                   <div className="text-[10px] text-red-600/70 font-mono mt-1 font-bold">
                       {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                   </div>
@@ -360,7 +374,9 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                                       }}
                                   >
                                       <option value="">All Branches</option>
-                                      {branches.map(br => <option key={br.id} value={br.id}>{br.name}</option>)}
+                                      {branches.map(br => (
+                                          <option key={br.id} value={br.id}>{br.name}</option>
+                                      ))}
                                   </select>
                                   <MapPin size={14} className="absolute left-3 top-3.5 text-blue-500" />
                               </div>
@@ -382,7 +398,9 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                                   <option value="">All Batches</option>
                                   {batches
                                       .filter(b => feeCollectBranchFilter ? b.branchId === feeCollectBranchFilter : true)
-                                      .map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+                                      .map(b => (
+                                          <option key={b.id} value={b.name}>{b.name}</option>
+                                      ))}
                               </select>
                           </div>
 
@@ -437,8 +455,8 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                       )}
                   </div>
                   
-                  {/* ✨ FEE BREAKDOWN FORM */}
-                  <div className="mb-2">
+                  {/* ✨ AUTO-BREAKDOWN FORM */}
+                  <div className="mb-4">
                        <label className={labelStyle}>Total Amount Received (₹)</label>
                        <input 
                            type="number" 
@@ -450,7 +468,7 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                        />
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3 mb-2">
+                  <div className="grid grid-cols-3 gap-3 mb-4">
                        <div>
                            <label className={labelStyle}>Tuition (₹)</label>
                            <input 
@@ -485,7 +503,7 @@ export default function AccountsPanel({ students }: { students: any[] }) {
 
                   <div className="grid grid-cols-2 gap-3 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
                        <div>
-                           <label className={labelStyle}>Extra Fee Name (Opt.)</label>
+                           <label className={labelStyle}>Extra Fee (Opt.)</label>
                            <input 
                                type="text" 
                                className={inputStyle} 
@@ -495,7 +513,7 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                            />
                        </div>
                        <div>
-                           <label className={labelStyle}>Extra Amount (₹)</label>
+                           <label className={labelStyle}>Extra (₹)</label>
                            <input 
                                type="number" 
                                className={inputStyle} 
@@ -506,7 +524,6 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                        </div>
                   </div>
 
-                  {/* REST OF THE FORM */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                           <label className={labelStyle}>Payment Mode</label>
@@ -528,7 +545,7 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                               className={inputStyle} 
                               value={feeForm.date} 
                               onChange={e => setFeeForm({...feeForm, date: e.target.value})} 
-                              required
+                              required 
                           />
                       </div>
                   </div>
@@ -690,7 +707,9 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                           onChange={e => setBatchFilter(e.target.value)}
                       >
                           <option value="">All Batches</option>
-                          {batches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+                          {batches.map(b => (
+                              <option key={b.id} value={b.name}>{b.name}</option>
+                          ))}
                       </select>
                   </div>
                   
@@ -801,7 +820,13 @@ export default function AccountsPanel({ students }: { students: any[] }) {
           )}
       </div>
       
-      {showInvoice && currentInvoice && <InvoiceModal data={currentInvoice} onClose={() => setShowInvoice(false)} isGstEnabled={currentInvoice.withGst} />}
+      {showInvoice && currentInvoice && (
+          <InvoiceModal 
+              data={currentInvoice} 
+              onClose={() => setShowInvoice(false)} 
+              isGstEnabled={currentInvoice.withGst} 
+          />
+      )}
     </div>
   );
 }

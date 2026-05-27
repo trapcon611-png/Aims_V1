@@ -1,18 +1,19 @@
 'use client';
 import React from 'react';
+import Image from 'next/image';
 import { Printer, X } from 'lucide-react';
 
 const LOGO_PATH = '/mainpage.png';
 
 const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () => void, isGstEnabled: boolean }) => {
-  // 1. Calculate Base Amounts securely
-  const rawAmount = Number(data.amount) || 0;
+  // 1. Calculate Base Amounts securely (Fallbacks added to guarantee a number)
+  const rawAmount = Number(data.amount) || Number(data.fees) || 0;
   const baseAmount = isGstEnabled ? Math.round(rawAmount / 1.18) : Math.round(rawAmount);
   const gstAmount = isGstEnabled ? rawAmount - baseAmount : 0;
   const cgst = gstAmount / 2;
   const sgst = gstAmount / 2;
 
-  // 2. Safely parse the feeBreakdown (handles stringified JSON from database)
+  // 2. Safely parse the feeBreakdown from the database
   let parsedBreakdown = null;
   try {
     if (typeof data.feeBreakdown === 'string') {
@@ -24,27 +25,26 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
     parsedBreakdown = null;
   }
 
-  // 3. Extract Values
+  // 3. Extract Values safely
   const tuition = Number(parsedBreakdown?.tuition) || 0;
   const dress = Number(parsedBreakdown?.dress) || 0;
   const books = Number(parsedBreakdown?.books) || 0;
   const extraAmount = Number(parsedBreakdown?.extraAmount) || 0;
   const extraName = parsedBreakdown?.extraName || 'Additional Fee';
 
-  // 4. Validate if a real breakdown exists
+  // 4. Validate if user manually entered a breakdown
   const hasValidBreakdown = (tuition + dress + books + extraAmount) > 0;
 
-  // 5. Build the Final Display Object (with Automatic Fallback built-in!)
+  // 5. Build the Final Display Object 
   let displayBreakdown = { tuition: 0, dress: 0, books: 0, extraAmount: 0, extraName: '' };
 
   if (hasValidBreakdown) {
-      // Use the exact values provided by the user
       displayBreakdown = { tuition, dress, books, extraAmount, extraName };
   } else if (baseAmount > 0) {
-      // ✨ The Auto-Fallback: Forces an 80/10/10 split if boxes were left blank or it's an old receipt!
+      // ✨ AUTO-FALLBACK: Forces exactly 80/10/10 split if the boxes were left blank!
       displayBreakdown.tuition = Math.round(baseAmount * 0.8);
       displayBreakdown.books = Math.round(baseAmount * 0.1);
-      displayBreakdown.dress = baseAmount - displayBreakdown.tuition - displayBreakdown.books; // Uses remainder to guarantee exact total
+      displayBreakdown.dress = baseAmount - displayBreakdown.tuition - displayBreakdown.books; 
   }
 
   return (
@@ -65,7 +65,13 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
           <div className="flex justify-between items-start border-b-2 border-[#dc2626] pb-6 mb-6">
               <div className="flex flex-col gap-2 justify-center mt-2">
                 <div className="relative w-64 h-16">
-                   <img src={LOGO_PATH} alt="AIMS Logo" className="object-contain object-left w-full h-full" />
+                   <Image 
+                       src={LOGO_PATH} 
+                       alt="AIMS Logo" 
+                       fill 
+                       className="object-contain object-left" 
+                       unoptimized 
+                   />
                 </div>
               </div>
               <div className="text-right text-xs text-slate-600">
@@ -122,34 +128,56 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
             </thead>
             <tbody>
               
-              {/* ✨ ITEMIZED FEE BREAKDOWN RENDERING */}
+              {/* ✨ GUARANTEED RENDER OF HEADERS */}
               {displayBreakdown.tuition > 0 && (
                   <tr className="border-b border-slate-200">
                       <td className="py-3 px-4 font-bold text-slate-800">Tuition / Academic Fees</td>
-                      <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{displayBreakdown.tuition.toLocaleString()}</td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">
+                          ₹{displayBreakdown.tuition.toLocaleString()}
+                      </td>
                   </tr>
               )}
               {displayBreakdown.dress > 0 && (
                   <tr className="border-b border-slate-200">
                       <td className="py-3 px-4 font-bold text-slate-800">Dress / Uniform Fee</td>
-                      <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{displayBreakdown.dress.toLocaleString()}</td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">
+                          ₹{displayBreakdown.dress.toLocaleString()}
+                      </td>
                   </tr>
               )}
               {displayBreakdown.books > 0 && (
                   <tr className="border-b border-slate-200">
                       <td className="py-3 px-4 font-bold text-slate-800">Books & Study Material</td>
-                      <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{displayBreakdown.books.toLocaleString()}</td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">
+                          ₹{displayBreakdown.books.toLocaleString()}
+                      </td>
                   </tr>
               )}
               {displayBreakdown.extraAmount > 0 && (
                   <tr className="border-b border-slate-200">
-                      <td className="py-3 px-4 font-bold text-slate-800">{displayBreakdown.extraName}</td>
-                      <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">₹{displayBreakdown.extraAmount.toLocaleString()}</td>
+                      <td className="py-3 px-4 font-bold text-slate-800">{displayBreakdown.extraName || 'Additional Fee'}</td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">
+                          ₹{displayBreakdown.extraAmount.toLocaleString()}
+                      </td>
                   </tr>
               )}
               
+              {/* Fallback for 0 amount overall */}
+              {displayBreakdown.tuition === 0 && displayBreakdown.dress === 0 && displayBreakdown.books === 0 && displayBreakdown.extraAmount === 0 && (
+                  <tr className="border-b border-slate-200">
+                    <td className="py-4 px-4">
+                      <p className="font-bold text-slate-800">Tuition / Academic Fees</p>
+                    </td>
+                    <td className="py-4 px-4 text-right font-mono font-bold text-slate-800">
+                      ₹{baseAmount.toLocaleString()}
+                    </td>
+                  </tr>
+              )}
+
               <tr className="border-b border-slate-100">
-                  <td colSpan={2} className="py-2 px-4 text-xs text-slate-500 italic">Txn Ref: {data.transactionId || 'N/A'} • Remarks: {data.remarks || 'Fee Payment'}</td>
+                  <td colSpan={2} className="py-2 px-4 text-xs text-slate-500 italic">
+                      Txn Ref: {data.transactionId || 'N/A'} • Remarks: {data.remarks || 'Fee Payment'}
+                  </td>
               </tr>
 
               {/* GST ROWS */}
@@ -204,8 +232,20 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
         </div>
 
         <div className="absolute top-4 -right-16 flex flex-col gap-2 print-hidden">
-          <button onClick={() => window.print()} className="bg-[#dc2626] text-white p-3 rounded-full shadow-lg hover:bg-red-800 transition" title="Print"><Printer size={20}/></button>
-          <button onClick={onClose} className="bg-white text-slate-700 p-3 rounded-full shadow-lg hover:bg-slate-100 transition" title="Close"><X size={20}/></button>
+          <button 
+              onClick={() => window.print()} 
+              className="bg-[#dc2626] text-white p-3 rounded-full shadow-lg hover:bg-red-800 transition" 
+              title="Print"
+          >
+              <Printer size={20}/>
+          </button>
+          <button 
+              onClick={onClose} 
+              className="bg-white text-slate-700 p-3 rounded-full shadow-lg hover:bg-slate-100 transition" 
+              title="Close"
+          >
+              <X size={20}/>
+          </button>
         </div>
       </div>
     </div>
