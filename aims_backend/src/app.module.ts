@@ -14,9 +14,11 @@ import { ErpModule } from './erp/erp.module';
 import { StudentModule } from './student/student.module';
 import { ParentModule } from './parent/parent.module'; // NEW IMPORT
 import { PaymentModule } from './payment/payment.module'; // <--- ADD THIS
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     PrismaModule, 
     UsersModule, 
     AuthModule,

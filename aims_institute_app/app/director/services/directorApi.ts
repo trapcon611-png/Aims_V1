@@ -445,5 +445,24 @@ export const directorApi = {
       });
       if (!res.ok) throw new Error('Failed to save attendance');
       return await parseJsonSafely(res);
+  }, // <--- DON'T FORGET THIS COMMA
+
+  // --- WHATSAPP COMMUNICATION HUB ---
+  async broadcastWhatsappReminders(installments: any[]) {
+      const res = await fetchWithAuth(`${API_URL}/finance/whatsapp/broadcast`, {
+          method: 'POST',
+          headers: { 
+              'Content-Type': 'application/json', 
+              'Authorization': `Bearer ${this.getToken()}` 
+          },
+          body: JSON.stringify({ targets: installments })
+      });
+      
+      if (!res.ok) {
+          const errorData = await parseJsonSafely(res, { message: 'Failed to dispatch WhatsApp messages to server' });
+          throw new Error(errorData.message || 'Failed to dispatch WhatsApp messages to server');
+      }
+      
+      return await parseJsonSafely(res);
   }
 };

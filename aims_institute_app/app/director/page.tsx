@@ -19,6 +19,7 @@ import StudentDirectoryPanel from './components/StudentDirectoryPanel';
 import ContentPanel from './components/ContentPanel';
 import CarouselPanel from './components/CarouselPanel';
 import AttendancePanel from './components/AttendancePanel'; // ✨ IMPORTED ATTENDANCE PANEL
+import WhatsappPanel from './components/WhatsappPanel';
 
 // --- TYPES ---
 interface Batch { id: string; name: string; startYear: string; strength: number; fee: number; branchId?: string; }
@@ -89,6 +90,7 @@ const DashboardHome = ({
         { id: 'attendance', label: 'Attendance', icon: CheckCircle, color: 'text-cyan-600', border: 'border-cyan-200', bg: 'hover:bg-cyan-50', count: null },
         { id: 'academics', label: 'Academics', icon: GraduationCap, color: 'text-indigo-600', border: 'border-indigo-200', bg: 'hover:bg-indigo-50', count: null },
         { id: 'carousel', label: 'Website Carousel', icon: ImageIcon, color: 'text-teal-600', border: 'border-teal-200', bg: 'hover:bg-teal-50', count: null },
+        { id: 'communications', label: 'WhatsApp Hub', icon: MessageSquare, color: 'text-green-600', border: 'border-green-200', bg: 'hover:bg-green-50', count: dueInstallments.length > 0 ? dueInstallments.length : null },
     ];
 
     return (
@@ -464,7 +466,7 @@ export default function DirectorPage() {
                  {!isSidebarCollapsed && "Dashboard"}
              </button>
              
-             {['users', 'batches', 'accounts', 'enquiries', 'directory', 'attendance', 'academics', 'content', 'carousel'].map(tab => (
+             {['users', 'batches', 'accounts', 'enquiries', 'directory', 'attendance', 'academics', 'content', 'carousel', 'communications'].map(tab => (
                  <button key={tab} onClick={() => setActiveTab(tab)} 
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${activeTab === tab ? 'bg-[#c1121f] text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`}
                  >
@@ -477,7 +479,8 @@ export default function DirectorPage() {
                     {tab === 'academics' && <GraduationCap size={18}/>}
                     {tab === 'content' && <BookOpen size={18}/>}
                     {tab === 'carousel' && <ImageIcon size={18}/>}
-                    {!isSidebarCollapsed && <span className="capitalize">{tab}</span>}
+                    {tab === 'communications' && <MessageSquare size={18}/>}
+                    {!isSidebarCollapsed && <span className="capitalize">{tab === 'communications' ? 'WhatsApp Hub' : tab}</span>}
                  </button>
              ))}
           </nav>
@@ -506,7 +509,10 @@ export default function DirectorPage() {
            {activeTab === 'carousel' && <CarouselPanel />}
            
           {/* ✨ NEW ATTENDANCE PANEL */}
-{activeTab === 'attendance' && <AttendancePanel branches={branches} batches={batches} students={students} />}
+          {activeTab === 'attendance' && <AttendancePanel branches={branches} batches={batches} students={students} />}
+          
+          {/* ✨ NEW WHATSAPP PANEL */}
+          {activeTab === 'communications' && <WhatsappPanel students={students} dueInstallments={dueInstallments} />}
            {/* --- INLINE TABS (ENQUIRIES) --- */}
            {activeTab === 'enquiries' && (
              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto p-8 relative">
