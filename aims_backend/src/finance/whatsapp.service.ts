@@ -51,7 +51,7 @@ export class WhatsappService {
 
       // 3. Define target dates based on Director's Rules
       const today = new Date();
-      const datesToTarget = [];
+      const datesToTarget: string[] = [];
 
       // Rule 1: First Warning (e.g., 3 days from now)
       const warningDate = new Date(today);
