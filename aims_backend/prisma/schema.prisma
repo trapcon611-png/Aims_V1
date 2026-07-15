@@ -368,3 +368,12 @@ model Branch {
 
   batches   Batch[]
 }
+// --- 8. SYSTEM CONFIGURATION ---
+
+model AutomationSettings {
+  id             String   @id @default("whatsapp_rules")
+  dispatchTime   String   @default("09:00")
+  daysBefore     Int      @default(3)
+  maxFollowUps   Int      @default(2)
+  updatedAt      DateTime @updatedAt
+}

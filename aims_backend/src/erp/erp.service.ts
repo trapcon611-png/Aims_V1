@@ -446,6 +446,7 @@ export class ErpService {
 
           isMobileMasked: !(s.parent?.isMobileVisible), 
           batch: s.batch?.name || 'Unassigned', 
+          branch: s.batch?.branch?.name || null,
           address: s.address, 
           feeTotal: s.feeAgreed, 
           feePaid: paid, 
