@@ -1,5 +1,5 @@
 import { Controller, Post, Body, UseGuards } from '@nestjs/common';
-import { WhatsappService } from './whatsapp.service.ts';
+import { WhatsappService } from './whatsapp.service';
 // import { JwtAuthGuard, RolesGuard, Roles } from '../auth/...'; // Import your guards
 
 @Controller('whatsapp')
