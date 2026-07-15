@@ -37,9 +37,15 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
         }
     }, [dueInstallments]);
 
-    // Derived Data for Filters
+    // --- 1. DERIVED DATA (DEPENDENT DROPDOWNS) ---
     const uniqueBranches = Array.from(new Set(students.map(s => s.branch?.name || s.branch).filter(Boolean)));
-    const uniqueBatches = Array.from(new Set(students.map(s => s.batch?.name || s.batch).filter(Boolean)));
+    
+    // Only extract batches that belong to the currently selected branch
+    const availableStudentsForBatches = branchFilter === "ALL" 
+        ? students 
+        : students.filter(s => (s.branch?.name || s.branch) === branchFilter);
+        
+    const uniqueBatches = Array.from(new Set(availableStudentsForBatches.map(s => s.batch?.name || s.batch).filter(Boolean)));
     
     const currentList = activeTab === 'dues' ? dueInstallments : students;
     
@@ -51,7 +57,7 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
         return branchMatch && batchMatch;
     });
 
-    // Handlers
+    // --- 2. HANDLERS ---
     const toggleSelection = (id: string) => {
         const newSet = new Set(selectedIds);
         if (newSet.has(id)) newSet.delete(id);
@@ -65,12 +71,14 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
     };
 
     const handleFilterChange = (type: 'branch' | 'batch', value: string) => {
-        if (type === 'branch') setBranchFilter(value);
-        if (type === 'batch') setBatchFilter(value);
-        
-        // Let state update cycle complete, then auto-select is handled by user clicking 'Select All'
-        // or we could clear selections to be safe:
-        setSelectedIds(new Set()); 
+        if (type === 'branch') {
+            setBranchFilter(value);
+            setBatchFilter("ALL"); // Auto-reset batch when branch changes!
+        }
+        if (type === 'batch') {
+            setBatchFilter(value);
+        }
+        setSelectedIds(new Set()); // Clear selections to prevent accidental wrong-batch sends
     };
 
     const saveTemplate = () => {
@@ -247,46 +255,52 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
                         // --- TARGET SELECTION VIEW ---
                         <>
                             {/* NEW BULLETPROOF FILTER LAYOUT */}
-                            <div className="p-4 border-b border-slate-200 bg-slate-100 rounded-t-xl space-y-4 lg:space-y-0 lg:flex lg:justify-between lg:items-center">
+                            <div className="p-4 border-b border-slate-200 bg-slate-100 rounded-t-xl flex flex-col md:flex-row justify-between md:items-center gap-4">
                                 <div className="flex items-center gap-2 font-black text-slate-800 shrink-0">
                                     <Users size={18} className="text-blue-600"/> Target Audience
                                 </div>
                                 
-                                {/* CSS Grid guarantees it will never break out of the box */}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full lg:w-3/5 xl:w-1/2">
+                                {/* Hard-constrained flex containers */}
+                                <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                                    
                                     {/* Branch Filter */}
-                                    <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-1.5 pl-3 shadow-inner border border-slate-700 min-w-0">
+                                    <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-2 shadow-inner border border-slate-700 w-full sm:w-[180px] shrink-0">
                                         <span className="text-xs font-bold text-slate-400 uppercase tracking-wide shrink-0">Branch:</span>
-                                        <select 
-                                            value={branchFilter} 
-                                            onChange={(e) => handleFilterChange('branch', e.target.value)}
-                                            className="bg-transparent text-white font-bold w-full text-sm outline-none cursor-pointer py-1 pr-2 truncate"
-                                        >
-                                            <option value="ALL">All Branches</option>
-                                            {uniqueBranches.length > 0 ? (
-                                                uniqueBranches.map((b, i) => <option key={`branch-${i}`} value={b as string}>{b as string}</option>)
-                                            ) : (
-                                                <option value="ALL" disabled>No Branches Found</option>
-                                            )}
-                                        </select>
+                                        <div className="min-w-0 flex-1">
+                                            <select 
+                                                value={branchFilter} 
+                                                onChange={(e) => handleFilterChange('branch', e.target.value)}
+                                                className="bg-transparent text-white font-bold w-full text-sm outline-none cursor-pointer truncate"
+                                            >
+                                                <option value="ALL">All Branches</option>
+                                                {uniqueBranches.length > 0 ? (
+                                                    uniqueBranches.map((b, i) => <option key={`branch-${i}`} value={b as string}>{b as string}</option>)
+                                                ) : (
+                                                    <option value="ALL" disabled>No Branches Found</option>
+                                                )}
+                                            </select>
+                                        </div>
                                     </div>
                                     
                                     {/* Batch Filter */}
-                                    <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-1.5 pl-3 shadow-inner border border-slate-700 min-w-0">
+                                    <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-2 shadow-inner border border-slate-700 w-full sm:w-[220px] shrink-0">
                                         <span className="text-xs font-bold text-slate-400 uppercase tracking-wide shrink-0">Batch:</span>
-                                        <select 
-                                            value={batchFilter} 
-                                            onChange={(e) => handleFilterChange('batch', e.target.value)}
-                                            className="bg-transparent text-white font-bold w-full text-sm outline-none cursor-pointer py-1 pr-2 truncate"
-                                        >
-                                            <option value="ALL">All Batches</option>
-                                            {uniqueBatches.length > 0 ? (
-                                                uniqueBatches.map((b, i) => <option key={`batch-${i}`} value={b as string}>{b as string}</option>)
-                                            ) : (
-                                                <option value="ALL" disabled>No Batches Found</option>
-                                            )}
-                                        </select>
+                                        <div className="min-w-0 flex-1">
+                                            <select 
+                                                value={batchFilter} 
+                                                onChange={(e) => handleFilterChange('batch', e.target.value)}
+                                                className="bg-transparent text-white font-bold w-full text-sm outline-none cursor-pointer truncate"
+                                            >
+                                                <option value="ALL">All Batches</option>
+                                                {uniqueBatches.length > 0 ? (
+                                                    uniqueBatches.map((b, i) => <option key={`batch-${i}`} value={b as string}>{b as string}</option>)
+                                                ) : (
+                                                    <option value="ALL" disabled>No Batches Found</option>
+                                                )}
+                                            </select>
+                                        </div>
                                     </div>
+
                                 </div>
                             </div>
                             
