@@ -21,6 +21,8 @@ services:
       - "5432:5432"
     volumes:
       - aims_pgdata:/var/lib/postgresql/data
+    networks:
+      - aims_network
     restart: unless-stopped
 
   # 2. NestJS Backend Service
@@ -36,8 +38,11 @@ services:
       - ./aims_backend/.env
     environment:
       - DATABASE_URL=postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public
+      - OPENWA_API_URL=http://openwa:3000/api
     depends_on:
       - postgres
+    networks:
+      - aims_network
     restart: unless-stopped
     volumes:
       - ./backups:/app/backups
@@ -47,7 +52,6 @@ services:
     build:
       context: ./aims_institute_app
       dockerfile: Dockerfile
-      # ✨ THE FIX: 'args' injects variables directly into the Next.js BUILD process
       args:
         - NEXT_PUBLIC_RAZORPAY_KEY_ID=rzp_live_SMgmgIgW1pxhhB
         - NEXT_PUBLIC_API_URL=http://76.13.247.225:3001
@@ -55,7 +59,6 @@ services:
     logging: *default-logging
     ports:
       - "3000:3000"
-    # We keep this here just for safety during runtime
     environment: 
       - NEXT_PUBLIC_RAZORPAY_KEY_ID=rzp_live_SMgmgIgW1pxhhB
       - NEXT_PUBLIC_API_URL=http://76.13.247.225:3001
@@ -63,7 +66,28 @@ services:
       - ./aims_institute_app/.env
     depends_on:
       - aims_backend
+    networks:
+      - aims_network
     restart: unless-stopped
+
+  # ✨ 4. NEW: OpenWA Service (Now building locally!)
+  openwa:
+    build:
+      context: ./openwa/OpenWA-main/OpenWA-main
+      dockerfile: Dockerfile
+    container_name: aims_whatsapp_service
+    logging: *default-logging
+    restart: unless-stopped
+    networks:
+      - aims_network
+    volumes:
+      - ./openwa_data:/app/data
+    environment:
+      - API_KEY=${OPENWA_API_KEY} 
+
+networks:
+  aims_network:
+    driver: bridge
 
 volumes:
   aims_pgdata:

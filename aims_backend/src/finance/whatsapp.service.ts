@@ -72,7 +72,7 @@ export class WhatsappService {
     try {
         this.logger.log(`[DRY-RUN] Sending WA to ${chatId}: ${text.substring(0, 30)}...`);
         
-        /* UNCOMMENT ONCE OPENWA IS LIVE
+         
         await fetch(`${this.openWaApiUrl}/sendText`, {
             method: 'POST',
             headers: {
@@ -85,9 +85,16 @@ export class WhatsappService {
                 session: "aims-finance" // Your session name in OpenWA
             })
         });
-        */
+        
     } catch (error) {
         this.logger.error(`Failed to send WA message to ${mobile}`, error);
     }
+  }
+  async automatedFeeRemindersManual(targets: any[]) {
+      for (const target of targets) {
+          const message = `*AIMS Institute Reminder*\n\nDear Parent of ${target.name},\nThis is a reminder for your pending installment of ₹${target.amount} due on ${new Date(target.date).toLocaleDateString()}.\n\nRegards,\nAIMS Admin`;
+          await this.dispatchOpenWAMessage(target.mobile, message);
+      }
+      return { success: true, dispatched: targets.length };
   }
 }

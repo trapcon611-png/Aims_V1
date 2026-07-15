@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { FinanceService } from './finance.service';
+import { WhatsappService } from './whatsapp.service'; // ✨ IMPORT SERVICE
 import { AuthGuard } from '@nestjs/passport';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -9,7 +10,18 @@ import { CollectFeeDto } from './dto/collect-fee.dto';
 @Controller('finance')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
 export class FinanceController {
-  constructor(private readonly service: FinanceService) {}
+  // ✨ INJECT BOTH SERVICES
+  constructor(
+    private readonly service: FinanceService,
+    private readonly whatsappService: WhatsappService 
+  ) {}
+
+  // --- WHATSAPP BROADCAST ENDPOINT ---
+  @Post('whatsapp/broadcast')
+  @Roles('SUPER_ADMIN')
+  async broadcastReminders(@Body() body: { targets: any[] }) {
+    return await this.whatsappService.automatedFeeRemindersManual(body.targets);
+  }
 
   // --- PARENT ACCESS ---
   @Get('my-summary')
@@ -50,7 +62,6 @@ export class FinanceController {
     return this.service.collectFee(body);
   }
 
-  // --- NEW: FEE HISTORY ENDPOINT ---
   @Get('transactions')
   @Roles('SUPER_ADMIN')
   getTransactions() {
