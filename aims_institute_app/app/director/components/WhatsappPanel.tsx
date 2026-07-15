@@ -272,11 +272,12 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
                                                 onChange={(e) => handleFilterChange('branch', e.target.value)}
                                                 className="bg-transparent text-white font-bold w-full text-sm outline-none cursor-pointer truncate"
                                             >
-                                                <option value="ALL">All Branches</option>
+                                                {/* Notice the explicit text-slate-800 and bg-white added to every option */}
+                                                <option value="ALL" className="text-slate-800 bg-white font-medium">All Branches</option>
                                                 {uniqueBranches.length > 0 ? (
-                                                    uniqueBranches.map((b, i) => <option key={`branch-${i}`} value={b as string}>{b as string}</option>)
+                                                    uniqueBranches.map((b, i) => <option key={`branch-${i}`} value={b as string} className="text-slate-800 bg-white font-medium">{b as string}</option>)
                                                 ) : (
-                                                    <option value="ALL" disabled>No Branches Found</option>
+                                                    <option value="ALL" disabled className="text-slate-500 bg-slate-50 italic">No Branches Found</option>
                                                 )}
                                             </select>
                                         </div>
@@ -291,11 +292,11 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
                                                 onChange={(e) => handleFilterChange('batch', e.target.value)}
                                                 className="bg-transparent text-white font-bold w-full text-sm outline-none cursor-pointer truncate"
                                             >
-                                                <option value="ALL">All Batches</option>
+                                                <option value="ALL" className="text-slate-800 bg-white font-medium">All Batches</option>
                                                 {uniqueBatches.length > 0 ? (
-                                                    uniqueBatches.map((b, i) => <option key={`batch-${i}`} value={b as string}>{b as string}</option>)
+                                                    uniqueBatches.map((b, i) => <option key={`batch-${i}`} value={b as string} className="text-slate-800 bg-white font-medium">{b as string}</option>)
                                                 ) : (
-                                                    <option value="ALL" disabled>No Batches Found</option>
+                                                    <option value="ALL" disabled className="text-slate-500 bg-slate-50 italic">No Batches Found</option>
                                                 )}
                                             </select>
                                         </div>
