@@ -448,14 +448,17 @@ export const directorApi = {
   }, // <--- DON'T FORGET THIS COMMA
 
   // --- WHATSAPP COMMUNICATION HUB ---
-  async broadcastWhatsappReminders(installments: any[]) {
-      const res = await fetchWithAuth(`${API_URL}/finance/whatsapp/broadcast`, {
+  // --- WHATSAPP COMMUNICATION HUB ---
+  async broadcastWhatsappReminders(payload: { targets: any[], customText: string | null }) {
+      // Notice we are hitting the /whatsapp/broadcast-reminders endpoint we made in NestJS
+      const res = await fetchWithAuth(`${API_URL}/whatsapp/broadcast-reminders`, {
           method: 'POST',
           headers: { 
               'Content-Type': 'application/json', 
               'Authorization': `Bearer ${this.getToken()}` 
           },
-          body: JSON.stringify({ targets: installments })
+          // We pass the entire payload object directly to the backend
+          body: JSON.stringify(payload)
       });
       
       if (!res.ok) {

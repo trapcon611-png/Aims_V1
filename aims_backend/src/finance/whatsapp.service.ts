@@ -90,9 +90,13 @@ export class WhatsappService {
         this.logger.error(`Failed to send WA message to ${mobile}`, error);
     }
   }
-  async automatedFeeRemindersManual(targets: any[]) {
+  async automatedFeeRemindersManual(targets: any[], customText?: string) {
       for (const target of targets) {
-          const message = `*AIMS Institute Reminder*\n\nDear Parent of ${target.name},\nThis is a reminder for your pending installment of ₹${target.amount} due on ${new Date(target.date).toLocaleDateString()}.\n\nRegards,\nAIMS Admin`;
+          // If the director typed a custom message in the UI, use it. Otherwise, use the default.
+          const message = customText 
+              ? customText 
+              : `*AIMS Institute Reminder*\n\nDear Parent of ${target.name},\nThis is a reminder for your pending installment of ₹${target.amount} due on ${new Date(target.date).toLocaleDateString()}.\n\nRegards,\nAIMS Admin`;
+          
           await this.dispatchOpenWAMessage(target.mobile, message);
       }
       return { success: true, dispatched: targets.length };

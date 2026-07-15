@@ -9,8 +9,11 @@ export class WhatsappController {
     constructor(private readonly whatsappService: WhatsappService) {}
 
     @Post('broadcast-reminders')
-    async broadcastReminders(@Body() targets: any[]) {
-        // Triggers the manual dispatch function you wrote in the service
-        return await this.whatsappService.automatedFeeRemindersManual(targets);
+    async broadcastReminders(@Body() body: { targets: any[], customText: string | null }) {
+        // We add "|| undefined" so TypeScript is happy with the service signature
+        return await this.whatsappService.automatedFeeRemindersManual(
+            body.targets, 
+            body.customText || undefined
+        );
     }
 }
