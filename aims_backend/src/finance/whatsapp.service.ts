@@ -7,7 +7,8 @@ export class WhatsappService {
   private readonly logger = new Logger(WhatsappService.name);
   
   // Connects to your OpenWA microservice
-  private readonly openWaApiUrl = process.env.OPENWA_API_URL || 'http://openwa:2785/api';
+  // Overriding any wrong .env variable to force the correct Docker network port
+  private readonly openWaApiUrl = 'http://aims_whatsapp_service:2785/api';
 
   constructor(private prisma: PrismaService) {}
   
@@ -141,7 +142,7 @@ export class WhatsappService {
               body: JSON.stringify({
                   chatId: chatId,
                   text: text,
-                  session: "default" // ✨ THE FIX: Targeting the correct OpenWA session
+                  session: "aims-finance" // ✨ THE FIX: Targeting the correct OpenWA session
               })
           });
 
