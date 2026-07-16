@@ -170,22 +170,36 @@ export class WhatsappService {
   }
 
   async automatedFeeRemindersManual(targets: any[], customText?: string) {
-        let count = 0;
+        let successCount = 0;
+        let failCount = 0;
+
         for (const target of targets) {
             const message = customText 
                 ? customText 
                 : `*AIMS Institute Reminder*\n\nDear Parent of ${target.name},\nThis is a reminder for your pending installment of ₹${target.amount} due on ${new Date(target.date).toLocaleDateString()}.\n\nRegards,\nAIMS Admin`;
             
-            await this.dispatchOpenWAMessage(target.mobile, message);
-            count++;
+            // ✨ We now wait to see if it actually returned true or false!
+            const isSuccess = await this.dispatchOpenWAMessage(target.mobile, message);
+            
+            if (isSuccess) {
+                successCount++;
+            } else {
+                failCount++;
+            }
 
-            // STEALTH MODE: If there are more messages to send, wait a random amount of time (4 to 9 seconds)
-            if (count < targets.length) {
+            // STEALTH MODE: Only pause if it actually sent successfully and there are more to send
+            if (isSuccess && (successCount + failCount) < targets.length) {
                 const delay = this.getRandomDelay(4, 9);
                 this.logger.log(`[STEALTH] Waiting ${delay / 1000} seconds before next message...`);
                 await this.sleep(delay);
             }
         }
-        return { success: true, dispatched: targets.length };
+
+        // Return the REAL numbers to your frontend
+        return { 
+            success: failCount === 0, 
+            dispatched: successCount,
+            failed: failCount 
+        };
     }
 }
