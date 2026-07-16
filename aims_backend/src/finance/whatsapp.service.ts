@@ -121,15 +121,18 @@ export class WhatsappService {
 
   // --- 3. CORE DISPATCHERS ---
   
+  // --- 3. CORE DISPATCHERS ---
+  
   async dispatchOpenWAMessage(mobile: string | undefined, text: string) {
       if (!mobile) return;
       
-      // OpenWA format requirement
-      const chatId = `91${mobile}@c.us`;
+      // Clean the mobile number (remove spaces, pluses, or existing 91s just in case)
+      const cleanMobile = mobile.replace(/[^0-9]/g, '').replace(/^91/, '');
+      const chatId = `91${cleanMobile}@c.us`; 
       
       try {
           this.logger.log(`[WA-DISPATCH] Sending to ${chatId}`);
-          await fetch(`${this.openWaApiUrl}/sendText`, {
+          const response = await fetch(`${this.openWaApiUrl}/sendText`, {
               method: 'POST',
               headers: {
                   'Content-Type': 'application/json',
@@ -138,11 +141,22 @@ export class WhatsappService {
               body: JSON.stringify({
                   chatId: chatId,
                   text: text,
-                  session: "aims-finance" 
+                  session: "default" // ✨ THE FIX: Targeting the correct OpenWA session
               })
           });
+
+          // ✨ NEW: Strict Error Catching
+          if (!response.ok) {
+              const errData = await response.json().catch(() => ({}));
+              this.logger.error(`OpenWA Error for ${chatId}: ${JSON.stringify(errData)}`);
+              throw new Error(`OpenWA rejected the message (Status: ${response.status})`);
+          }
+
+          this.logger.log(`[WA-DISPATCH] Successfully sent to ${chatId}`);
+          
       } catch (error) {
-          this.logger.error(`Failed to send WA message to ${mobile}`, error);
+          this.logger.error(`Failed to reach OpenWA for ${mobile}`, error);
+          throw error; // Pass the error up so the UI sees it!
       }
   }
 
