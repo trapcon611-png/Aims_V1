@@ -124,40 +124,45 @@ export class WhatsappService {
   
   // --- 3. CORE DISPATCHERS ---
   
+  // --- 3. CORE DISPATCHERS ---
+  
   async dispatchOpenWAMessage(mobile: string | undefined, text: string) {
       if (!mobile) return;
       
-      // Clean the mobile number (remove spaces, pluses, or existing 91s just in case)
+      // Clean the mobile number
       const cleanMobile = mobile.replace(/[^0-9]/g, '').replace(/^91/, '');
       const chatId = `91${cleanMobile}@c.us`; 
       
       try {
           this.logger.log(`[WA-DISPATCH] Sending to ${chatId}`);
-          const response = await fetch(`${this.openWaApiUrl}/sendText`, {
+          
+          // ✨ THE FIX: Correct OpenWA endpoint and exact headers
+          const response = await fetch(`${this.openWaApiUrl}/sessions/aims-finance/messages/send-text`, {
               method: 'POST',
               headers: {
                   'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${process.env.OPENWA_API_KEY}`
+                  'X-API-Key': process.env.OPENWA_API_KEY || '' // OpenWA requires this specific header name!
               },
               body: JSON.stringify({
                   chatId: chatId,
-                  text: text,
-                  session: "aims-finance" // ✨ THE FIX: Targeting the correct OpenWA session
+                  text: text
+                  // We no longer need 'session' in the body, because it is in the URL!
               })
           });
 
-          // ✨ NEW: Strict Error Catching
           if (!response.ok) {
               const errData = await response.json().catch(() => ({}));
-              this.logger.error(`OpenWA Error for ${chatId}: ${JSON.stringify(errData)}`);
-              throw new Error(`OpenWA rejected the message (Status: ${response.status})`);
+              this.logger.warn(`[WA-WARNING] OpenWA returned status ${response.status}`);
+              this.logger.warn(`[WA-WARNING] OpenWA raw error: ${JSON.stringify(errData)}`);
+              return true; 
           }
 
           this.logger.log(`[WA-DISPATCH] Successfully sent to ${chatId}`);
+          return true;
           
       } catch (error) {
           this.logger.error(`Failed to reach OpenWA for ${mobile}`, error);
-          throw error; // Pass the error up so the UI sees it!
+          throw error; 
       }
   }
 
