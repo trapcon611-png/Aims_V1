@@ -120,12 +120,18 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
         
         setIsDispatching(true);
         try {
-            const formattedTargets = targetsToSend.map(t => ({
-                name: t.name || t.fullName,
-                mobile: t.mobile || (t.parent && t.parent.mobile),
-                amount: t.amount || 0,
-                date: t.date || new Date().toISOString()
-            })).filter(t => t.mobile);
+            const formattedTargets = targetsToSend.map(t => {
+                // Look for parentMobile first, ignore 'N/A' values
+                const rawMobile = t.parentMobile || t.mobile || (t.parent && t.parent.mobile);
+                const validMobile = rawMobile && rawMobile !== 'N/A' ? rawMobile : null;
+
+                return {
+                    name: t.name || t.fullName,
+                    mobile: validMobile,
+                    amount: t.amount || 0,
+                    date: t.date || new Date().toISOString()
+                };
+            }).filter(t => t.mobile); // Now it successfully filters out people with no valid number
 
             if (formattedTargets.length === 0) throw new Error("No valid mobile numbers found.");
 
@@ -325,7 +331,7 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
                                     const isSelected = selectedIds.has(id);
                                     const name = item.name || item.fullName;
                                     const batchName = item.batch?.name || item.batch;
-                                    const mobile = item.mobile || (item.parent && item.parent.mobile) || "No Number";
+                                    const mobile = item.parentMobile || item.mobile || (item.parent && item.parent.mobile) || "No Number";;
                                     
                                     return (
                                         <div key={i} className={`flex justify-between items-center p-4 border-2 rounded-xl transition-all cursor-pointer ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-100 bg-white hover:border-slate-300'}`} onClick={() => toggleSelection(id)}>
