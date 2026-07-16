@@ -122,28 +122,66 @@ export class WhatsappService {
 
   // --- 3. CORE DISPATCHERS ---
   
-  // --- 3. CORE DISPATCHERS ---
   
   // --- 3. CORE DISPATCHERS ---
-  
- // --- 3. CORE DISPATCHERS ---
-  
+
+  // ✨ NEW HELPER: Dynamically fetches the active session ID from OpenWA
+  private async getActiveSessionId(): Promise<string | null> {
+      try {
+          const res = await fetch(`${this.openWaApiUrl}/sessions`, {
+              headers: { 'X-API-Key': process.env.OPENWA_API_KEY || '' }
+          });
+          
+          if (!res.ok) return null;
+          
+          const data = await res.json();
+          // OpenWA might return an array directly, or wrap it in { data: [...] }
+          const sessions = Array.isArray(data) ? data : (data.data || []);
+          
+          // Find the session that is actively connected to a phone
+          const active = sessions.find((s: any) => s.status === 'READY' || s.status === 'CONNECTED');
+          
+          if (active) {
+              return active.id || active.sessionId || active.name;
+          }
+          
+          // Fallback: If none say READY, just grab the first one that exists
+          if (sessions.length > 0) {
+              return sessions[0].id || sessions[0].sessionId || sessions[0].name;
+          }
+          
+          return null;
+      } catch (err) {
+          this.logger.error('[WA-ERROR] Failed to fetch active sessions from OpenWA', err);
+          return null;
+      }
+  }
+
+  // UPDATED DISPATCHER: Now 100% Dynamic!
   async dispatchOpenWAMessage(mobile: string | undefined, text: string) {
       if (!mobile) return false;
       
-      // Clean the mobile number
       const cleanMobile = mobile.replace(/[^0-9]/g, '').replace(/^91/, '');
       const chatId = `91${cleanMobile}@c.us`; 
       
       try {
+          // ✨ STEP 1: Ask OpenWA for the current active Session ID
+          const sessionId = await this.getActiveSessionId();
+          
+          if (!sessionId) {
+              this.logger.error(`[WA-DISPATCH] Aborted! No active OpenWA session found.`);
+              return false;
+          }
+
+          this.logger.log(`[WA-DISPATCH] Auto-detected Active Session: ${sessionId}`);
           this.logger.log(`[WA-DISPATCH] Sending to ${chatId}`);
           
-          // ✨ THE FIX 1: Change 'aims-finance' to 'default' (matching the dashboard!)
-          const response = await fetch(`${this.openWaApiUrl}/sessions/default/messages/send-text`, {
+          // ✨ STEP 2: Send the message using the dynamic ID
+          const response = await fetch(`${this.openWaApiUrl}/sessions/${sessionId}/messages/send-text`, {
               method: 'POST',
               headers: {
                   'Content-Type': 'application/json',
-                  'X-API-Key': process.env.OPENWA_API_KEY || ''
+                  'X-API-Key': process.env.OPENWA_API_KEY || '' 
               },
               body: JSON.stringify({
                   chatId: chatId,
@@ -155,17 +193,15 @@ export class WhatsappService {
               const errData = await response.json().catch(() => ({}));
               this.logger.warn(`[WA-WARNING] OpenWA returned status ${response.status}`);
               this.logger.warn(`[WA-WARNING] OpenWA raw error: ${JSON.stringify(errData)}`);
-              
-              // ✨ THE FIX 2: Return false instead of true! Now your UI will accurately show "Failed" if it blocks it.
               return false; 
           }
 
           this.logger.log(`[WA-DISPATCH] Successfully sent to ${chatId}`);
-          return true;
+          return true; 
           
       } catch (error) {
           this.logger.error(`Failed to reach OpenWA for ${mobile}`, error);
-          return false; // ✨ Return false here too!
+          return false;
       }
   }
 
