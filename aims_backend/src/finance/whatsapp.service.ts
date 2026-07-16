@@ -10,6 +10,17 @@ export class WhatsappService {
   private readonly openWaApiUrl = process.env.OPENWA_API_URL || 'http://openwa:2785/api';
 
   constructor(private prisma: PrismaService) {}
+  
+  // HELPER: Simulates human typing delay
+  private sleep(ms: number) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+  }
+  
+  // HELPER: Generates a random delay between min and max seconds
+  private getRandomDelay(minSeconds: number, maxSeconds: number) {
+      const ms = Math.floor(Math.random() * (maxSeconds - minSeconds + 1) + minSeconds) * 1000;
+      return ms;
+  }
 
   // --- 1. AUTOMATION RULE MANAGEMENT ---
   
@@ -136,13 +147,22 @@ export class WhatsappService {
   }
 
   async automatedFeeRemindersManual(targets: any[], customText?: string) {
-      for (const target of targets) {
-          const message = customText 
-              ? customText 
-              : `*AIMS Institute Reminder*\n\nDear Parent of ${target.name},\nThis is a reminder for your pending installment of ₹${target.amount} due on ${new Date(target.date).toLocaleDateString()}.\n\nRegards,\nAIMS Admin`;
-          
-          await this.dispatchOpenWAMessage(target.mobile, message);
-      }
-      return { success: true, dispatched: targets.length };
-  }
+        let count = 0;
+        for (const target of targets) {
+            const message = customText 
+                ? customText 
+                : `*AIMS Institute Reminder*\n\nDear Parent of ${target.name},\nThis is a reminder for your pending installment of ₹${target.amount} due on ${new Date(target.date).toLocaleDateString()}.\n\nRegards,\nAIMS Admin`;
+            
+            await this.dispatchOpenWAMessage(target.mobile, message);
+            count++;
+
+            // STEALTH MODE: If there are more messages to send, wait a random amount of time (4 to 9 seconds)
+            if (count < targets.length) {
+                const delay = this.getRandomDelay(4, 9);
+                this.logger.log(`[STEALTH] Waiting ${delay / 1000} seconds before next message...`);
+                await this.sleep(delay);
+            }
+        }
+        return { success: true, dispatched: targets.length };
+    }
 }
