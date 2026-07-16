@@ -126,8 +126,10 @@ export class WhatsappService {
   
   // --- 3. CORE DISPATCHERS ---
   
+ // --- 3. CORE DISPATCHERS ---
+  
   async dispatchOpenWAMessage(mobile: string | undefined, text: string) {
-      if (!mobile) return;
+      if (!mobile) return false;
       
       // Clean the mobile number
       const cleanMobile = mobile.replace(/[^0-9]/g, '').replace(/^91/, '');
@@ -136,17 +138,16 @@ export class WhatsappService {
       try {
           this.logger.log(`[WA-DISPATCH] Sending to ${chatId}`);
           
-          // ✨ THE FIX: Correct OpenWA endpoint and exact headers
-          const response = await fetch(`${this.openWaApiUrl}/sessions/aims-finance/messages/send-text`, {
+          // ✨ THE FIX 1: Change 'aims-finance' to 'default' (matching the dashboard!)
+          const response = await fetch(`${this.openWaApiUrl}/sessions/default/messages/send-text`, {
               method: 'POST',
               headers: {
                   'Content-Type': 'application/json',
-                  'X-API-Key': process.env.OPENWA_API_KEY || '' // OpenWA requires this specific header name!
+                  'X-API-Key': process.env.OPENWA_API_KEY || ''
               },
               body: JSON.stringify({
                   chatId: chatId,
                   text: text
-                  // We no longer need 'session' in the body, because it is in the URL!
               })
           });
 
@@ -154,7 +155,9 @@ export class WhatsappService {
               const errData = await response.json().catch(() => ({}));
               this.logger.warn(`[WA-WARNING] OpenWA returned status ${response.status}`);
               this.logger.warn(`[WA-WARNING] OpenWA raw error: ${JSON.stringify(errData)}`);
-              return true; 
+              
+              // ✨ THE FIX 2: Return false instead of true! Now your UI will accurately show "Failed" if it blocks it.
+              return false; 
           }
 
           this.logger.log(`[WA-DISPATCH] Successfully sent to ${chatId}`);
@@ -162,7 +165,7 @@ export class WhatsappService {
           
       } catch (error) {
           this.logger.error(`Failed to reach OpenWA for ${mobile}`, error);
-          throw error; 
+          return false; // ✨ Return false here too!
       }
   }
 
