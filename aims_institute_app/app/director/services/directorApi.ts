@@ -468,6 +468,13 @@ export const directorApi = {
       
       return await parseJsonSafely(res);
   },
+  async getWhatsappRules() {
+      const res = await fetchWithAuth(`${API_URL}/whatsapp/rules`, {
+          headers: { 'Authorization': `Bearer ${this.getToken()}` }
+      });
+      if (!res.ok) return null;
+      return await parseJsonSafely(res);
+  },
   // ✨ NEW: Save the updated rules to the database
   async updateWhatsappRules(payload: { time: string, daysBefore: number, maxFollowUps: number }) {
       const res = await fetchWithAuth(`${API_URL}/whatsapp/rules`, {

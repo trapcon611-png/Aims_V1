@@ -46,23 +46,25 @@ export class WhatsappService {
 
   // --- 2. DYNAMIC AUTOMATION ENGINE (Runs every 60 seconds) ---
   
+  // --- 2. DYNAMIC AUTOMATION ENGINE (Runs every 60 seconds) ---
+  
   @Cron(CronExpression.EVERY_MINUTE)
   async dynamicFeeReminders() {
       const rules = await this.getAutomationRules();
       
-      // 1. Get current server time in HH:MM format
-      const now = new Date();
-      const currentHours = String(now.getHours()).padStart(2, '0');
-      const currentMinutes = String(now.getMinutes()).padStart(2, '0');
+      // ✨ THE FIX: Force the server to calculate the exact current time in IST (India)
+      const today = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+      
+      const currentHours = String(today.getHours()).padStart(2, '0');
+      const currentMinutes = String(today.getMinutes()).padStart(2, '0');
       const currentTime = `${currentHours}:${currentMinutes}`;
 
       // 2. If it is NOT the exact minute the Director requested, sleep.
       if (currentTime !== rules.dispatchTime) return;
 
-      this.logger.log(`[AUTOMATION] Executing WhatsApp Protocol at scheduled time: ${currentTime}`);
+      this.logger.log(`[AUTOMATION] Executing WhatsApp Protocol at scheduled time: ${currentTime} IST`);
 
       // 3. Define target dates based on Director's Rules
-      const today = new Date();
       const datesToTarget: string[] = [];
 
       // Rule 1: First Warning (e.g., 3 days from now)
@@ -98,11 +100,9 @@ export class WhatsappService {
               for (const inst of schedule) {
                   cumulativeInst += inst.amount;
                   
-                  // If this installment is not fully paid
                   if (cumulativeInst > totalPaid) {
                       const instDateStr = new Date(inst.dueDate).toISOString().split('T')[0];
                       
-                      // If this installment's due date matches ANY of our active target rules
                       if (datesToTarget.includes(instDateStr)) {
                           const amountDue = cumulativeInst - Math.max(totalPaid, cumulativeInst - inst.amount);
                           
