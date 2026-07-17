@@ -121,7 +121,6 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
         setIsDispatching(true);
         try {
             const formattedTargets = targetsToSend.map(t => {
-                // Look for parentMobile first, ignore 'N/A' values
                 const rawMobile = t.parentMobile || t.mobile || (t.parent && t.parent.mobile);
                 const validMobile = rawMobile && rawMobile !== 'N/A' ? rawMobile : null;
 
@@ -131,17 +130,23 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
                     amount: t.amount || 0,
                     date: t.date || new Date().toISOString()
                 };
-            }).filter(t => t.mobile); // Now it successfully filters out people with no valid number
+            }).filter(t => t.mobile); 
 
             if (formattedTargets.length === 0) throw new Error("No valid mobile numbers found.");
+
+            // ✨ PRE-LOG: Tell the terminal we are working on it so it doesn't look stuck
+            formattedTargets.forEach(t => addLog(t.name, 'Broadcasting...'));
 
             const payload = {
                 targets: formattedTargets,
                 customText: customMessage.trim() !== "" ? customMessage : null
             };
 
-            await directorApi.broadcastWhatsappReminders(payload);
-            formattedTargets.forEach(t => addLog(t.name, 'Queued for delivery'));
+            // This waits for the backend (and stealth mode) to finish
+            const response = await directorApi.broadcastWhatsappReminders(payload);
+            
+            // ✨ POST-LOG: Tell the UI it was a massive success!
+            formattedTargets.forEach(t => addLog(t.name, 'Delivered successfully!'));
             
             if (targetsToSend.length > 1) {
                 const remaining = new Set(selectedIds);
