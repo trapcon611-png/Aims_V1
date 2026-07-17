@@ -467,5 +467,19 @@ export const directorApi = {
       }
       
       return await parseJsonSafely(res);
+  },
+  // ✨ NEW: Save the updated rules to the database
+  async updateWhatsappRules(payload: { time: string, daysBefore: number, maxFollowUps: number }) {
+      const res = await fetchWithAuth(`${API_URL}/whatsapp/rules`, {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${this.getToken()}`
+          },
+          body: JSON.stringify(payload)
+      });
+      
+      if (!res.ok) throw new Error('Failed to update automation rules');
+      return await parseJsonSafely(res);
   }
 };

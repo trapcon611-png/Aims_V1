@@ -35,6 +35,21 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
         if (dueInstallments.length > 0) {
             setSelectedIds(new Set(dueInstallments.map(d => d.id || d.mobile)));
         }
+
+        // Fetch saved automation rules from the database
+        const loadRules = async () => {
+            try {
+                const rules = await directorApi.getWhatsappRules();
+                if (rules) {
+                    if (rules.dispatchTime) setAutoTime(rules.dispatchTime);
+                    if (rules.daysBefore !== undefined) setDaysBefore(rules.daysBefore);
+                    if (rules.maxFollowUps !== undefined) setMaxFollowUps(rules.maxFollowUps);
+                }
+            } catch (err) {
+                console.error("Could not load automation rules", err);
+            }
+        };
+        loadRules();
     }, [dueInstallments]);
 
     // --- 1. DERIVED DATA (DEPENDENT DROPDOWNS) ---
@@ -102,8 +117,16 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
     };
 
     const saveAutomationRules = async () => {
-        // Here you would call an API to save these to the database
-        alert(`Automation Saved!\nReminders will run at ${autoTime}, starting ${daysBefore} days before due date, sending a max of ${maxFollowUps} reminders.`);
+        try {
+            await directorApi.updateWhatsappRules({
+                time: autoTime,
+                daysBefore: daysBefore,
+                maxFollowUps: maxFollowUps
+            });
+            alert(`Automation Saved to Server! 🚀\nReminders will run daily at ${autoTime}, starting ${daysBefore} days before the due date.`);
+        } catch (error: any) {
+            alert(`Failed to save rules: ${error.message}`);
+        }
     };
 
     const addLog = (name: string, status: string, isError = false) => {
@@ -134,7 +157,7 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
 
             if (formattedTargets.length === 0) throw new Error("No valid mobile numbers found.");
 
-            // ✨ PRE-LOG: Tell the terminal we are working on it so it doesn't look stuck
+            // PRE-LOG: Tell the terminal we are working on it so it doesn't look stuck
             formattedTargets.forEach(t => addLog(t.name, 'Broadcasting...'));
 
             const payload = {
@@ -145,7 +168,7 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
             // This waits for the backend (and stealth mode) to finish
             const response = await directorApi.broadcastWhatsappReminders(payload);
             
-            // ✨ POST-LOG: Tell the UI it was a massive success!
+            // POST-LOG: Tell the UI it was a massive success!
             formattedTargets.forEach(t => addLog(t.name, 'Delivered successfully!'));
             
             if (targetsToSend.length > 1) {
