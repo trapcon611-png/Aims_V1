@@ -377,3 +377,26 @@ model AutomationSettings {
   maxFollowUps   Int      @default(2)
   updatedAt      DateTime @updatedAt
 }
+
+// --- 9. SECURITY & AUDIT LOGS ---
+
+model SecurityLog {
+  id          String   @id @default(uuid())
+  
+  // Who did it? (Stored as raw strings so logs survive even if the user is deleted)
+  actorId     String   // The username or ID of the person
+  role        String?  // e.g., SUPER_ADMIN, TEACHER, UNKNOWN
+  
+  // What did they do?
+  action      String   // e.g., LOGIN_SUCCESS, LOGIN_FAILED, FEE_COLLECTED, DATA_DELETED
+  
+  // Where did they do it from?
+  ipAddress   String?  // The IP address of the device
+  userAgent   String?  // The browser/device info (e.g., iPhone Safari, Windows Chrome)
+  
+  // The exact details of the action
+  details     Json?    // e.g., { "targetStudent": "John", "amount": 5000 }
+  
+  // When did they do it?
+  timestamp   DateTime @default(now())
+}
