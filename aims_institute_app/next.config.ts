@@ -4,7 +4,6 @@ const withPWA = withPWAInit({
   dest: "public",
   disable: process.env.NODE_ENV === "development", // Only runs in production so it doesn't annoy you while coding
   register: true,
-  skipWaiting: true,
 });
 
 /** @type {import('next').NextConfig} */
