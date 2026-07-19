@@ -5,7 +5,7 @@ import {
   ShieldAlert, Lock, Eye, EyeOff, Search, UserCheck, Key, 
   Menu, LogOut, CheckCircle, XCircle, UserPlus, Sun, Moon, 
   ChevronLeft, ChevronRight, Server, Activity, Terminal, 
-  AlertTriangle, Clock, Smartphone, Globe
+  AlertTriangle, Clock, Smartphone, Globe, DownloadCloud
 } from 'lucide-react';
 
 // --- SMART API RESOLVER ---
@@ -25,7 +25,7 @@ export default function SecurityPanel() {
   
   const [admins, setAdmins] = useState<any[]>([]);
   const [parents, setParents] = useState<any[]>([]);
-  const [securityLogs, setSecurityLogs] = useState<any[]>([]); // ✨ NEW: Audit Trail State
+  const [securityLogs, setSecurityLogs] = useState<any[]>([]); 
   
   const [activeTab, setActiveTab] = useState<'audit' | 'parents' | 'admins' | 'create'>('audit');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -38,6 +38,47 @@ export default function SecurityPanel() {
   const ITEMS_PER_PAGE = 10;
 
   const [newAdmin, setNewAdmin] = useState({ username: '', password: '', role: 'TEACHER' });
+
+  // ✨ PWA Installation State
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+
+  // Catch the PWA install prompt
+  useEffect(() => {
+      const handleBeforeInstallPrompt = (e: any) => {
+          // Prevent the mini-infobar from appearing on mobile
+          e.preventDefault();
+          // Stash the event so it can be triggered later
+          setDeferredPrompt(e);
+          // Show our custom high-tech banner
+          setShowInstallBanner(true);
+      };
+
+      window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+      window.addEventListener('appinstalled', () => {
+          setShowInstallBanner(false);
+          setDeferredPrompt(null);
+      });
+
+      return () => {
+          window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      };
+  }, []);
+
+  const handleInstallClick = async () => {
+      if (!deferredPrompt) return;
+      
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      
+      if (outcome === 'accepted') {
+          console.log('SOC Terminal deployed as native application.');
+      }
+      
+      setDeferredPrompt(null);
+      setShowInstallBanner(false);
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,15 +109,12 @@ export default function SecurityPanel() {
     try {
         const headers = { 'Authorization': `Bearer ${currentToken}` };
 
-        // Fetch Admins
         const adminsRes = await fetch(`${API_URL}/erp/security/admins`, { headers });
         if(adminsRes.ok) setAdmins(await adminsRes.json());
 
-        // Fetch Parents
         const parentsRes = await fetch(`${API_URL}/erp/security/directory`, { headers });
         if(parentsRes.ok) setParents(await parentsRes.json());
 
-        // ✨ NEW: Fetch Audit Logs
         const logsRes = await fetch(`${API_URL}/erp/security/logs?limit=50`, { headers });
         if(logsRes.ok) setSecurityLogs(await logsRes.json());
 
@@ -85,7 +123,6 @@ export default function SecurityPanel() {
     }
   };
 
-  // Refresh logs every 30 seconds if on the audit tab
   useEffect(() => {
       if (isAuth && activeTab === 'audit') {
           const interval = setInterval(() => fetchData(), 30000);
@@ -147,7 +184,6 @@ export default function SecurityPanel() {
   const totalPages = Math.ceil(filteredParents.length / ITEMS_PER_PAGE);
   useEffect(() => { setCurrentPage(1); }, [searchQuery]);
 
-  // ✨ SOC Cyber Theme (High Contrast Dark Mode Default)
   const theme = {
     bg: isDarkMode ? 'bg-black' : 'bg-slate-50',
     text: isDarkMode ? 'text-green-500' : 'text-slate-800',
@@ -230,6 +266,26 @@ export default function SecurityPanel() {
       </header>
 
       <main className="p-4 md:p-8 max-w-7xl mx-auto">
+        
+        {/* ✨ NATIVE APP INSTALLATION BANNER */}
+        {showInstallBanner && (
+          <div className={`mb-8 p-5 rounded-xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${theme.border} bg-green-950/20 shadow-[0_0_20px_rgba(34,197,94,0.1)]`}>
+             <div className="flex items-center gap-4">
+                <div className="p-3 bg-black rounded-lg border border-green-900">
+                    <DownloadCloud className={theme.accent} size={24} />
+                </div>
+                <div>
+                   <h3 className={`font-bold ${theme.accent} tracking-wider`}>SYSTEM UPGRADE DETECTED</h3>
+                   <p className={`text-xs mt-1 ${theme.subtext}`}>Initialize the SOC Terminal as a standalone native application for enhanced operational speed and persistence.</p>
+                </div>
+             </div>
+             <div className="flex gap-3 w-full md:w-auto mt-2 md:mt-0">
+                <button onClick={() => setShowInstallBanner(false)} className="px-5 py-2.5 rounded border border-gray-800 text-gray-500 text-xs font-bold hover:bg-gray-900 transition-colors w-full md:w-auto">DISMISS</button>
+                <button onClick={handleInstallClick} className={`px-5 py-2.5 rounded border text-xs font-bold tracking-wider w-full md:w-auto shadow-[0_0_15px_rgba(34,197,94,0.15)] ${theme.buttonPrimary}`}>DEPLOY TERMINAL</button>
+             </div>
+          </div>
+        )}
+
         <div className="flex flex-col md:flex-row gap-2 md:gap-4 mb-8 overflow-x-auto pb-2 custom-scrollbar">
           <button onClick={() => setActiveTab('audit')} className={`shrink-0 px-6 py-3 md:py-2 rounded border transition-all duration-300 flex items-center justify-center gap-2 text-xs md:text-sm font-bold ${activeTab === 'audit' ? theme.tabActive : theme.tabInactive}`}>
             <Activity size={16}/> LIVE AUDIT
@@ -245,7 +301,6 @@ export default function SecurityPanel() {
           </button>
         </div>
 
-        {/* ✨ NEW LIVE AUDIT MATRIX TAB */}
         {activeTab === 'audit' && (
           <div className={`border ${theme.border} rounded-xl p-0 overflow-hidden ${theme.cardBg} shadow-[0_0_30px_rgba(34,197,94,0.05)]`}>
              <div className={`bg-black/50 p-4 border-b ${theme.border} flex justify-between items-center`}>
@@ -298,10 +353,8 @@ export default function SecurityPanel() {
           </div>
         )}
 
-        {/* OTHER TABS REMAIN UNCHANGED BELOW THIS LINE, JUST ADAPTED TO THEME */}
         {activeTab === 'parents' && (
           <div className={`border ${theme.border} rounded-xl p-4 md:p-6 ${theme.cardBg} transition-colors`}>
-            {/* Same as before but with cyber theme classes */}
             <div className={`flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 border-b ${theme.border} pb-4 gap-4`}>
                <h2 className={`text-sm md:text-lg flex items-center gap-2 font-bold ${theme.accent}`}><UserCheck size={18} /> PARENT DIRECTORY ACCESS</h2>
                <div className="flex flex-col md:flex-row gap-4 w-full xl:w-auto">
