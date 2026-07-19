@@ -27,7 +27,7 @@ const getResolvedImageUrl = (imgUrl?: string | null) => {
 // ==========================================
 // ✨ LATEX RENDERER
 // ==========================================
-export const LatexRenderer = ({ content, className = "" }: { content: string, className?: string }) => {
+const LatexRenderer = ({ content, className = "" }: { content: string, className?: string }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isReady, setIsReady] = useState(false);
 
