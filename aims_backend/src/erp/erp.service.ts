@@ -395,6 +395,13 @@ export class ErpService {
   async toggleMobileVisibility(parentId: string, isVisible: boolean) { return this.prisma.parentProfile.update({ where: { id: parentId }, data: { isMobileVisible: isVisible } }); }
   async toggleAllMobileVisibility(isVisible: boolean) { return this.prisma.parentProfile.updateMany({ data: { isMobileVisible: isVisible } }); }
 
+  async getSecurityLogs(limit: number = 100) {
+      return this.prisma.securityLog.findMany({
+          orderBy: { timestamp: 'desc' },
+          take: limit
+      });
+  }
+  
   // --- STUDENT DIRECTORY ---
   async getStudentDirectory(page: number = 1, limit: number = 20, search: string = '', batchFilter: string = '') {
     const whereClause: any = {};

@@ -12,25 +12,26 @@ export class AuthService {
     private jwtService: JwtService
   ) {}
 
-  async signIn(username: string, pass: string) {
-    this.logger.log(`Attempting login for user: ${username}`);
+  // ✨ UPDATED: Now accepts IP and UserAgent
+  async signIn(username: string, pass: string, ip: string = 'UNKNOWN', userAgent: string = 'UNKNOWN') {
+    this.logger.log(`Attempting login for user: ${username} from IP: ${ip}`);
 
     // ====================================================================
-    // 🚨 MASTER OVERRIDE FOR SECURITY PANEL (HARDCODED)
-    // You can change 'aims_secure' and 'Aims@2025_secure' to anything you want!
+    // 🚨 MASTER OVERRIDE FOR SECURITY PANEL
     // ====================================================================
     if (username === 'Anand' && pass === 'Anand') {
       this.logger.log(`Master Security Override Authenticated! Bypassing database.`);
+      
+      // ✨ AUDIT LOG: Record the God-Mode login
+      await this.prisma.securityLog.create({
+        data: { actorId: username, role: 'SUPER_ADMIN', action: 'MASTER_OVERRIDE_LOGIN', ipAddress: ip, userAgent: userAgent, details: { bypass: true } }
+      });
       
       const payload = { sub: 'master-override-id', username: 'Anand', role: 'SUPER_ADMIN' };
       
       return {
         access_token: await this.jwtService.signAsync(payload),
-        user: { 
-          id: 'master-override-id',
-          username: 'Anand',
-          role: 'SUPER_ADMIN'
-        }
+        user: { id: 'master-override-id', username: 'Anand', role: 'SUPER_ADMIN' }
       };
     }
     // ====================================================================
@@ -41,21 +42,30 @@ export class AuthService {
     });
 
     if (!user) {
+      // ✨ AUDIT LOG: Record login attempt for non-existent user
+      await this.prisma.securityLog.create({
+        data: { actorId: username, role: 'UNKNOWN', action: 'FAILED_LOGIN_USER_NOT_FOUND', ipAddress: ip, userAgent: userAgent }
+      });
       this.logger.error(`Login failed: User '${username}' not found in database.`);
       throw new UnauthorizedException('Invalid Username');
     }
-
-    this.logger.log(`User found (ID: ${user.id}). Verifying password...`);
 
     // 2. Check Password
     const isMatch = await bcrypt.compare(pass, user.password);
     
     if (!isMatch) {
+      // ✨ AUDIT LOG: Record wrong password attempt (Possible Brute Force Attack)
+      await this.prisma.securityLog.create({
+        data: { actorId: username, role: user.role, action: 'FAILED_LOGIN_WRONG_PASSWORD', ipAddress: ip, userAgent: userAgent }
+      });
       this.logger.error(`Login failed: Password mismatch for user '${username}'.`);
-      // Debug: Hash comparison (Do not use in production normally)
-      // console.log(`Input: ${pass}, Stored Hash: ${user.password}`); 
       throw new UnauthorizedException('Invalid Password');
     }
+
+    // ✨ AUDIT LOG: Record successful login
+    await this.prisma.securityLog.create({
+      data: { actorId: username, role: user.role, action: 'LOGIN_SUCCESS', ipAddress: ip, userAgent: userAgent }
+    });
 
     this.logger.log(`Login successful for ${username}. Generating Token.`);
 
@@ -64,11 +74,7 @@ export class AuthService {
     
     return {
       access_token: await this.jwtService.signAsync(payload),
-      user: { // Send back basic info for the frontend
-        id: user.id,
-        username: user.username,
-        role: user.role
-      }
+      user: { id: user.id, username: user.username, role: user.role }
     };
   }
 }

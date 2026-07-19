@@ -211,6 +211,12 @@ export class ErpController {
   toggleAllMobileVisibility(@Body() body: { isVisible: boolean }) {
     return this.erpService.toggleAllMobileVisibility(body.isVisible);
   }
+  
+  @Get('security/logs')
+  @Roles('SUPER_ADMIN')
+  getSecurityLogs(@Query('limit') limit?: string) {
+    return this.erpService.getSecurityLogs(limit ? parseInt(limit) : 100);
+  }
 
   // --- ADMISSIONS & STUDENTS ---
   @Post('admissions')
