@@ -277,6 +277,14 @@ model Attendance {
 
 // --- 5. FINANCE ---
 
+// ✨ NEW: Status options for receipt edit workflows (Feature 3)
+enum EditRequestStatus {
+  NONE
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model FeeRecord {
   id              String         @id @default(uuid())
   studentId       String
@@ -286,12 +294,17 @@ model FeeRecord {
   remarks         String?
   transactionId   String?        
   paymentMode     String?        @default("CASH")
+  // ✨ NEW: Bank Account Name (Features 1 & 2)
+  bankName        String?
 
   // ✨ NEW: Saves the live breakdown of this specific payment
   feeBreakdown    Json?
 
   receiptNumber   String?        @unique
   razorpayOrderId String?
+  // ✨ NEW: Edit Workflow fields (Feature 3)
+  editStatus      EditRequestStatus @default(NONE)
+  editRequestDate DateTime?
 }
 
 model Expense {

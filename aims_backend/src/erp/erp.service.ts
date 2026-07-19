@@ -310,6 +310,46 @@ export class ErpService {
     }));
   }
 
+// ✨ NEW: Feature 3 Request Admin Edit
+  async requestFeeEdit(feeId: string, actor: string) {
+    const record = await this.prisma.feeRecord.findUnique({ where: { id: feeId } });
+    if (!record) throw new NotFoundException('Fee record not found');
+
+    const updated = await this.prisma.feeRecord.update({
+      where: { id: feeId },
+      data: {
+        editStatus: 'PENDING',
+        editRequestDate: new Date()
+      } as any // Using 'as any' temporarily until Prisma regenerates
+    });
+
+    // Log this critical action in the Security Terminal automatically
+    await (this.prisma as any).securityLog.create({
+      data: {
+        actorId: actor,
+        role: 'ACCOUNTS',
+        action: 'FEE_EDIT_REQUESTED',
+        details: { feeId: feeId, amount: record.amount }
+      }
+    });
+
+    return updated;
+  }
+
+  async updateFeeRecord(id: string, data: any) {
+      return this.prisma.feeRecord.update({
+          where: { id },
+          data: {
+              amount: Number(data.amount),
+              paymentMode: data.paymentMode,
+              transactionId: data.transactionId,
+              bankName: data.bankName,
+              remarks: data.remarks,
+              editStatus: 'NONE' // Re-locks the receipt after editing
+          }
+      });
+  }
+
   // --- CONTENT (NOTICES & RESOURCES) ---
   async getNotices() { return this.prisma.notice.findMany({ include: { batch: true }, orderBy: { createdAt: 'desc' } }); }
   
@@ -401,7 +441,50 @@ export class ErpService {
           take: limit
       });
   }
-  
+
+  // ✨ NEW: Feature 3 Fetch Pending Requests
+  async getFeeEditRequests() {
+    const records = await this.prisma.feeRecord.findMany({
+      where: { editStatus: 'PENDING' },
+      include: { student: { include: { user: true } } },
+      orderBy: { editRequestDate: 'desc' }
+    });
+
+    return records.map(r => ({
+      id: r.id,
+      studentName: r.student.fullName,
+      displayId: r.student.user.username,
+      amount: r.amount,
+      date: r.date,
+      paymentMode: r.paymentMode,
+      transactionId: r.transactionId,
+      editRequestDate: r.editRequestDate
+    }));
+  }
+
+  // ✨ NEW: Feature 3 Resolve the Request and Log it!
+  async resolveFeeEditRequest(feeId: string, status: 'APPROVED' | 'REJECTED', actor: string) {
+    const record = await this.prisma.feeRecord.findUnique({ where: { id: feeId } });
+    if (!record) throw new NotFoundException('Fee record not found');
+
+    const updated = await this.prisma.feeRecord.update({
+      where: { id: feeId },
+      data: { editStatus: status }
+    });
+
+    // Automatically log the Director's decision in the Security Terminal
+    await this.prisma.securityLog.create({
+      data: {
+        actorId: actor,
+        role: 'SECURITY_DIRECTOR',
+        action: `FEE_EDIT_${status}`,
+        details: { feeId: feeId, amount: record.amount } as any
+      }
+    });
+
+    return updated;
+  }
+
   // --- STUDENT DIRECTORY ---
   async getStudentDirectory(page: number = 1, limit: number = 20, search: string = '', batchFilter: string = '') {
     const whereClause: any = {};

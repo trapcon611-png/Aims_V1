@@ -5,7 +5,8 @@ import {
   ShieldAlert, Lock, Eye, EyeOff, Search, UserCheck, Key, 
   Menu, LogOut, CheckCircle, XCircle, UserPlus, Sun, Moon, 
   ChevronLeft, ChevronRight, Server, Activity, Terminal, 
-  AlertTriangle, Clock, Smartphone, Globe, DownloadCloud
+  AlertTriangle, Clock, Smartphone, Globe, DownloadCloud,
+  FileSignature, Check, X
 } from 'lucide-react';
 
 // --- SMART API RESOLVER ---
@@ -26,8 +27,9 @@ export default function SecurityPanel() {
   const [admins, setAdmins] = useState<any[]>([]);
   const [parents, setParents] = useState<any[]>([]);
   const [securityLogs, setSecurityLogs] = useState<any[]>([]); 
+  const [feeRequests, setFeeRequests] = useState<any[]>([]); // ✨ NEW: Finance Approvals State
   
-  const [activeTab, setActiveTab] = useState<'audit' | 'parents' | 'admins' | 'create'>('audit');
+  const [activeTab, setActiveTab] = useState<'audit' | 'parents' | 'admins' | 'create' | 'finance'>('audit');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   
   // Enforce Dark Mode for SOC feel
@@ -139,13 +141,17 @@ export default function SecurityPanel() {
         const logsRes = await fetch(`${API_URL}/erp/security/logs?limit=50`, { headers });
         if(logsRes.ok) setSecurityLogs(await logsRes.json());
 
+        // ✨ NEW: Fetch Pending Edit Requests
+        const feeReqRes = await fetch(`${API_URL}/erp/security/fee-requests`, { headers });
+        if(feeReqRes.ok) setFeeRequests(await feeReqRes.json());
+
     } catch (error: any) {
         console.error("Network connection to backend failed:", error);
     }
   };
 
   useEffect(() => {
-      if (isAuth && activeTab === 'audit') {
+      if (isAuth && (activeTab === 'audit' || activeTab === 'finance')) {
           const interval = setInterval(() => fetchData(), 30000);
           return () => clearInterval(interval);
       }
@@ -196,6 +202,22 @@ export default function SecurityPanel() {
     } catch (e: any) { alert(`Network Error: ${e.message}`); }
   };
 
+  // ✨ NEW: Handle Fee Edit Requests
+  const handleResolveFeeRequest = async (id: string, status: 'APPROVED' | 'REJECTED') => {
+      if(!confirm(`Are you sure you want to ${status} this edit request?`)) return;
+      try {
+          const res = await fetch(`${API_URL}/erp/security/fee-requests/${id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({ status })
+          });
+          if(!res.ok) throw new Error('Failed to resolve request');
+          fetchData(); // Refresh the list instantly
+      } catch (e: any) {
+          alert(`Error resolving request: ${e.message}`);
+      }
+  };
+
   const filteredParents = parents.filter(p => 
     (p.parentId && p.parentId.toLowerCase().includes(searchQuery.toLowerCase())) || 
     (p.mobile && p.mobile.includes(searchQuery))
@@ -223,8 +245,8 @@ export default function SecurityPanel() {
   };
 
   const getLogBadge = (action: string) => {
-      if (action.includes('FAILED')) return <span className="bg-red-950 text-red-400 border border-red-900 text-[10px] px-2 py-0.5 rounded font-bold flex items-center gap-1"><AlertTriangle size={10}/> {action}</span>;
-      if (action.includes('MASTER')) return <span className="bg-purple-950 text-purple-400 border border-purple-900 text-[10px] px-2 py-0.5 rounded font-bold flex items-center gap-1"><ShieldAlert size={10}/> {action}</span>;
+      if (action.includes('FAILED') || action.includes('REJECTED')) return <span className="bg-red-950 text-red-400 border border-red-900 text-[10px] px-2 py-0.5 rounded font-bold flex items-center gap-1"><AlertTriangle size={10}/> {action}</span>;
+      if (action.includes('MASTER') || action.includes('REQUESTED')) return <span className="bg-purple-950 text-purple-400 border border-purple-900 text-[10px] px-2 py-0.5 rounded font-bold flex items-center gap-1"><ShieldAlert size={10}/> {action}</span>;
       return <span className="bg-green-950 text-green-400 border border-green-900 text-[10px] px-2 py-0.5 rounded font-bold flex items-center gap-1"><CheckCircle size={10}/> {action}</span>;
   };
 
@@ -321,6 +343,17 @@ export default function SecurityPanel() {
           <button onClick={() => setActiveTab('audit')} className={`shrink-0 px-6 py-3 md:py-2 rounded border transition-all duration-300 flex items-center justify-center gap-2 text-xs md:text-sm font-bold ${activeTab === 'audit' ? theme.tabActive : theme.tabInactive}`}>
             <Activity size={16}/> LIVE AUDIT
           </button>
+          
+          {/* ✨ NEW: FINANCE APPROVALS TAB */}
+          <button onClick={() => setActiveTab('finance')} className={`relative shrink-0 px-6 py-3 md:py-2 rounded border transition-all duration-300 flex items-center justify-center gap-2 text-xs md:text-sm font-bold ${activeTab === 'finance' ? theme.tabActive : theme.tabInactive}`}>
+            <FileSignature size={16}/> FINANCE APPROVALS
+            {feeRequests.length > 0 && (
+                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full animate-bounce">
+                    {feeRequests.length}
+                </span>
+            )}
+          </button>
+          
           <button onClick={() => setActiveTab('parents')} className={`shrink-0 px-6 py-3 md:py-2 rounded border transition-all duration-300 flex items-center justify-center gap-2 text-xs md:text-sm font-bold ${activeTab === 'parents' ? theme.tabActive : theme.tabInactive}`}>
             <UserCheck size={16}/> PARENT PRIVACY
           </button>
@@ -382,6 +415,66 @@ export default function SecurityPanel() {
                  </table>
              </div>
           </div>
+        )}
+
+        {/* ✨ NEW: FINANCE APPROVALS INTERFACE */}
+        {activeTab === 'finance' && (
+            <div className={`border ${theme.border} rounded-xl p-4 md:p-6 ${theme.cardBg}`}>
+                <h2 className={`text-sm md:text-lg mb-6 flex items-center gap-2 border-b pb-2 font-bold ${theme.accent} ${theme.border}`}>
+                    <FileSignature size={18} /> PENDING RECEIPT EDIT REQUESTS
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {feeRequests.length === 0 ? (
+                        <div className={`col-span-full py-10 text-center ${theme.subtext} font-mono tracking-widest uppercase`}>
+                            <CheckCircle size={32} className="mx-auto mb-3 opacity-50" />
+                            No pending financial edit requests.
+                        </div>
+                    ) : (
+                        feeRequests.map(req => (
+                            <div key={req.id} className={`border p-4 rounded-lg transition-colors ${theme.border} bg-black/20 hover:bg-black/40`}>
+                                <div className="flex justify-between items-start mb-2">
+                                    <div>
+                                        <div className="font-bold text-white text-base md:text-lg">{req.studentName}</div>
+                                        <div className="text-xs text-gray-500">{req.displayId}</div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="font-bold text-green-400 text-lg">₹{req.amount}</div>
+                                        <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{req.paymentMode}</div>
+                                    </div>
+                                </div>
+                                <div className="text-[10px] text-gray-400 mb-5 font-mono bg-black/50 p-2 rounded">
+                                    <div className="flex justify-between border-b border-gray-800 pb-1 mb-1">
+                                        <span>RECEIPT DATE:</span>
+                                        <span className="text-white">{new Date(req.date).toLocaleDateString()}</span>
+                                    </div>
+                                    <div className="flex justify-between border-b border-gray-800 pb-1 mb-1">
+                                        <span>REQUEST DATE:</span>
+                                        <span className="text-white">{new Date(req.editRequestDate).toLocaleString()}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>TRANSACTION REF:</span>
+                                        <span className="text-white">{req.transactionId || 'N/A'}</span>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button 
+                                        onClick={() => handleResolveFeeRequest(req.id, 'APPROVED')} 
+                                        className="flex-1 bg-green-900/30 hover:bg-green-900/50 text-green-500 border border-green-800 rounded py-2.5 text-xs font-bold transition flex items-center justify-center gap-2"
+                                    >
+                                        <Check size={14}/> APPROVE (UNLOCK)
+                                    </button>
+                                    <button 
+                                        onClick={() => handleResolveFeeRequest(req.id, 'REJECTED')} 
+                                        className="flex-1 bg-red-900/30 hover:bg-red-900/50 text-red-500 border border-red-800 rounded py-2.5 text-xs font-bold transition flex items-center justify-center gap-2"
+                                    >
+                                        <X size={14}/> REJECT
+                                    </button>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
         )}
 
         {activeTab === 'parents' && (

@@ -279,7 +279,7 @@ export const directorApi = {
       return await parseJsonSafely(res);
   },
 
-  async collectFee(data: { studentId: string; amount: number; remarks?: string; paymentMode?: string; transactionId?: string; date?: string; feeBreakdown?: any }) { 
+  async collectFee(data: { studentId: string; amount: number; remarks?: string; paymentMode?: string; transactionId?: string; date?: string; feeBreakdown?: any; bankName?: string }) { 
       const res = await fetchWithAuth(`${API_URL}/erp/fees`, { 
           method: 'POST', 
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` }, 
@@ -301,6 +301,30 @@ export const directorApi = {
           return []; 
       }
   },
+
+  // ✨ NEW: Feature 3 - Request Admin Edit
+  async requestFeeEdit(feeId: string) {
+      const res = await fetchWithAuth(`${API_URL}/erp/fees/${feeId}/request-edit`, {
+          method: 'PATCH',
+          headers: { 'Authorization': `Bearer ${this.getToken()}` }
+      });
+      if (!res.ok) {
+          const err = await parseJsonSafely(res, { message: 'Failed to request edit' });
+          throw new Error(err.message || 'Failed to request edit');
+      }
+      return await parseJsonSafely(res);
+  },
+
+  // ✨ NEW: Feature 3 Apply the Approved Edit
+    async updateFeeRecord(id: string, data: any) {
+        const res = await fetchWithAuth(`${API_URL}/erp/fees/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` },
+            body: JSON.stringify(data)
+        });
+        if (!res.ok) throw new Error('Failed to update fee record');
+        return await parseJsonSafely(res);
+    },
 
   // --- CRM ---
   async getEnquiries() { 
@@ -445,19 +469,16 @@ export const directorApi = {
       });
       if (!res.ok) throw new Error('Failed to save attendance');
       return await parseJsonSafely(res);
-  }, // <--- DON'T FORGET THIS COMMA
+  }, 
 
   // --- WHATSAPP COMMUNICATION HUB ---
-  // --- WHATSAPP COMMUNICATION HUB ---
   async broadcastWhatsappReminders(payload: { targets: any[], customText: string | null }) {
-      // Notice we are hitting the /whatsapp/broadcast-reminders endpoint we made in NestJS
       const res = await fetchWithAuth(`${API_URL}/whatsapp/broadcast-reminders`, {
           method: 'POST',
           headers: { 
               'Content-Type': 'application/json', 
               'Authorization': `Bearer ${this.getToken()}` 
           },
-          // We pass the entire payload object directly to the backend
           body: JSON.stringify(payload)
       });
       
@@ -468,6 +489,7 @@ export const directorApi = {
       
       return await parseJsonSafely(res);
   },
+  
   async getWhatsappRules() {
       const res = await fetchWithAuth(`${API_URL}/whatsapp/rules`, {
           headers: { 'Authorization': `Bearer ${this.getToken()}` }
@@ -475,7 +497,7 @@ export const directorApi = {
       if (!res.ok) return null;
       return await parseJsonSafely(res);
   },
-  // ✨ NEW: Save the updated rules to the database
+  
   async updateWhatsappRules(payload: { time: string, daysBefore: number, maxFollowUps: number }) {
       const res = await fetchWithAuth(`${API_URL}/whatsapp/rules`, {
           method: 'POST',

@@ -1,5 +1,4 @@
-import { Controller, Get, Post, Body, Param, Delete, Query, Patch, UseGuards } from '@nestjs/common';
-import { ErpService } from './erp.service';
+import { Controller, Get, Post, Body, Param, Delete, Query, Patch, UseGuards, Request } from '@nestjs/common';import { ErpService } from './erp.service';
 import { CreateQuestionDto } from './dto/create-question.dto'; 
 import { AuthGuard } from '@nestjs/passport';
 import { RolesGuard } from '../auth/roles.guard';
@@ -82,7 +81,7 @@ export class ErpController {
   // ✨ UPDATED: Accept manual dates for fee collection
   @Post('fees')
   @Roles('SUPER_ADMIN')
-  collectFee(@Body() data: { studentId: string; amount: number; remarks?: string; paymentMode?: string; transactionId?: string; date?: string }) {
+  collectFee(@Body() data: { studentId: string; amount: number; remarks?: string; paymentMode?: string; transactionId?: string; date?: string; bankName?: string; feeBreakdown?: any }) {
     return this.erpService.collectFee(data);
   }
 
@@ -90,6 +89,20 @@ export class ErpController {
   @Roles('SUPER_ADMIN')
   getAllFees() {
     return this.erpService.getAllFeeRecords();
+  }
+
+  // ✨ NEW: Feature 3 - Request Admin Edit Endpoint
+  @Patch('fees/:id/request-edit')
+  @Roles('SUPER_ADMIN', 'TEACHER') // Allows accountants/staff to request edits
+  requestFeeEdit(@Param('id') id: string, @Request() req: any) {
+    const actor = req.user?.username || 'SYSTEM_USER';
+    return this.erpService.requestFeeEdit(id, actor);
+  }
+  
+  @Patch('fees/:id')
+  @Roles('SUPER_ADMIN', 'TEACHER')
+  updateFeeRecord(@Param('id') id: string, @Body() data: any) {
+    return this.erpService.updateFeeRecord(id, data);
   }
 
   // --- EXAMS & QUESTION BANK ---
@@ -216,6 +229,20 @@ export class ErpController {
   @Roles('SUPER_ADMIN')
   getSecurityLogs(@Query('limit') limit?: string) {
     return this.erpService.getSecurityLogs(limit ? parseInt(limit) : 100);
+  }
+
+  @Get('security/fee-requests')
+  @Roles('SUPER_ADMIN', 'SECURITY_ADMIN')
+  getFeeEditRequests() {
+    return this.erpService.getFeeEditRequests();
+  }
+
+  // ✨ NEW: Approve or Reject the edit request
+  @Patch('security/fee-requests/:id')
+  @Roles('SUPER_ADMIN', 'SECURITY_ADMIN')
+  resolveFeeEditRequest(@Param('id') id: string, @Body() body: { status: 'APPROVED' | 'REJECTED' }, @Request() req: any) {
+    const actor = req.user?.username || 'SECURITY_DIRECTOR';
+    return this.erpService.resolveFeeEditRequest(id, body.status, actor);
   }
 
   // --- ADMISSIONS & STUDENTS ---

@@ -93,7 +93,6 @@ export class FinanceService {
   }
 
   async collectFee(data: CollectFeeDto) {
-    // Verify student exists first
     const student = await this.prisma.studentProfile.findUnique({ where: { id: data.studentId } });
     if (!student) throw new BadRequestException("Student not found");
 
@@ -104,7 +103,8 @@ export class FinanceService {
         remarks: data.remarks || "Office Payment",
         paymentMode: data.paymentMode || "CASH",
         transactionId: data.transactionId || `TXN-${Date.now()}`,
-        // --- NEW RAZORPAY & RECEIPT LOGIC ---
+        bankName: (data as any).bankName || null,             // ✨ SYNCED
+        feeBreakdown: (data as any).feeBreakdown || null,     // ✨ SYNCED
         receiptNumber: `REC-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         razorpayOrderId: data.razorpayOrderId,
         date: new Date()
@@ -116,23 +116,15 @@ export class FinanceService {
   async getAllTransactions() {
     const records = await this.prisma.feeRecord.findMany({
       include: {
-        student: {
-          include: {
-            batch: true,
-            parent: {
-              include: { user: true }
-            },
-            user: true // To get student ID (username)
-          }
-        }
+        student: { include: { batch: true, parent: { include: { user: true } }, user: true } }
       },
       orderBy: { date: 'desc' }
     });
 
     return records.map(r => ({
       id: r.id,
-      studentId: r.studentId, // Keep internal UUID for matching
-      displayId: r.student.user.username, // Show STU-001
+      studentId: r.studentId,
+      displayId: r.student.user.username,
       studentName: r.student.fullName,
       parentId: r.student.parent?.user.username || 'N/A',
       batch: r.student.batch?.name || 'Unassigned',
@@ -141,7 +133,10 @@ export class FinanceService {
       remarks: r.remarks,
       paymentMode: r.paymentMode,
       transactionId: r.transactionId,
-      receiptNumber: r.receiptNumber, // Added so invoice works!
+      bankName: r.bankName,               // ✨ SYNCED
+      feeBreakdown: r.feeBreakdown,       // ✨ SYNCED
+      editStatus: r.editStatus,           // ✨ SYNCED
+      receiptNumber: r.receiptNumber,
       razorpayOrderId: r.razorpayOrderId
     }));
   }

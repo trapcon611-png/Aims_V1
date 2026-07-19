@@ -6,6 +6,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { CollectFeeDto } from './dto/collect-fee.dto';
+import { IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 
 @Controller('finance')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
