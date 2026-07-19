@@ -2,33 +2,16 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  ShieldAlert, 
-  Lock, 
-  Eye, 
-  EyeOff, 
-  Search, 
-  UserCheck, 
-  Key, 
-  Menu, 
-  LogOut, 
-  CheckCircle, 
-  XCircle, 
-  UserPlus, 
-  Sun, 
-  Moon, 
-  ChevronLeft, 
-  ChevronRight,
-  Server
+  ShieldAlert, Lock, Eye, EyeOff, Search, UserCheck, Key, 
+  Menu, LogOut, CheckCircle, XCircle, UserPlus, Sun, Moon, 
+  ChevronLeft, ChevronRight, Server, Activity, Terminal, 
+  AlertTriangle, Clock, Smartphone, Globe
 } from 'lucide-react';
 
 // --- SMART API RESOLVER ---
 const getApiUrl = () => {
-    if (process.env.NEXT_PUBLIC_API_URL) {
-        return process.env.NEXT_PUBLIC_API_URL;
-    }
-    if (typeof window !== 'undefined') {
-        return `${window.location.protocol}//${window.location.hostname}:3001`;
-    }
+    if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+    if (typeof window !== 'undefined') return `${window.location.protocol}//${window.location.hostname}:3001`;
     return 'http://localhost:3001';
 };
 
@@ -38,15 +21,17 @@ export default function SecurityPanel() {
   const [isAuth, setIsAuth] = useState(false);
   const [token, setToken] = useState(''); 
   const [creds, setCreds] = useState({ id: '', pass: '' });
-  
-  // Add state for toggling password visibility
   const [showPassword, setShowPassword] = useState(false);
   
   const [admins, setAdmins] = useState<any[]>([]);
   const [parents, setParents] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState('parents');
+  const [securityLogs, setSecurityLogs] = useState<any[]>([]); // ✨ NEW: Audit Trail State
+  
+  const [activeTab, setActiveTab] = useState<'audit' | 'parents' | 'admins' | 'create'>('audit');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  
+  // Enforce Dark Mode for SOC feel
+  const [isDarkMode, setIsDarkMode] = useState(true); 
   
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -66,13 +51,9 @@ export default function SecurityPanel() {
       if (!res.ok) throw new Error("Invalid Security Clearance");
 
       const data = await res.json();
-      
-      // CRITICAL FIX: NestJS uses access_token (snake_case)
       const authToken = data.access_token || data.token || data.accessToken;
       
-      if (!authToken) {
-          throw new Error("Authentication failed: No token received.");
-      }
+      if (!authToken) throw new Error("Authentication failed: No token received.");
       
       setToken(authToken);
       setIsAuth(true);
@@ -84,56 +65,57 @@ export default function SecurityPanel() {
 
   const fetchData = async (currentToken = token) => {
     if (!currentToken) return;
-
     try {
         const headers = { 'Authorization': `Bearer ${currentToken}` };
 
+        // Fetch Admins
         const adminsRes = await fetch(`${API_URL}/erp/security/admins`, { headers });
         if(adminsRes.ok) setAdmins(await adminsRes.json());
-        else console.error(`Admins Fetch Failed: ${adminsRes.status}`);
 
+        // Fetch Parents
         const parentsRes = await fetch(`${API_URL}/erp/security/directory`, { headers });
         if(parentsRes.ok) setParents(await parentsRes.json());
-        else console.error(`Parents Fetch Failed: ${parentsRes.status}`);
+
+        // ✨ NEW: Fetch Audit Logs
+        const logsRes = await fetch(`${API_URL}/erp/security/logs?limit=50`, { headers });
+        if(logsRes.ok) setSecurityLogs(await logsRes.json());
+
     } catch (error: any) {
         console.error("Network connection to backend failed:", error);
     }
   };
 
+  // Refresh logs every 30 seconds if on the audit tab
+  useEffect(() => {
+      if (isAuth && activeTab === 'audit') {
+          const interval = setInterval(() => fetchData(), 30000);
+          return () => clearInterval(interval);
+      }
+  }, [isAuth, activeTab]);
+
   const toggleVisibility = async (parentId: string, currentStatus: boolean) => {
     try {
         const res = await fetch(`${API_URL}/erp/security/mobile-visibility`, {
           method: 'PATCH',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}` 
-          },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify({ parentId, isVisible: !currentStatus })
         });
         if (!res.ok) throw new Error(`Server returned ${res.status}`);
         fetchData(); 
-    } catch (e: any) {
-        alert(`Failed to update visibility: ${e.message}`);
-    }
+    } catch (e: any) { alert(`Failed to update visibility: ${e.message}`); }
   };
 
   const toggleAllVisibility = async (status: boolean) => {
     if(!confirm(`Security Alert:\n\nAre you sure you want to ${status ? 'UNMASK' : 'MASK'} all parent mobile numbers for the Director?`)) return;
-
     try {
         const res = await fetch(`${API_URL}/erp/security/mobile-visibility/all`, {
           method: 'PATCH',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}` 
-          },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify({ isVisible: status })
         });
         if (!res.ok) throw new Error(`Server returned ${res.status}`);
         fetchData();
-    } catch (e: any) {
-        alert(`Failed to execute bulk update: ${e.message}`);
-    }
+    } catch (e: any) { alert(`Failed to execute bulk update: ${e.message}`); }
   };
 
   const handleCreateAdmin = async (e: React.FormEvent) => {
@@ -141,10 +123,7 @@ export default function SecurityPanel() {
     try {
       const res = await fetch(`${API_URL}/erp/security/admins`, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` 
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(newAdmin)
       });
       
@@ -156,9 +135,7 @@ export default function SecurityPanel() {
         const errorText = await res.text();
         alert(`Failed to create user. Server response: ${res.status}\n${errorText}`);
       }
-    } catch (e: any) { 
-        alert(`Network Error: Could not connect to ${API_URL}\nDetails: ${e.message}`); 
-    }
+    } catch (e: any) { alert(`Network Error: ${e.message}`); }
   };
 
   const filteredParents = parents.filter(p => 
@@ -168,9 +145,9 @@ export default function SecurityPanel() {
 
   const paginatedParents = filteredParents.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
   const totalPages = Math.ceil(filteredParents.length / ITEMS_PER_PAGE);
-
   useEffect(() => { setCurrentPage(1); }, [searchQuery]);
 
+  // ✨ SOC Cyber Theme (High Contrast Dark Mode Default)
   const theme = {
     bg: isDarkMode ? 'bg-black' : 'bg-slate-50',
     text: isDarkMode ? 'text-green-500' : 'text-slate-800',
@@ -188,40 +165,38 @@ export default function SecurityPanel() {
     paginationBtn: isDarkMode ? 'bg-black border-green-900 text-green-500 hover:bg-green-900/20' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-100'
   };
 
+  const getLogBadge = (action: string) => {
+      if (action.includes('FAILED')) return <span className="bg-red-950 text-red-400 border border-red-900 text-[10px] px-2 py-0.5 rounded font-bold flex items-center gap-1"><AlertTriangle size={10}/> {action}</span>;
+      if (action.includes('MASTER')) return <span className="bg-purple-950 text-purple-400 border border-purple-900 text-[10px] px-2 py-0.5 rounded font-bold flex items-center gap-1"><ShieldAlert size={10}/> {action}</span>;
+      return <span className="bg-green-950 text-green-400 border border-green-900 text-[10px] px-2 py-0.5 rounded font-bold flex items-center gap-1"><CheckCircle size={10}/> {action}</span>;
+  };
+
   if (!isAuth) {
     return (
       <div className={`min-h-screen flex items-center justify-center p-4 ${theme.bg}`}>
-        <div className={`w-full max-w-sm border ${theme.border} ${theme.cardBg} p-6 md:p-8 rounded-2xl shadow-xl transition-colors duration-300`}>
+        <div className={`w-full max-w-sm border ${theme.border} ${theme.cardBg} p-6 md:p-8 rounded-2xl shadow-[0_0_40px_rgba(34,197,94,0.1)] transition-colors duration-300`}>
           <div className="flex justify-center mb-6">
             <ShieldAlert className={`h-14 w-14 md:h-16 md:w-16 animate-pulse ${theme.accent}`} />
           </div>
-          <h1 className={`text-xl md:text-2xl font-mono text-center mb-8 uppercase tracking-widest ${theme.text}`}>Security Override</h1>
+          <h1 className={`text-xl md:text-2xl font-mono text-center mb-2 uppercase tracking-widest ${theme.text}`}>SOC Terminal</h1>
+          <p className={`text-xs text-center font-mono mb-8 ${theme.subtext}`}>UNAUTHORIZED ACCESS PROHIBITED</p>
           <form onSubmit={handleLogin} className="space-y-4">
             <input 
               className={`w-full border p-3 rounded font-mono focus:outline-none transition-colors ${theme.inputBg}`} 
               placeholder="AGENT ID" 
-              value={creds.id} 
-              onChange={e=>setCreds({...creds, id:e.target.value})} 
+              value={creds.id} onChange={e=>setCreds({...creds, id:e.target.value})} 
             />
-            
-            {/* Password input with toggle button */}
             <div className="relative">
               <input 
                 className={`w-full border p-3 rounded font-mono focus:outline-none transition-colors pr-10 ${theme.inputBg}`} 
                 type={showPassword ? "text" : "password"} 
                 placeholder="ACCESS KEY" 
-                value={creds.pass} 
-                onChange={e=>setCreds({...creds, pass:e.target.value})} 
+                value={creds.pass} onChange={e=>setCreds({...creds, pass:e.target.value})} 
               />
-              <button 
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className={`absolute right-3 top-3.5 ${theme.subtext} hover:text-green-400 transition-colors focus:outline-none`}
-              >
+              <button type="button" onClick={() => setShowPassword(!showPassword)} className={`absolute right-3 top-3.5 ${theme.subtext} hover:text-green-400 transition-colors focus:outline-none`}>
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
-
             <button className={`w-full border py-3 rounded font-mono font-bold transition-all active:scale-95 ${theme.buttonPrimary}`}>AUTHENTICATE</button>
           </form>
         </div>
@@ -231,29 +206,23 @@ export default function SecurityPanel() {
 
   return (
     <div className={`min-h-screen font-mono pb-10 transition-colors duration-300 ${theme.bg} ${theme.text}`}>
-      <header className={`flex flex-col md:flex-row justify-between items-center p-4 md:p-8 border-b ${theme.border} ${theme.headerBg} sticky top-0 z-50 backdrop-blur-md transition-colors`}>
+      <header className={`flex flex-col md:flex-row justify-between items-center p-4 md:p-6 border-b ${theme.border} ${theme.headerBg} sticky top-0 z-50 backdrop-blur-md transition-colors`}>
         <div className="w-full flex justify-between items-center md:w-auto">
           <div className="flex items-center gap-3 md:gap-4">
-            <ShieldAlert className="h-8 w-8 md:h-10 md:w-10" />
+            <ShieldAlert className={`h-8 w-8 md:h-10 md:w-10 ${theme.accent}`} />
             <div>
-              <h1 className="text-sm md:text-xl tracking-widest uppercase font-bold">Command Center</h1>
-              <p className={`text-[10px] md:text-xs uppercase ${theme.subtext}`}>System Integrity: Nominal</p>
+              <h1 className="text-sm md:text-xl tracking-widest uppercase font-bold text-white">Director SOC</h1>
+              <p className={`text-[10px] md:text-xs uppercase flex items-center gap-1 ${theme.accent}`}><span className="h-2 w-2 rounded-full bg-green-500 animate-pulse inline-block"></span> System Integrity: Nominal</p>
             </div>
           </div>
           <div className="flex items-center gap-2 md:hidden">
-            <button onClick={() => setIsDarkMode(!isDarkMode)} className={`p-2 rounded border ${theme.border}`}>
-               {isDarkMode ? <Sun size={18}/> : <Moon size={18}/>}
-            </button>
-            <button onClick={() => setIsMenuOpen(!isMenuOpen)} className={`p-2 rounded border ${theme.border}`}>
+            <button onClick={() => setIsMenuOpen(!isMenuOpen)} className={`p-2 rounded border ${theme.border} text-green-500`}>
                <Menu size={20} />
             </button>
           </div>
         </div>
 
         <div className={`${isMenuOpen ? 'flex' : 'hidden'} md:flex flex-col md:flex-row w-full md:w-auto gap-4 mt-4 md:mt-0`}>
-          <button onClick={() => setIsDarkMode(!isDarkMode)} className={`hidden md:block p-2 rounded border hover:opacity-80 transition ${theme.border}`}>
-             {isDarkMode ? <Sun size={20}/> : <Moon size={20}/>}
-          </button>
           <button onClick={() => { setIsAuth(false); setToken(''); }} className={`flex items-center justify-center gap-2 px-4 py-2 rounded border text-xs md:text-sm font-bold transition-colors ${theme.buttonDestructive}`}>
             <LogOut size={14}/> LOCK SESSION
           </button>
@@ -261,22 +230,80 @@ export default function SecurityPanel() {
       </header>
 
       <main className="p-4 md:p-8 max-w-7xl mx-auto">
-        <div className="flex flex-col md:flex-row gap-2 md:gap-4 mb-8">
-          <button onClick={() => setActiveTab('parents')} className={`flex-1 md:flex-none px-6 py-3 md:py-2 rounded border transition-all duration-300 flex items-center justify-center gap-2 text-xs md:text-sm font-bold ${activeTab === 'parents' ? theme.tabActive : theme.tabInactive}`}>
+        <div className="flex flex-col md:flex-row gap-2 md:gap-4 mb-8 overflow-x-auto pb-2 custom-scrollbar">
+          <button onClick={() => setActiveTab('audit')} className={`shrink-0 px-6 py-3 md:py-2 rounded border transition-all duration-300 flex items-center justify-center gap-2 text-xs md:text-sm font-bold ${activeTab === 'audit' ? theme.tabActive : theme.tabInactive}`}>
+            <Activity size={16}/> LIVE AUDIT
+          </button>
+          <button onClick={() => setActiveTab('parents')} className={`shrink-0 px-6 py-3 md:py-2 rounded border transition-all duration-300 flex items-center justify-center gap-2 text-xs md:text-sm font-bold ${activeTab === 'parents' ? theme.tabActive : theme.tabInactive}`}>
             <UserCheck size={16}/> PARENT PRIVACY
           </button>
-          <button onClick={() => setActiveTab('admins')} className={`flex-1 md:flex-none px-6 py-3 md:py-2 rounded border transition-all duration-300 flex items-center justify-center gap-2 text-xs md:text-sm font-bold ${activeTab === 'admins' ? theme.tabActive : theme.tabInactive}`}>
-            <Key size={16}/> ADMIN CREDENTIALS
+          <button onClick={() => setActiveTab('admins')} className={`shrink-0 px-6 py-3 md:py-2 rounded border transition-all duration-300 flex items-center justify-center gap-2 text-xs md:text-sm font-bold ${activeTab === 'admins' ? theme.tabActive : theme.tabInactive}`}>
+            <Key size={16}/> ADMIN CREDS
           </button>
-          <button onClick={() => setActiveTab('create')} className={`flex-1 md:flex-none px-6 py-3 md:py-2 rounded border transition-all duration-300 flex items-center justify-center gap-2 text-xs md:text-sm font-bold ${activeTab === 'create' ? theme.tabActive : theme.tabInactive}`}>
-            <UserPlus size={16}/> USER MANAGEMENT
+          <button onClick={() => setActiveTab('create')} className={`shrink-0 px-6 py-3 md:py-2 rounded border transition-all duration-300 flex items-center justify-center gap-2 text-xs md:text-sm font-bold ${activeTab === 'create' ? theme.tabActive : theme.tabInactive}`}>
+            <UserPlus size={16}/> CREATE USER
           </button>
         </div>
 
+        {/* ✨ NEW LIVE AUDIT MATRIX TAB */}
+        {activeTab === 'audit' && (
+          <div className={`border ${theme.border} rounded-xl p-0 overflow-hidden ${theme.cardBg} shadow-[0_0_30px_rgba(34,197,94,0.05)]`}>
+             <div className={`bg-black/50 p-4 border-b ${theme.border} flex justify-between items-center`}>
+                <h2 className={`text-sm md:text-lg flex items-center gap-2 font-bold ${theme.accent}`}><Terminal size={18} /> NETWORK TRAFFIC LOGS</h2>
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <Activity size={12} className="animate-pulse text-green-500"/> Live Feed
+                </div>
+             </div>
+             
+             <div className="overflow-x-auto">
+                 <table className="w-full text-left border-collapse text-xs md:text-sm">
+                     <thead className={`bg-black/80 ${theme.subtext} uppercase text-[10px] md:text-xs tracking-wider border-b ${theme.border}`}>
+                         <tr>
+                             <th className="p-4 font-normal">Timestamp (IST)</th>
+                             <th className="p-4 font-normal">Actor</th>
+                             <th className="p-4 font-normal">Event Signature</th>
+                             <th className="p-4 font-normal hidden md:table-cell">Origin Node</th>
+                         </tr>
+                     </thead>
+                     <tbody className="divide-y divide-green-900/30">
+                         {securityLogs.length === 0 ? (
+                             <tr><td colSpan={4} className="p-8 text-center text-gray-600">No signals intercepted.</td></tr>
+                         ) : (
+                             securityLogs.map((log) => (
+                                 <tr key={log.id} className="hover:bg-green-900/10 transition-colors group">
+                                     <td className="p-4 whitespace-nowrap">
+                                        <div className="flex items-center gap-2 text-gray-400">
+                                            <Clock size={12} className="opacity-50"/>
+                                            {new Date(log.timestamp).toLocaleString('en-US', { timeZone: 'Asia/Kolkata', month: 'short', day: '2-digit', hour: '2-digit', minute:'2-digit', second:'2-digit' })}
+                                        </div>
+                                     </td>
+                                     <td className="p-4 font-bold text-white">
+                                        {log.actorId} <span className="text-[10px] text-gray-600 font-normal ml-2 hidden sm:inline-block">({log.role})</span>
+                                     </td>
+                                     <td className="p-4">
+                                        {getLogBadge(log.action)}
+                                     </td>
+                                     <td className="p-4 hidden md:table-cell text-gray-500">
+                                        <div className="flex items-center gap-3">
+                                            <span className="flex items-center gap-1" title="IP Address"><Globe size={12}/> {log.ipAddress}</span>
+                                            <span className="flex items-center gap-1 max-w-[150px] truncate" title={log.userAgent}><Smartphone size={12}/> {log.userAgent?.split(' ')[0] || 'Unknown'}</span>
+                                        </div>
+                                     </td>
+                                 </tr>
+                             ))
+                         )}
+                     </tbody>
+                 </table>
+             </div>
+          </div>
+        )}
+
+        {/* OTHER TABS REMAIN UNCHANGED BELOW THIS LINE, JUST ADAPTED TO THEME */}
         {activeTab === 'parents' && (
           <div className={`border ${theme.border} rounded-xl p-4 md:p-6 ${theme.cardBg} transition-colors`}>
+            {/* Same as before but with cyber theme classes */}
             <div className={`flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 border-b ${theme.border} pb-4 gap-4`}>
-               <h2 className={`text-sm md:text-lg flex items-center gap-2 ${theme.accent}`}><UserCheck size={18} /> PARENT DIRECTORY ACCESS</h2>
+               <h2 className={`text-sm md:text-lg flex items-center gap-2 font-bold ${theme.accent}`}><UserCheck size={18} /> PARENT DIRECTORY ACCESS</h2>
                <div className="flex flex-col md:flex-row gap-4 w-full xl:w-auto">
                   <div className="relative w-full md:w-64">
                     <input 
@@ -305,13 +332,13 @@ export default function SecurityPanel() {
                 paginatedParents.map(p => (
                   <div key={p.id} className={`flex flex-col md:flex-row justify-between items-start md:items-center border ${theme.border} p-4 rounded-lg transition-colors ${theme.rowHover}`}>
                     <div className="mb-3 md:mb-0 w-full md:w-auto">
-                      <div className={`font-bold text-sm md:text-base flex items-center gap-2 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                      <div className={`font-bold text-sm md:text-base flex items-center gap-2 text-white`}>
                          {p.parentId}
                          {p.isVisible && <span className="flex h-2 w-2 rounded-full bg-red-500 animate-pulse md:hidden"></span>}
                       </div>
                       <div className={`text-xs mt-1 flex flex-col md:flex-row gap-1 md:gap-3 ${theme.subtext}`}>
-                         <span>Children: <span className={isDarkMode ? 'text-gray-300' : 'text-slate-700'}>{p.childrenCount}</span></span>
-                         <span className={`hidden md:inline ${isDarkMode ? 'text-green-900' : 'text-slate-300'}`}>|</span>
+                         <span>Children: <span className='text-gray-300'>{p.childrenCount}</span></span>
+                         <span className={`hidden md:inline text-green-900`}>|</span>
                          <span className="font-mono">Mobile: {p.mobile}</span>
                       </div>
                     </div>
@@ -346,21 +373,21 @@ export default function SecurityPanel() {
 
         {activeTab === 'admins' && (
           <div className={`border ${theme.border} rounded-xl p-4 md:p-6 ${theme.cardBg}`}>
-            <h2 className={`text-sm md:text-lg mb-6 flex items-center gap-2 border-b pb-2 ${theme.accent} ${theme.border}`}><Key size={18} /> ADMINISTRATIVE CREDENTIALS</h2>
+            <h2 className={`text-sm md:text-lg mb-6 flex items-center gap-2 border-b pb-2 font-bold ${theme.accent} ${theme.border}`}><Key size={18} /> ADMINISTRATIVE CREDENTIALS</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
               {admins.map(a => (
-                <div key={a.id} className={`border p-5 rounded-lg transition-colors ${theme.border} ${isDarkMode ? 'bg-green-900/5 hover:bg-green-900/10' : 'bg-slate-50 hover:bg-slate-100'}`}>
+                <div key={a.id} className={`border p-5 rounded-lg transition-colors ${theme.border} bg-green-900/5 hover:bg-green-900/10`}>
                   <div className="flex justify-between mb-4 items-center">
-                    <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded ${isDarkMode ? 'bg-green-900/20 text-gray-400' : 'bg-blue-100 text-blue-700'}`}>{a.role}</span>
+                    <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded bg-green-900/20 text-gray-400`}>{a.role}</span>
                     {a.isActive ? <div className="h-2 w-2 rounded-full bg-green-500 shadow-[0_0_10px_#22c55e]"></div> : <div className="h-2 w-2 rounded-full bg-red-500"></div>}
                   </div>
                   <div className="mb-3">
                     <label className={`text-[10px] uppercase block mb-1 ${theme.subtext}`}>Username</label>
-                    <div className={`text-base md:text-lg font-bold tracking-wide ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{a.username}</div>
+                    <div className={`text-base md:text-lg font-bold tracking-wide text-white`}>{a.username}</div>
                   </div>
                   <div>
                     <label className={`text-[10px] uppercase block mb-1 ${theme.subtext}`}>Decrypted Password</label>
-                    <div className={`font-mono text-sm md:text-base tracking-wider p-2 rounded border ${isDarkMode ? 'text-red-400 bg-red-900/10 border-red-900/30' : 'text-red-600 bg-red-50 border-red-100'}`}>
+                    <div className={`font-mono text-sm md:text-base tracking-wider p-2 rounded border text-red-400 bg-red-900/10 border-red-900/30`}>
                       {a.visiblePassword || 'ENCRYPTED_ONLY'}
                     </div>
                   </div>
@@ -372,7 +399,7 @@ export default function SecurityPanel() {
 
         {activeTab === 'create' && (
           <div className={`border ${theme.border} rounded-xl p-6 ${theme.cardBg} max-w-xl mx-auto`}>
-            <h2 className={`text-lg mb-6 flex items-center gap-2 border-b pb-2 ${theme.border} ${theme.accent}`}><UserPlus size={18} /> CREATE NEW SYSTEM USER</h2>
+            <h2 className={`text-lg mb-6 flex items-center gap-2 border-b pb-2 font-bold ${theme.border} ${theme.accent}`}><UserPlus size={18} /> CREATE NEW SYSTEM USER</h2>
             <form onSubmit={handleCreateAdmin} className="space-y-4">
               <div>
                 <label className={`text-xs uppercase block mb-1 ${theme.subtext}`}>Role Assignment</label>

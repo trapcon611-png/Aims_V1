@@ -1,0 +1,23 @@
+{
+  "name": "AIMS Director SOC",
+  "short_name": "AIMS SOC",
+  "description": "AIMS Institute Security Operations Center",
+  "start_url": "/security",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "any",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo-v2.jpg",
+      "sizes": "any",
+      "type": "image/jpeg",
+      "purpose": "maskable"
+    }
+  ]
+}
