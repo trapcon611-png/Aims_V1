@@ -45,18 +45,29 @@ export default function SecurityPanel() {
 
   // Catch the PWA install prompt
   useEffect(() => {
+      // Check if the user has previously marked it as already installed
+      const isAlreadyInstalled = localStorage.getItem('aims_soc_installed') === 'true';
+      
+      // If they haven't marked it as installed, show the banner on every login/load
+      if (!isAlreadyInstalled) {
+          setShowInstallBanner(true);
+      }
+
       const handleBeforeInstallPrompt = (e: any) => {
           // Prevent the mini-infobar from appearing on mobile
           e.preventDefault();
           // Stash the event so it can be triggered later
           setDeferredPrompt(e);
           // Show our custom high-tech banner
-          setShowInstallBanner(true);
+          if (!isAlreadyInstalled) {
+              setShowInstallBanner(true);
+          }
       };
 
       window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
       window.addEventListener('appinstalled', () => {
+          localStorage.setItem('aims_soc_installed', 'true');
           setShowInstallBanner(false);
           setDeferredPrompt(null);
       });
@@ -67,16 +78,26 @@ export default function SecurityPanel() {
   }, []);
 
   const handleInstallClick = async () => {
-      if (!deferredPrompt) return;
-      
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      
-      if (outcome === 'accepted') {
-          console.log('SOC Terminal deployed as native application.');
+      if (deferredPrompt) {
+          deferredPrompt.prompt();
+          const { outcome } = await deferredPrompt.userChoice;
+          
+          if (outcome === 'accepted') {
+              console.log('SOC Terminal deployed as native application.');
+              localStorage.setItem('aims_soc_installed', 'true');
+              setShowInstallBanner(false);
+          }
+          
+          setDeferredPrompt(null);
+      } else {
+          // Fallback for iOS Safari or desktop browsers where prompt isn't supported yet
+          alert("To install: Click your browser's menu button (three dots or share icon) and select 'Add to Home Screen' or 'Install App'.");
       }
-      
-      setDeferredPrompt(null);
+  };
+
+  const handleAlreadyInstalledClick = () => {
+      // Save to localStorage so it doesn't nag them, but we can easily reset it if needed
+      localStorage.setItem('aims_soc_installed', 'true');
       setShowInstallBanner(false);
   };
 
@@ -267,7 +288,7 @@ export default function SecurityPanel() {
 
       <main className="p-4 md:p-8 max-w-7xl mx-auto">
         
-        {/* ✨ NATIVE APP INSTALLATION BANNER */}
+        {/* ✨ FORCED PERSISTENT APP UPGRADE ALERT BANNER */}
         {showInstallBanner && (
           <div className={`mb-8 p-5 rounded-xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${theme.border} bg-green-950/20 shadow-[0_0_20px_rgba(34,197,94,0.1)]`}>
              <div className="flex items-center gap-4">
@@ -275,13 +296,23 @@ export default function SecurityPanel() {
                     <DownloadCloud className={theme.accent} size={24} />
                 </div>
                 <div>
-                   <h3 className={`font-bold ${theme.accent} tracking-wider`}>SYSTEM UPGRADE DETECTED</h3>
-                   <p className={`text-xs mt-1 ${theme.subtext}`}>Initialize the SOC Terminal as a standalone native application for enhanced operational speed and persistence.</p>
+                   <h3 className={`font-bold ${theme.accent} tracking-wider text-xs md:text-sm`}>SYSTEM DEPLOYMENT ADVANTAGE</h3>
+                   <p className={`text-xs mt-1 ${theme.subtext}`}>Run the Director SOC Terminal as an isolated hardware app container. Removes browser URL constraints and improves logging speeds.</p>
                 </div>
              </div>
-             <div className="flex gap-3 w-full md:w-auto mt-2 md:mt-0">
-                <button onClick={() => setShowInstallBanner(false)} className="px-5 py-2.5 rounded border border-gray-800 text-gray-500 text-xs font-bold hover:bg-gray-900 transition-colors w-full md:w-auto">DISMISS</button>
-                <button onClick={handleInstallClick} className={`px-5 py-2.5 rounded border text-xs font-bold tracking-wider w-full md:w-auto shadow-[0_0_15px_rgba(34,197,94,0.15)] ${theme.buttonPrimary}`}>DEPLOY TERMINAL</button>
+             <div className="flex flex-wrap md:flex-nowrap gap-3 w-full md:w-auto mt-2 md:mt-0">
+                <button 
+                   onClick={handleAlreadyInstalledClick} 
+                   className="px-4 py-2.5 rounded border border-gray-800 text-gray-400 text-xs font-bold hover:bg-gray-900/60 transition-colors flex-1 md:flex-none whitespace-nowrap"
+                >
+                   ALREADY INSTALLED
+                </button>
+                <button 
+                   onClick={handleInstallClick} 
+                   className={`px-5 py-2.5 rounded border text-xs font-bold tracking-wider flex-1 md:flex-none whitespace-nowrap shadow-[0_0_15px_rgba(34,197,94,0.15)] ${theme.buttonPrimary}`}
+                >
+                   INSTALL NOW
+                </button>
              </div>
           </div>
         )}
