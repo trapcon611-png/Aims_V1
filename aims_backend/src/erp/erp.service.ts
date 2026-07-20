@@ -7,7 +7,8 @@ import * as webPush from 'web-push';
 
 @Injectable()
 export class ErpService {
-  private readonly logger = new Logger(ErpService.name);
+    private readonly logger = new Logger(ErpService.name);
+    private isPoolLocked = true;
 
   constructor(private prisma: PrismaService) {
       webPush.setVapidDetails(
@@ -15,6 +16,15 @@ export class ErpService {
         'BPIOFqW5EdW7LL-eYMHMdZ_1g0hdcgM093hpYAiqDL9jFyFoOI4gLT4Wu3zwgaVJBpZ9EufGagusvdL52CGL2lA', 
         'yqOdQrSnKGOmQLRwtJvNEm0zi1AlYByvYDUBxIslr3U' 
       );
+  }
+  
+  async getPoolStatus() { 
+      return { isUnlocked: !this.isPoolLocked }; 
+  }
+
+  async setPoolStatus(status: boolean) { 
+      this.isPoolLocked = !status; 
+      return { isUnlocked: status }; 
   }
 
   private sanitize(data: any): any {
@@ -317,19 +327,16 @@ export class ErpService {
 
     const updated = await this.prisma.feeRecord.update({
       where: { id: feeId },
-      data: {
-        editStatus: 'PENDING',
-        editRequestDate: new Date()
-      } as any // Using 'as any' temporarily until Prisma regenerates
+      data: { editStatus: 'PENDING', editRequestDate: new Date() }
     });
 
-    // Log this critical action in the Security Terminal automatically
-    await (this.prisma as any).securityLog.create({
+    // Directly access securityLog here
+    await this.prisma.securityLog.create({
       data: {
         actorId: actor,
         role: 'ACCOUNTS',
         action: 'FEE_EDIT_REQUESTED',
-        details: { feeId: feeId, amount: record.amount }
+        details: { feeId: feeId, amount: record.amount } as any
       }
     });
 
@@ -472,7 +479,7 @@ export class ErpService {
       data: { editStatus: status }
     });
 
-    // Automatically log the Director's decision in the Security Terminal
+    // Directly access securityLog here
     await this.prisma.securityLog.create({
       data: {
         actorId: actor,

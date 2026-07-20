@@ -202,20 +202,42 @@ export default function SecurityPanel() {
     } catch (e: any) { alert(`Network Error: ${e.message}`); }
   };
 
-  // ✨ NEW: Handle Fee Edit Requests
-  const handleResolveFeeRequest = async (id: string, status: 'APPROVED' | 'REJECTED') => {
-      if(!confirm(`Are you sure you want to ${status} this edit request?`)) return;
+  // ✨ NEW: Handle Pool Access Requests
+  const handleResolvePoolAccess = async (actorId: string, status: 'APPROVED' | 'REJECTED') => {
+      const isUnlocking = status === 'APPROVED';
+      if (!confirm(`Are you sure you want to ${isUnlocking ? 'UNLOCK' : 'LOCK'} the Financial Pool?`)) return;
+      
       try {
-          const res = await fetch(`${API_URL}/erp/security/fee-requests/${id}`, {
+          const res = await fetch(`${API_URL}/erp/security/pool-status`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-              body: JSON.stringify({ status })
+              body: JSON.stringify({ status: isUnlocking })
           });
-          if(!res.ok) throw new Error('Failed to resolve request');
-          fetchData(); // Refresh the list instantly
+          
+          if (!res.ok) throw new Error('Failed to update pool status');
+          
+          alert(`Financial Pool ${isUnlocking ? 'UNLOCKED' : 'LOCKED'} successfully.`);
+          fetchData();
       } catch (e: any) {
-          alert(`Error resolving request: ${e.message}`);
+          alert(`Error: ${e.message}`);
       }
+  };
+
+  // ✨ NEW: Handle Fee Edit Requests
+  const handleResolveFeeRequest = async (id: string, status: 'APPROVED' | 'REJECTED') => {
+    if (!confirm(`Are you sure you want to ${status} this edit request?`)) return;
+    try {
+        const res = await fetch(`${API_URL}/erp/security/fee-requests/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ status })
+        });
+        if (!res.ok) throw new Error('Failed to resolve request');
+        fetchData();
+        alert(`Request ${status} successfully.`);
+    } catch (e: any) { 
+        alert(`Error resolving request: ${e.message}`); 
+    }
   };
 
   const filteredParents = parents.filter(p => 
@@ -420,6 +442,28 @@ export default function SecurityPanel() {
         {/* ✨ NEW: FINANCE APPROVALS INTERFACE */}
         {activeTab === 'finance' && (
             <div className={`border ${theme.border} rounded-xl p-4 md:p-6 ${theme.cardBg}`}>
+                
+                {/* ✨ NEW: VAULT CONTROL SECTION */}
+                <div className={`border ${theme.border} rounded-xl p-4 md:p-6 mb-6 bg-black/40`}>
+                    <h2 className={`text-sm md:text-lg mb-4 flex items-center gap-2 font-bold ${theme.accent}`}>
+                        <Lock size={18} /> FINANCIAL POOL MANAGEMENT
+                    </h2>
+                    <div className="flex gap-4">
+                        <button 
+                            onClick={() => handleResolvePoolAccess('SYSTEM_USER', 'APPROVED')}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-xs font-bold transition"
+                        >
+                            UNLOCK FINANCIAL POOL
+                        </button>
+                        <button 
+                            onClick={() => handleResolvePoolAccess('SYSTEM_USER', 'REJECTED')}
+                            className="bg-red-900/50 hover:bg-red-900 text-red-200 px-4 py-2 rounded text-xs font-bold transition"
+                        >
+                            LOCK FINANCIAL POOL
+                        </button>
+                    </div>
+                </div>
+
                 <h2 className={`text-sm md:text-lg mb-6 flex items-center gap-2 border-b pb-2 font-bold ${theme.accent} ${theme.border}`}>
                     <FileSignature size={18} /> PENDING RECEIPT EDIT REQUESTS
                 </h2>

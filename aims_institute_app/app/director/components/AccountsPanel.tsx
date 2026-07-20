@@ -50,6 +50,8 @@ export default function AccountsPanel({ students }: { students: any[] }) {
   const [selectedPoolDate, setSelectedPoolDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [poolMonthDate, setPoolMonthDate] = useState(new Date());
   const [editModalData, setEditModalData] = useState<any>(null);
+  const [poolStartDate, setPoolStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [poolEndDate, setPoolEndDate] = useState(new Date().toISOString().split('T')[0]);
 
   const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl transition-all duration-300";
   const inputStyle = "w-full p-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-[#c1121f] focus:border-[#c1121f] outline-none transition font-medium text-sm";
@@ -72,7 +74,14 @@ export default function AccountsPanel({ students }: { students: any[] }) {
       finally { setIsLoading(false); }
   };
 
-  useEffect(() => { refreshData(); }, []);
+  useEffect(() => { refreshData(); 
+    // ✨ Polling: Check for status changes every 10 seconds
+    const interval = setInterval(() => {
+        refreshData();
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   const filteredStudentOptions = useMemo(() => {
       if (!studentSearchQuery && !feeCollectBatchFilter && !feeCollectBranchFilter) return [];

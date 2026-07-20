@@ -195,6 +195,20 @@ export class ErpController {
   }
 
   // --- SECURITY ---
+  
+  // ✨ NEW: Pool Unlock Endpoints
+  @Get('security/pool-status')
+  @Roles('SUPER_ADMIN', 'SECURITY_ADMIN')
+  getPoolStatus() {
+      return this.erpService.getPoolStatus();
+  }
+
+  @Patch('security/pool-status')
+  @Roles('SUPER_ADMIN', 'SECURITY_ADMIN')
+  setPoolStatus(@Body() body: { status: boolean }) {
+      return this.erpService.setPoolStatus(body.status);
+  }
+
   @Post('security/admins')
   @Roles('SUPER_ADMIN')
   createSystemAdmin(@Body() dto: { username: string; password: string; role: 'SUPER_ADMIN' | 'TEACHER' }) {
