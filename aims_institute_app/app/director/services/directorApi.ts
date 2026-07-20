@@ -270,6 +270,19 @@ export const directorApi = {
       } 
   },
 
+  // ✨ NEW: Fetch Vault Lock Status
+    async getPoolStatus() {
+        try {
+            const res = await fetchWithAuth(`${API_URL}/erp/security/pool-status`, {
+                headers: { 'Authorization': `Bearer ${this.getToken()}` }
+            });
+            if (!res.ok) return { isUnlocked: false };
+            return await parseJsonSafely(res, { isUnlocked: false });
+        } catch (e) {
+            return { isUnlocked: false };
+        }
+    },
+
   async deleteFeeRecord(id: string) {
       const res = await fetchWithAuth(`${API_URL}/erp/fees/${id}`, {
           method: 'DELETE',
