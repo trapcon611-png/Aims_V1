@@ -41,8 +41,11 @@ export default function AccountsPanel({ students }: { students: any[] }) {
     // ✨ FEATURE 4: API-CONNECTED FINANCIAL POOL STATE
     const [isPoolUnlocked, setIsPoolUnlocked] = useState(false);
     const [isUnlocking, setIsUnlocking] = useState(false);
-    const [poolStartDate, setPoolStartDate] = useState(new Date().toISOString().split('T')[0]);
-    const [poolEndDate, setPoolEndDate] = useState(new Date().toISOString().split('T')[0]);
+    
+    const todayStr = new Date().toISOString().split('T')[0];
+    const [poolStartDate, setPoolStartDate] = useState(todayStr);
+    const [poolEndDate, setPoolEndDate] = useState(todayStr);
+    const [poolMonthDate, setPoolMonthDate] = useState(new Date());
 
     const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl transition-all duration-300";
     const inputStyle = "w-full p-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-[#c1121f] focus:border-[#c1121f] outline-none transition font-medium text-sm";
@@ -115,17 +118,18 @@ export default function AccountsPanel({ students }: { students: any[] }) {
     };
 
     const todaysMetrics = useMemo(() => {
-        const todayStr = new Date().toLocaleDateString('en-CA');
-        const todaysFees = feeHistory.filter(f => new Date(f.date).toLocaleDateString('en-CA') === todayStr).reduce((sum, f) => sum + Number(f.amount), 0);
-        const todaysExpenses = expenses.filter(e => new Date(e.date).toLocaleDateString('en-CA') === todayStr).reduce((sum, e) => sum + Number(e.amount), 0);
+        const todayString = new Date().toLocaleDateString('en-CA');
+        const todaysFees = feeHistory.filter(f => new Date(f.date).toLocaleDateString('en-CA') === todayString).reduce((sum, f) => sum + Number(f.amount), 0);
+        const todaysExpenses = expenses.filter(e => new Date(e.date).toLocaleDateString('en-CA') === todayString).reduce((sum, e) => sum + Number(e.amount), 0);
         return { collected: todaysFees, spent: todaysExpenses, net: todaysFees - todaysExpenses };
     }, [feeHistory, expenses]);
 
     // ✨ FEATURE 4: DATE RANGE FINANCIAL POOL LOGIC
     const poolLedger = useMemo(() => {
+        const activeEndDate = poolEndDate || poolStartDate; // Fallback to start if end isn't picked yet
         const txnsInRange = feeHistory.filter(f => {
             const d = new Date(f.date).toLocaleDateString('en-CA');
-            return d >= poolStartDate && d <= poolEndDate;
+            return d >= poolStartDate && d <= activeEndDate;
         });
 
         const cash = txnsInRange.filter(t => t.paymentMode === 'CASH');
@@ -139,6 +143,43 @@ export default function AccountsPanel({ students }: { students: any[] }) {
             cheque: { total: cheque.reduce((s, t) => s + Number(t.amount), 0), list: cheque }
         };
     }, [feeHistory, poolStartDate, poolEndDate]);
+
+    const getPaymentModesForDate = (dateStr: string) => {
+        const txns = feeHistory.filter(f => new Date(f.date).toLocaleDateString('en-CA') === dateStr);
+        return {
+            hasCash: txns.some(t => t.paymentMode === 'CASH'),
+            hasOnline: txns.some(t => ['ONLINE', 'NEFT'].includes(t.paymentMode)),
+            hasCheque: txns.some(t => t.paymentMode === 'CHEQUE')
+        };
+    };
+
+    const generateCalendarDays = () => {
+        const year = poolMonthDate.getFullYear();
+        const month = poolMonthDate.getMonth();
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const days = [];
+        for (let i = 0; i < firstDay; i++) days.push(null);
+        for (let i = 1; i <= daysInMonth; i++) days.push(new Date(year, month, i));
+        return days;
+    };
+
+    // ✨ INTERACTIVE RANGE CALENDAR CLICK LOGIC
+    const handleDateSelect = (dateStr: string) => {
+        if (!poolStartDate || (poolStartDate && poolEndDate)) {
+            // Fresh selection start
+            setPoolStartDate(dateStr);
+            setPoolEndDate('');
+        } else {
+            // Complete the range
+            if (dateStr < poolStartDate) {
+                // If they clicked a date BEFORE the start date, make it the new start
+                setPoolStartDate(dateStr);
+            } else {
+                setPoolEndDate(dateStr);
+            }
+        }
+    };
 
     const filteredTransactions = useMemo(() => {
         return feeHistory.filter(item => {
@@ -376,39 +417,75 @@ export default function AccountsPanel({ students }: { students: any[] }) {
 
                 <div className={`grid grid-cols-1 lg:grid-cols-12 min-h-[400px] transition-opacity duration-500 ${!isPoolUnlocked ? 'opacity-20 pointer-events-none' : 'opacity-100'}`}>
                     
-                    {/* LEFT: CALENDAR (DATE RANGE UI) */}
+                    {/* LEFT: INTERACTIVE RANGE CALENDAR */}
                     <div className="lg:col-span-4 border-r border-slate-200 bg-white p-6">
-                        <div className="flex flex-col gap-6 mb-6">
-                            <div className="flex flex-col">
-                                <label className={labelStyle}>Start Date</label>
-                                <input
-                                    type="date"
-                                    className={inputStyle}
-                                    value={poolStartDate}
-                                    onChange={e => setPoolStartDate(e.target.value)}
-                                />
-                            </div>
-                            <div className="flex flex-col">
-                                <label className={labelStyle}>End Date</label>
-                                <input
-                                    type="date"
-                                    className={inputStyle}
-                                    value={poolEndDate}
-                                    onChange={e => setPoolEndDate(e.target.value)}
-                                />
-                            </div>
+                        <div className="flex justify-between items-center mb-6">
+                            <button onClick={() => setPoolMonthDate(new Date(poolMonthDate.setMonth(poolMonthDate.getMonth() - 1)))} className="p-1 hover:bg-slate-100 rounded text-slate-500">
+                                <ChevronLeft size={20} />
+                            </button>
+                            <span className="font-bold text-slate-700 flex items-center gap-2">
+                                <CalendarDays size={16} />
+                                {poolMonthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                            </span>
+                            <button onClick={() => setPoolMonthDate(new Date(poolMonthDate.setMonth(poolMonthDate.getMonth() + 1)))} className="p-1 hover:bg-slate-100 rounded text-slate-500">
+                                <ChevronRight size={20} />
+                            </button>
                         </div>
-                        <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
-                             <h4 className="text-xs font-bold text-blue-800 mb-1">Vault Instructions</h4>
-                             <p className="text-[10px] text-blue-600">Select a date range to instantly aggregate all financial collections. Bank Name and TXN IDs will be listed for cross-verification.</p>
+                        <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-400 mb-2">
+                            <div>SU</div><div>MO</div><div>TU</div><div>WE</div><div>TH</div><div>FR</div><div>SA</div>
                         </div>
+                        <div className="grid grid-cols-7 gap-1">
+                            {generateCalendarDays().map((day, idx) => {
+                                if (!day) return <div key={`empty-${idx}`} className="h-12 border border-transparent"></div>;
+                                
+                                const dateStr = day.toLocaleDateString('en-CA');
+                                const isStart = dateStr === poolStartDate;
+                                const isEnd = dateStr === poolEndDate;
+                                const isBetween = poolStartDate && poolEndDate && dateStr > poolStartDate && dateStr < poolEndDate;
+                                const isToday = dateStr === new Date().toLocaleDateString('en-CA');
+                                const modes = getPaymentModesForDate(dateStr);
+
+                                let bgClass = "border-slate-100 hover:border-slate-300 hover:bg-slate-50";
+                                let textClass = isToday ? "text-red-500" : "text-slate-600";
+
+                                if (isStart || isEnd) {
+                                    bgClass = "bg-blue-600 border-blue-700 shadow-md";
+                                    textClass = "text-white";
+                                } else if (isBetween) {
+                                    bgClass = "bg-blue-50 border-blue-200";
+                                    textClass = "text-blue-800";
+                                }
+
+                                return (
+                                    <button
+                                        key={dateStr}
+                                        onClick={() => handleDateSelect(dateStr)}
+                                        className={`h-12 border flex flex-col items-center pt-2 transition relative ${bgClass} ${isStart ? 'rounded-l-lg' : ''} ${isEnd ? 'rounded-r-lg' : ''} ${!isStart && !isEnd ? 'rounded' : ''}`}
+                                    >
+                                        <span className={`text-xs font-bold ${textClass}`}>{day.getDate()}</span>
+                                        
+                                        {/* Payment Mode Dots */}
+                                        <div className="flex gap-0.5 absolute bottom-1.5">
+                                            {modes.hasCash && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                                            {modes.hasOnline && <div className="w-1.5 h-1.5 rounded-full bg-blue-300"></div>}
+                                            {modes.hasCheque && <div className="w-1.5 h-1.5 rounded-full bg-purple-500"></div>}
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <p className="text-[10px] text-slate-500 text-center mt-4">
+                            Click a date to set the <span className="font-bold text-blue-600">Start</span>. Click again to set the <span className="font-bold text-blue-600">End</span>.
+                        </p>
                     </div>
 
                     {/* RIGHT: LEDGER BREAKDOWN */}
                     <div className="lg:col-span-8 bg-slate-50/50 p-6 flex flex-col">
                         <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-200">
                             <div>
-                                <h4 className="font-bold text-slate-800 text-lg">Ledger: {new Date(poolStartDate).toLocaleDateString()} to {new Date(poolEndDate).toLocaleDateString()}</h4>
+                                <h4 className="font-bold text-slate-800 text-lg">
+                                    Ledger: {new Date(poolStartDate).toLocaleDateString()} {poolEndDate && `to ${new Date(poolEndDate).toLocaleDateString()}`}
+                                </h4>
                                 <p className="text-xs text-slate-500 font-mono mt-0.5">Total Pool Value: <span className="font-bold text-slate-800">₹ {poolLedger.total.toLocaleString()}</span></p>
                             </div>
                         </div>
