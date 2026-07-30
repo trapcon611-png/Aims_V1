@@ -78,6 +78,10 @@ services:
       dockerfile: Dockerfile
     container_name: aims_whatsapp_service
     logging: *default-logging
+    # 👇 ADD THIS PORTS BLOCK 👇
+    ports:
+      - "2785:2785"
+    # 👆 --------------------- 👆
     command: npm run start:prod # ✨ ADDED: Ensures the server actually boots
     restart: unless-stopped
     networks:
