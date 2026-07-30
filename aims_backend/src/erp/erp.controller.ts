@@ -22,6 +22,13 @@ export class ErpController {
       return this.erpService.createBranch(dto);
   }
 
+  // ✨ NEW: Added the PATCH endpoint to handle phone number updates
+  @Patch('branches/:id')
+  @Roles('SUPER_ADMIN')
+  updateBranch(@Param('id') id: string, @Body() dto: any) {
+      return this.erpService.updateBranch(id, dto);
+  }
+
   @Delete('branches/:id')
   @Roles('SUPER_ADMIN')
   deleteBranch(@Param('id') id: string) {

@@ -273,6 +273,7 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                 ...res, amount: feeForm.amount, studentName: student.name, batch: student.batch, studentId: student.id,
                 displayId: student.studentId, date: paymentDate.toISOString(), feeBreakdown, branchName: studentBranch?.name || null,
                 branchAddress: studentBranch?.address || null, branchCity: studentBranch?.city || null,
+                branchPhone: studentBranch?.phone || null,
                 bankName: feeForm.bankName, transactionId: feeForm.transactionId, balanceAfter: (student.feeRemaining || 0) - feeForm.amount
             });
             setShowInvoice(true);
@@ -1054,7 +1055,8 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                                                             ...t,
                                                             branchName: studentBranch?.name || t.branchName,
                                                             branchAddress: studentBranch?.address || t.branchAddress,
-                                                            branchCity: studentBranch?.city || t.branchCity
+                                                            branchCity: studentBranch?.city || t.branchCity,
+                                                            branchPhone: studentBranch?.phone || t.branchPhone
                                                         });
                                                         setShowInvoice(true);
                                                     }}

@@ -376,6 +376,7 @@ model Branch {
   name      String   @unique
   address   String?
   city      String?
+  phone     String?  // ✨ NEW: Branch-specific phone number(s)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

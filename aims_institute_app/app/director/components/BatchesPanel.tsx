@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Layers, Loader2, Plus, Search, Edit2, Check, X, MapPin, Trash2 } from 'lucide-react';
+import { Layers, Loader2, Plus, Search, Edit2, Check, X, MapPin, Trash2, Phone } from 'lucide-react';
 import { directorApi } from '../services/directorApi';
 
 export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
@@ -13,13 +13,17 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
   const [activeTab, setActiveTab] = useState<'BATCHES' | 'BRANCHES'>('BATCHES');
   
   // Create Form States
-  const [newBranch, setNewBranch] = useState({ name: '', city: '', address: '' });
+  const [newBranch, setNewBranch] = useState({ name: '', city: '', address: '', phone: '' }); // ✨ Added phone
   const [newBatch, setNewBatch] = useState({ name: '', startYear: '', fee: 0, branchId: '' });
 
-  // Inline Edit State
+  // Inline Edit State (Batches)
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editFee, setEditFee] = useState(0);
-  const [editBranchId, setEditBranchId] = useState<string>(''); // ✨ NEW: State to hold the branch being edited
+  const [editBranchId, setEditBranchId] = useState<string>('');
+
+  // ✨ NEW: Inline Edit State (Branches)
+  const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
+  const [editBranchPhone, setEditBranchPhone] = useState<string>('');
 
   const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl transition-all duration-300";
   const inputStyle = "w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:ring-2 focus:ring-[#c1121f] outline-none transition";
@@ -45,7 +49,7 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
       e.preventDefault();
       try {
           await directorApi.createBranch(newBranch);
-          setNewBranch({ name: '', city: '', address: '' }); // Reset
+          setNewBranch({ name: '', city: '', address: '', phone: '' }); // Reset
           fetchData();
           setActiveTab('BRANCHES'); 
       } catch (e) { alert("Failed to create branch"); }
@@ -57,6 +61,16 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
           await directorApi.deleteBranch(id);
           fetchData();
       } catch (e) { alert("Failed to delete branch. It might still be in use."); }
+  };
+
+  // ✨ NEW: Save updated branch phone number
+  const saveBranchPhoneEdit = async (id: string) => {
+      try {
+          await directorApi.updateBranch(id, { phone: editBranchPhone });
+          setEditingBranchId(null);
+          fetchData();
+          onRefresh();
+      } catch (e) { alert("Failed to update branch phone number"); }
   };
 
   // --- BATCH HANDLERS ---
@@ -83,17 +97,16 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
   const startEdit = (b: any) => {
       setEditingId(b.id);
       setEditFee(b.fee);
-      setEditBranchId(b.branchId || ''); // ✨ Capture current branch when editing starts
+      setEditBranchId(b.branchId || '');
   };
 
   const saveEdit = async () => {
       if (!editingId) return;
       try {
-          // ✨ Send both the fee and the newly selected branch to the API
           await directorApi.updateBatch(editingId, { fee: editFee, branchId: editBranchId });
           setEditingId(null);
           fetchData();
-          onRefresh(); // Refresh parent to push branch changes globally
+          onRefresh();
       } catch (e) { alert("Update failed"); }
   };
 
@@ -110,7 +123,8 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
 
   const filteredBranches = branches.filter(br => 
       br.name.toLowerCase().includes(search.toLowerCase()) || 
-      (br.city && br.city.toLowerCase().includes(search.toLowerCase()))
+      (br.city && br.city.toLowerCase().includes(search.toLowerCase())) ||
+      (br.phone && br.phone.toLowerCase().includes(search.toLowerCase()))
   );
 
   return (
@@ -133,6 +147,15 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
                  <div>
                      <label className={labelStyle}>City</label>
                      <input className={inputStyle} placeholder="e.g. Pune" value={newBranch.city} onChange={(e) => setNewBranch({...newBranch, city: e.target.value})} />
+                 </div>
+                 <div className="col-span-2">
+                     <label className={labelStyle}>Branch Contact Number(s)</label>
+                     <input 
+                        className={inputStyle} 
+                        placeholder="e.g. +91 87889 40143, +91 87676 50590" 
+                        value={newBranch.phone} 
+                        onChange={(e) => setNewBranch({...newBranch, phone: e.target.value})} 
+                     />
                  </div>
                  <div className="col-span-2">
                      <label className={labelStyle}>Full Address (Prints on Fee Receipts)</label>
@@ -235,7 +258,6 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
                                           Year: {b.startYear}
                                       </span>
                                       
-                                      {/* ✨ NEW: Inline Branch Editing Dropdown */}
                                       {editingId === b.id ? (
                                           <select 
                                               className="text-[10px] font-bold text-blue-700 bg-white border border-[#c1121f] rounded px-1 py-0.5 outline-none"
@@ -269,7 +291,6 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
                                   ) : (
                                       <div className="flex items-center gap-2 justify-end">
                                           <span className="text-lg font-black text-green-600">₹{b.fee?.toLocaleString()}</span>
-                                          {/* Keep edit button visible */}
                                           <button onClick={() => startEdit(b)} className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition" title="Edit Batch">
                                               <Edit2 size={14}/>
                                           </button>
@@ -281,7 +302,6 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
                               <span>Students: <strong className="text-slate-600">{b.strength || '0'}</strong></span>
                           </div>
 
-                          {/* DELETE BATCH BUTTON */}
                           <button 
                               onClick={() => handleDeleteBatch(b.id)} 
                               className="absolute right-0 top-0 bottom-0 w-8 bg-red-50 border-l border-red-100 flex items-center justify-center text-red-300 hover:text-red-600 hover:bg-red-100 transition-all translate-x-full group-hover:translate-x-0"
@@ -301,13 +321,49 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
               ) : (
                   filteredBranches.map(br => (
                       <div key={br.id} className="bg-white p-4 rounded-xl border border-slate-200 hover:border-blue-300 transition flex justify-between items-start group">
-                          <div className="flex items-start gap-3">
+                          <div className="flex items-start gap-3 flex-1">
                               <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 mt-1">
                                   <MapPin size={18}/>
                               </div>
-                              <div>
+                              <div className="flex-1">
                                   <h4 className="font-bold text-slate-800 text-base">{br.name}</h4>
                                   <p className="text-xs text-slate-500 mt-0.5 font-medium">{br.city || 'Location not specified'}</p>
+                                  
+                                  {/* ✨ NEW: Phone Number Display & Inline Editing */}
+                                  <div className="mt-2 pt-2 border-t border-slate-100">
+                                      {editingBranchId === br.id ? (
+                                          <div className="flex items-center gap-2">
+                                              <input 
+                                                  type="text" 
+                                                  className="w-full p-1 text-xs border border-blue-500 rounded outline-none"
+                                                  placeholder="Enter phone numbers..."
+                                                  value={editBranchPhone}
+                                                  onChange={e => setEditBranchPhone(e.target.value)}
+                                                  autoFocus
+                                              />
+                                              <button onClick={() => saveBranchPhoneEdit(br.id)} className="p-1 bg-green-100 text-green-700 rounded hover:bg-green-200"><Check size={14}/></button>
+                                              <button onClick={() => setEditingBranchId(null)} className="p-1 bg-red-100 text-red-700 rounded hover:bg-red-200"><X size={14}/></button>
+                                          </div>
+                                      ) : (
+                                          <div className="flex items-center justify-between">
+                                              <span className="text-xs font-mono text-slate-600 flex items-center gap-1.5">
+                                                  <Phone size={12} className="text-blue-500" />
+                                                  {br.phone || 'No phone set'}
+                                              </span>
+                                              <button 
+                                                  onClick={() => {
+                                                      setEditingBranchId(br.id);
+                                                      setEditBranchPhone(br.phone || '');
+                                                  }}
+                                                  className="p-1 text-slate-400 hover:text-blue-600 rounded" 
+                                                  title="Edit Branch Phone"
+                                              >
+                                                  <Edit2 size={13}/>
+                                              </button>
+                                          </div>
+                                      )}
+                                  </div>
+
                                   {br.address && (
                                       <p className="text-[10px] text-slate-400 mt-1 max-w-xs">{br.address}</p>
                                   )}

@@ -92,8 +92,15 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
                 )}
                 
                 <div className="mt-2 font-mono">
-                  <p>+91 87889 40143</p>
-                  <p>+91 87676 50590</p>
+                  {/* ✨ NEW: Dynamically render branch phone if available */}
+                  {data.branchPhone ? (
+                      <p>+91 {data.branchPhone}</p>
+                  ) : (
+                      <>
+                        <p>+91 87889 40143</p>
+                        <p>+91 87676 50590</p>
+                      </>
+                  )}
                   <p className="text-blue-600">talentsupport@aimsinstitute.org.in</p>
                 </div>
                 {isGstEnabled && <p className="font-bold text-slate-800 mt-2">GSTIN: 27AABCU9603R1ZM</p>}

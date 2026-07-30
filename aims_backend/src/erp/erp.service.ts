@@ -66,7 +66,21 @@ export class ErpService {
           data: {
               name: data.name,
               city: data.city || null,
-              address: data.address || null
+              address: data.address || null,
+              phone: data.phone || null // ✨ NEW: Now saves the phone number to the DB
+          }
+      });
+  }
+
+  // ✨ NEW: Created function to handle updating branch details (like the phone number)
+  async updateBranch(id: string, data: any) {
+      return this.prisma.branch.update({
+          where: { id },
+          data: {
+              name: data.name !== undefined ? data.name : undefined,
+              city: data.city !== undefined ? data.city : undefined,
+              address: data.address !== undefined ? data.address : undefined,
+              phone: data.phone !== undefined ? data.phone : undefined
           }
       });
   }
