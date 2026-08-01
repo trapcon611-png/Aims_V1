@@ -46,8 +46,6 @@ export class WhatsappService {
 
   // --- 2. DYNAMIC AUTOMATION ENGINE (Runs every 60 seconds) ---
   
-  // --- 2. DYNAMIC AUTOMATION ENGINE (Runs every 60 seconds) ---
-  
   @Cron(CronExpression.EVERY_MINUTE)
   async dynamicFeeReminders() {
       const rules = await this.getAutomationRules();
@@ -120,12 +118,47 @@ export class WhatsappService {
       }
   }
 
-  // --- 3. CORE DISPATCHERS ---
-  
-  
-  // --- 3. CORE DISPATCHERS ---
+  // --- 3. SESSION MONITORING & QR (NEW) ---
 
-  // ✨ NEW HELPER: Dynamically fetches the active session ID from OpenWA
+  async getSessionStatus(fallbackSessionId: string = 'default') {
+      try {
+          const activeId = await this.getActiveSessionId() || fallbackSessionId;
+          const response = await fetch(`${this.openWaApiUrl}/sessions/${activeId}`, {
+              headers: { 'X-API-Key': process.env.OPENWA_API_KEY || '' }
+          });
+          
+          if (!response.ok) return { status: 'disconnected' };
+          
+          const data = await response.json();
+          // Normalize status response depending on the engine
+          return { status: data.status || data.state || 'disconnected', data };
+      } catch (err) {
+          this.logger.error('[WA-STATUS] Error fetching session status', err);
+          return { status: 'failed' };
+      }
+  }
+
+  async getSessionQr(fallbackSessionId: string = 'default') {
+      try {
+          const activeId = await this.getActiveSessionId() || fallbackSessionId;
+          const response = await fetch(`${this.openWaApiUrl}/sessions/${activeId}/qr`, {
+              headers: { 'X-API-Key': process.env.OPENWA_API_KEY || '' }
+          });
+          
+          if (!response.ok) return null;
+          
+          const data = await response.json();
+          // Return the base64 string from whichever format the engine returns
+          return data.qr || data.qrcode || data.data?.qr || null;
+      } catch (err) {
+          this.logger.error('[WA-QR] Error fetching session QR', err);
+          return null;
+      }
+  }
+
+  // --- 4. CORE DISPATCHERS ---
+
+  // ✨ HELPER: Dynamically fetches the active session ID from OpenWA
   private async getActiveSessionId(): Promise<string | null> {
       try {
           const res = await fetch(`${this.openWaApiUrl}/sessions`, {

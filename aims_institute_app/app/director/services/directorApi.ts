@@ -270,18 +270,17 @@ export const directorApi = {
       } 
   },
 
-  // ✨ NEW: Fetch Vault Lock Status
-    async getPoolStatus() {
-        try {
-            const res = await fetchWithAuth(`${API_URL}/erp/security/pool-status`, {
-                headers: { 'Authorization': `Bearer ${this.getToken()}` }
-            });
-            if (!res.ok) return { isUnlocked: false };
-            return await parseJsonSafely(res, { isUnlocked: false });
-        } catch (e) {
-            return { isUnlocked: false };
-        }
-    },
+  async getPoolStatus() {
+      try {
+          const res = await fetchWithAuth(`${API_URL}/erp/security/pool-status`, {
+              headers: { 'Authorization': `Bearer ${this.getToken()}` }
+          });
+          if (!res.ok) return { isUnlocked: false };
+          return await parseJsonSafely(res, { isUnlocked: false });
+      } catch (e) {
+          return { isUnlocked: false };
+      }
+  },
 
   async deleteFeeRecord(id: string) {
       const res = await fetchWithAuth(`${API_URL}/erp/fees/${id}`, {
@@ -315,7 +314,6 @@ export const directorApi = {
       }
   },
 
-  // ✨ NEW: Feature 3 - Request Admin Edit
   async requestFeeEdit(feeId: string) {
       const res = await fetchWithAuth(`${API_URL}/erp/fees/${feeId}/request-edit`, {
           method: 'PATCH',
@@ -328,16 +326,15 @@ export const directorApi = {
       return await parseJsonSafely(res);
   },
 
-  // ✨ NEW: Feature 3 Apply the Approved Edit
-    async updateFeeRecord(id: string, data: any) {
-        const res = await fetchWithAuth(`${API_URL}/erp/fees/${id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` },
-            body: JSON.stringify(data)
-        });
-        if (!res.ok) throw new Error('Failed to update fee record');
-        return await parseJsonSafely(res);
-    },
+  async updateFeeRecord(id: string, data: any) {
+      const res = await fetchWithAuth(`${API_URL}/erp/fees/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.getToken()}` },
+          body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('Failed to update fee record');
+      return await parseJsonSafely(res);
+  },
 
   // --- CRM ---
   async getEnquiries() { 
@@ -362,7 +359,6 @@ export const directorApi = {
       return await parseJsonSafely(res); 
   },
 
-  // ✨ RESTORED: 4-argument signature to perfectly match page.tsx
   async updateEnquiryStatus(id: string, status: string, followUpCount?: number, newRemark?: string) { 
       const res = await fetchWithAuth(`${API_URL}/erp/enquiries/${id}/status`, { 
           method: 'PATCH', 
@@ -523,5 +519,31 @@ export const directorApi = {
       
       if (!res.ok) throw new Error('Failed to update automation rules');
       return await parseJsonSafely(res);
+  },
+
+  // ✨ NEW: WhatsApp Status API
+  async getWhatsappStatus() {
+      try {
+          const res = await fetchWithAuth(`${API_URL}/whatsapp/status`, {
+              headers: { 'Authorization': `Bearer ${this.getToken()}` }
+          });
+          if (!res.ok) return null;
+          return await parseJsonSafely(res);
+      } catch (e) {
+          return null;
+      }
+  },
+
+  // ✨ NEW: WhatsApp QR API
+  async getWhatsappQr() {
+      try {
+          const res = await fetchWithAuth(`${API_URL}/whatsapp/qr`, {
+              headers: { 'Authorization': `Bearer ${this.getToken()}` }
+          });
+          if (!res.ok) return null;
+          return await parseJsonSafely(res);
+      } catch (e) {
+          return null;
+      }
   }
 };

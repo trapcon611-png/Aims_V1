@@ -20,12 +20,25 @@ export class WhatsappController {
         return await this.whatsappService.updateAutomationRules(body);
     }
 
-    // Trigger the manual manual broadcast
+    // Trigger the manual broadcast
     @Post('broadcast-reminders')
     async broadcastReminders(@Body() body: { targets: any[], customText: string | null }) {
         return await this.whatsappService.automatedFeeRemindersManual(
             body.targets, 
             body.customText || undefined
         );
+    }
+
+    // ✨ NEW: Expose WhatsApp Connection Status to the frontend
+    @Get('status')
+    async getStatus() {
+        return await this.whatsappService.getSessionStatus('default');
+    }
+
+    // ✨ NEW: Fetch the QR Code to display in the frontend
+    @Get('qr')
+    async getQr() {
+        const qrData = await this.whatsappService.getSessionQr('default');
+        return { qr: qrData };
     }
 }

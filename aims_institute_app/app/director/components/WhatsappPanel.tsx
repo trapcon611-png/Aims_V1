@@ -1,6 +1,10 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, Send, Clock, Users, Activity, CheckSquare, Square, Edit3, AlertCircle, CheckCircle, BookmarkPlus, Save, Filter, Settings, BellRing } from 'lucide-react';
+import { 
+    MessageSquare, Send, Clock, Users, Activity, CheckSquare, Square, 
+    Edit3, AlertCircle, CheckCircle, BookmarkPlus, Save, Filter, 
+    Settings, BellRing, Smartphone, QrCode, AlertTriangle, Loader2 
+} from 'lucide-react';
 import { directorApi } from '../services/directorApi';
 
 export default function WhatsappPanel({ students = [], dueInstallments = [] }: { students: any[], dueInstallments: any[] }) {
@@ -26,6 +30,10 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
     const [daysBefore, setDaysBefore] = useState(3);
     const [maxFollowUps, setMaxFollowUps] = useState(2);
 
+    // ✨ NEW: WhatsApp Connection State
+    const [waStatus, setWaStatus] = useState<string>('checking...');
+    const [qrCodeData, setQrCodeData] = useState<string | null>(null);
+
     const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl transition-all duration-300 flex flex-col";
 
     useEffect(() => {
@@ -36,7 +44,6 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
             setSelectedIds(new Set(dueInstallments.map(d => d.id || d.mobile)));
         }
 
-        // Fetch saved automation rules from the database
         const loadRules = async () => {
             try {
                 const rules = await directorApi.getWhatsappRules();
@@ -52,10 +59,41 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
         loadRules();
     }, [dueInstallments]);
 
+    // ✨ NEW: Polling Hook for WhatsApp Status & QR Code
+    useEffect(() => {
+        const checkWaConnection = async () => {
+            const statusData = await directorApi.getWhatsappStatus();
+            if (statusData) {
+                const state = String(statusData.status).toUpperCase();
+                setWaStatus(state);
+                
+                // If it needs a scan, fetch the QR
+                if (['UNPAIRED', 'QR_READY', 'QR'].includes(state)) {
+                    const qrRes = await directorApi.getWhatsappQr();
+                    if (qrRes && qrRes.qr) {
+                        setQrCodeData(qrRes.qr);
+                    }
+                }
+            } else {
+                setWaStatus('DISCONNECTED');
+            }
+        };
+
+        checkWaConnection();
+
+        // Poll every 10 seconds if it's not fully connected
+        const interval = setInterval(() => {
+            if (waStatus !== 'READY' && waStatus !== 'CONNECTED') {
+                checkWaConnection();
+            }
+        }, 10000);
+
+        return () => clearInterval(interval);
+    }, [waStatus]);
+
     // --- 1. DERIVED DATA (DEPENDENT DROPDOWNS) ---
     const uniqueBranches = Array.from(new Set(students.map(s => s.branch?.name || s.branch).filter(Boolean)));
     
-    // Only extract batches that belong to the currently selected branch
     const availableStudentsForBatches = branchFilter === "ALL" 
         ? students 
         : students.filter(s => (s.branch?.name || s.branch) === branchFilter);
@@ -88,12 +126,12 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
     const handleFilterChange = (type: 'branch' | 'batch', value: string) => {
         if (type === 'branch') {
             setBranchFilter(value);
-            setBatchFilter("ALL"); // Auto-reset batch when branch changes!
+            setBatchFilter("ALL"); 
         }
         if (type === 'batch') {
             setBatchFilter(value);
         }
-        setSelectedIds(new Set()); // Clear selections to prevent accidental wrong-batch sends
+        setSelectedIds(new Set()); 
     };
 
     const saveTemplate = () => {
@@ -135,6 +173,12 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
 
     const handleDispatch = async (targetsToSend: any[]) => {
         if (targetsToSend.length === 0) return;
+        
+        // Prevent sending if WA is disconnected
+        if (waStatus !== 'READY' && waStatus !== 'CONNECTED') {
+            return alert("Cannot broadcast: WhatsApp is currently disconnected or not scanned.");
+        }
+
         const confirmMsg = targetsToSend.length === 1 
             ? `Send message to ${targetsToSend[0].name || targetsToSend[0].fullName}?` 
             : `Broadcast to ${targetsToSend.length} selected recipients?`;
@@ -157,7 +201,6 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
 
             if (formattedTargets.length === 0) throw new Error("No valid mobile numbers found.");
 
-            // PRE-LOG: Tell the terminal we are working on it so it doesn't look stuck
             formattedTargets.forEach(t => addLog(t.name, 'Broadcasting...'));
 
             const payload = {
@@ -165,10 +208,8 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
                 customText: customMessage.trim() !== "" ? customMessage : null
             };
 
-            // This waits for the backend (and stealth mode) to finish
-            const response = await directorApi.broadcastWhatsappReminders(payload);
+            await directorApi.broadcastWhatsappReminders(payload);
             
-            // POST-LOG: Tell the UI it was a massive success!
             formattedTargets.forEach(t => addLog(t.name, 'Delivered successfully!'));
             
             if (targetsToSend.length > 1) {
@@ -185,6 +226,11 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
     };
 
     const selectedTargets = filteredList.filter(item => selectedIds.has(item.id || item.mobile));
+
+    // WhatsApp Status Logic for the UI
+    const isWaReady = ['CONNECTED', 'READY'].includes(waStatus);
+    const isWaScanning = ['UNPAIRED', 'QR_READY', 'QR'].includes(waStatus) || (qrCodeData && !isWaReady);
+    const isWaDisconnected = !isWaReady && !isWaScanning && waStatus !== 'checking...';
 
     return (
         <div className="space-y-6 max-w-7xl mx-auto py-6 px-4">
@@ -203,7 +249,7 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
                     </div>
                     <button 
                         onClick={() => handleDispatch(selectedTargets)}
-                        disabled={selectedIds.size === 0 || isDispatching}
+                        disabled={selectedIds.size === 0 || isDispatching || (!isWaReady)}
                         className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 font-bold py-3 px-6 rounded-xl shadow-lg shadow-blue-900/50 transition-all active:scale-95 flex items-center gap-2"
                     >
                         {isDispatching ? <Clock className="animate-spin"/> : <Send size={18}/>}
@@ -288,15 +334,12 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
                     ) : (
                         // --- TARGET SELECTION VIEW ---
                         <>
-                            {/* NEW BULLETPROOF FILTER LAYOUT */}
                             <div className="p-4 border-b border-slate-200 bg-slate-100 rounded-t-xl flex flex-col md:flex-row justify-between md:items-center gap-4">
                                 <div className="flex items-center gap-2 font-black text-slate-800 shrink-0">
                                     <Users size={18} className="text-blue-600"/> Target Audience
                                 </div>
                                 
-                                {/* Hard-constrained flex containers */}
                                 <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-                                    
                                     {/* Branch Filter */}
                                     <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-2 shadow-inner border border-slate-700 w-full sm:w-[180px] shrink-0">
                                         <span className="text-xs font-bold text-slate-400 uppercase tracking-wide shrink-0">Branch:</span>
@@ -306,7 +349,6 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
                                                 onChange={(e) => handleFilterChange('branch', e.target.value)}
                                                 className="bg-transparent text-white font-bold w-full text-sm outline-none cursor-pointer truncate"
                                             >
-                                                {/* Notice the explicit text-slate-800 and bg-white added to every option */}
                                                 <option value="ALL" className="text-slate-800 bg-white font-medium">All Branches</option>
                                                 {uniqueBranches.length > 0 ? (
                                                     uniqueBranches.map((b, i) => <option key={`branch-${i}`} value={b as string} className="text-slate-800 bg-white font-medium">{b as string}</option>)
@@ -339,7 +381,6 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
                                 </div>
                             </div>
                             
-                            {/* List Header with Select All */}
                             <div className="flex justify-between items-center px-4 py-3 bg-white border-b border-slate-100 shadow-sm z-10 sticky top-0">
                                 <span className="text-xs font-black text-slate-500 uppercase tracking-wider bg-slate-100 px-2 py-1 rounded">{filteredList.length} Contacts Found</span>
                                 <button onClick={toggleAll} className="text-sm text-blue-700 hover:text-blue-900 font-bold flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 px-4 py-1.5 rounded-lg transition-colors border border-blue-200">
@@ -390,9 +431,53 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
                     )}
                 </div>
 
-                {/* RIGHT COLUMN: High Contrast Composer & Logs */}
+                {/* RIGHT COLUMN: Connection, Composer & Logs */}
                 <div className="space-y-6 flex flex-col h-full">
                     
+                    {/* ✨ NEW: WHATSAPP CONNECTION STATUS CARD */}
+                    <div className={`${glassPanel} p-5 shrink-0 bg-white`}>
+                        <h3 className="font-black text-slate-800 mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
+                            <Smartphone size={16} className="text-emerald-600"/> API Connection
+                        </h3>
+                        
+                        {isWaReady && (
+                            <div className="text-center p-4 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200">
+                                <CheckCircle size={32} className="mx-auto mb-2" />
+                                <span className="font-bold">Connected & Ready</span>
+                                <p className="text-xs mt-1 opacity-80">System is online and transmitting.</p>
+                            </div>
+                        )}
+
+                        {isWaScanning && (
+                            <div className="text-center">
+                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Scan QR to Link WhatsApp</p>
+                                <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-inner inline-block">
+                                    {qrCodeData ? (
+                                        <img src={qrCodeData} alt="WhatsApp QR Code" className="w-40 h-40 object-contain" />
+                                    ) : (
+                                        <div className="w-40 h-40 flex items-center justify-center text-slate-400">
+                                            <Loader2 className="animate-spin" size={24} />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {waStatus === 'checking...' && (
+                            <div className="flex items-center justify-center gap-2 text-slate-500 p-4">
+                                <Loader2 className="animate-spin" size={16}/> Checking OpenWA API...
+                            </div>
+                        )}
+
+                        {isWaDisconnected && (
+                            <div className="text-center p-4 bg-red-50 text-red-700 rounded-lg border border-red-200">
+                                <AlertTriangle size={32} className="mx-auto mb-2" />
+                                <span className="font-bold">Disconnected</span>
+                                <p className="text-xs mt-1 opacity-80">API is offline or starting up.</p>
+                            </div>
+                        )}
+                    </div>
+
                     {/* Darkened Message Composer */}
                     <div className={`${glassPanel} p-5 shrink-0 bg-white`}>
                         <h3 className="font-black text-slate-800 mb-2 flex items-center gap-2">
@@ -400,21 +485,19 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
                         </h3>
                         {activeTab === 'dues' && <p className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded mb-3">Leave blank to use the standard system fee template.</p>}
                         
-                        {/* HIGH CONTRAST TEXT AREA */}
                         <textarea 
                             value={customMessage}
                             onChange={(e) => setCustomMessage(e.target.value)}
-                            placeholder="Type your message here... (Highly visible)"
-                            className="w-full h-40 p-4 bg-slate-100 border-2 border-slate-300 rounded-xl text-slate-900 font-medium placeholder:text-slate-400 focus:bg-white focus:border-blue-500 outline-none resize-none custom-scrollbar mb-4 transition-colors"
+                            placeholder="Type your message here..."
+                            className="w-full h-32 p-4 bg-slate-100 border-2 border-slate-300 rounded-xl text-slate-900 font-medium placeholder:text-slate-400 focus:bg-white focus:border-blue-500 outline-none resize-none custom-scrollbar mb-4 transition-colors"
                         />
                         
-                        {/* High Contrast Template Saver */}
                         <div className="space-y-2">
                             <label className="text-xs font-black text-slate-500 uppercase tracking-wide">Save as Template</label>
                             <div className="flex gap-2">
                                 <input 
                                     type="text" 
-                                    placeholder="e.g., Diwali Holiday Notice" 
+                                    placeholder="e.g., Holiday Notice" 
                                     value={newTemplateTitle}
                                     onChange={(e) => setNewTemplateTitle(e.target.value)}
                                     className="grow bg-slate-100 border-2 border-slate-300 text-slate-900 font-bold rounded-lg px-3 py-2 text-sm focus:bg-white focus:border-blue-500 outline-none transition-colors"
