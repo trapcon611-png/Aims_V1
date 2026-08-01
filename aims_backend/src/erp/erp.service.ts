@@ -300,6 +300,7 @@ export class ErpService {
   }
 
   // ✨ UPDATED: Include Deep Branch details for Fee Receipt Address
+  // ✨ FIXED: Added editStatus, bankName, and feeBreakdown to the payload
   async getAllFeeRecords() {
     const records = await this.prisma.feeRecord.findMany({
       include: {
@@ -327,10 +328,17 @@ export class ErpService {
       remarks: r.remarks,
       paymentMode: r.paymentMode,
       transactionId: r.transactionId,
+      
+      // ✨ THESE WERE MISSING! Added them so the frontend can use them:
+      editStatus: r.editStatus, 
+      bankName: r.bankName,
+      feeBreakdown: r.feeBreakdown,
+      
       batch: r.student.batch?.name || 'Unassigned',
       branchName: r.student.batch?.branch?.name || null,
       branchAddress: r.student.batch?.branch?.address || null,
-      branchCity: r.student.batch?.branch?.city || null
+      branchCity: r.student.batch?.branch?.city || null,
+      branchPhone: r.student.batch?.branch?.phone || null 
     }));
   }
 

@@ -92,9 +92,11 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
                 )}
                 
                 <div className="mt-2 font-mono">
-                  {/* ✨ NEW: Dynamically render branch phone if available */}
+                  {/* ✨ UPDATED: Splits comma-separated numbers into multiple lines */}
                   {data.branchPhone ? (
-                      <p>+91 {data.branchPhone}</p>
+                      data.branchPhone.split(',').map((num: string, idx: number) => (
+                          <p key={idx}>+91 {num.trim()}</p>
+                      ))
                   ) : (
                       <>
                         <p>+91 87889 40143</p>

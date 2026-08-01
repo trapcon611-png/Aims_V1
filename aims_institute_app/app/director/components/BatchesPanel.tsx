@@ -13,7 +13,7 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
   const [activeTab, setActiveTab] = useState<'BATCHES' | 'BRANCHES'>('BATCHES');
   
   // Create Form States
-  const [newBranch, setNewBranch] = useState({ name: '', city: '', address: '', phone: '' }); // ✨ Added phone
+  const [newBranch, setNewBranch] = useState({ name: '', city: '', address: '', phone: '' }); 
   const [newBatch, setNewBatch] = useState({ name: '', startYear: '', fee: 0, branchId: '' });
 
   // Inline Edit State (Batches)
@@ -21,7 +21,7 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
   const [editFee, setEditFee] = useState(0);
   const [editBranchId, setEditBranchId] = useState<string>('');
 
-  // ✨ NEW: Inline Edit State (Branches)
+  // Inline Edit State (Branches)
   const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
   const [editBranchPhone, setEditBranchPhone] = useState<string>('');
 
@@ -63,7 +63,7 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
       } catch (e) { alert("Failed to delete branch. It might still be in use."); }
   };
 
-  // ✨ NEW: Save updated branch phone number
+  // Save updated branch phone number
   const saveBranchPhoneEdit = async (id: string) => {
       try {
           await directorApi.updateBranch(id, { phone: editBranchPhone });
@@ -149,12 +149,12 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
                      <input className={inputStyle} placeholder="e.g. Pune" value={newBranch.city} onChange={(e) => setNewBranch({...newBranch, city: e.target.value})} />
                  </div>
                  <div className="col-span-2">
-                     <label className={labelStyle}>Branch Contact Number(s)</label>
+                     <label className={labelStyle}>Contact Numbers (Separate with commas)</label>
                      <input 
-                        className={inputStyle} 
-                        placeholder="e.g. +91 87889 40143, +91 87676 50590" 
-                        value={newBranch.phone} 
-                        onChange={(e) => setNewBranch({...newBranch, phone: e.target.value})} 
+                         className={inputStyle} 
+                         placeholder="e.g. 9876543210, 8765432109" 
+                         value={newBranch.phone} 
+                         onChange={(e) => setNewBranch({...newBranch, phone: e.target.value})} 
                      />
                  </div>
                  <div className="col-span-2">
@@ -302,6 +302,7 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
                               <span>Students: <strong className="text-slate-600">{b.strength || '0'}</strong></span>
                           </div>
 
+                          {/* DELETE BATCH BUTTON */}
                           <button 
                               onClick={() => handleDeleteBatch(b.id)} 
                               className="absolute right-0 top-0 bottom-0 w-8 bg-red-50 border-l border-red-100 flex items-center justify-center text-red-300 hover:text-red-600 hover:bg-red-100 transition-all translate-x-full group-hover:translate-x-0"
@@ -320,7 +321,7 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
                   <div className="text-center text-slate-400 py-10 italic">No branches found.</div>
               ) : (
                   filteredBranches.map(br => (
-                      <div key={br.id} className="bg-white p-4 rounded-xl border border-slate-200 hover:border-blue-300 transition flex justify-between items-start group">
+                      <div key={br.id} className="bg-white p-4 rounded-xl border border-slate-200 hover:border-blue-300 transition flex justify-between items-start group relative">
                           <div className="flex items-start gap-3 flex-1">
                               <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 mt-1">
                                   <MapPin size={18}/>
@@ -329,14 +330,14 @@ export default function BatchesPanel({ onRefresh }: { onRefresh: () => void }) {
                                   <h4 className="font-bold text-slate-800 text-base">{br.name}</h4>
                                   <p className="text-xs text-slate-500 mt-0.5 font-medium">{br.city || 'Location not specified'}</p>
                                   
-                                  {/* ✨ NEW: Phone Number Display & Inline Editing */}
+                                  {/* INLINE PHONE EDITOR */}
                                   <div className="mt-2 pt-2 border-t border-slate-100">
                                       {editingBranchId === br.id ? (
                                           <div className="flex items-center gap-2">
                                               <input 
                                                   type="text" 
-                                                  className="w-full p-1 text-xs border border-blue-500 rounded outline-none"
-                                                  placeholder="Enter phone numbers..."
+                                                  className="w-48 p-1 text-xs font-mono border border-blue-400 rounded outline-none"
+                                                  placeholder="Num 1, Num 2..."
                                                   value={editBranchPhone}
                                                   onChange={e => setEditBranchPhone(e.target.value)}
                                                   autoFocus
