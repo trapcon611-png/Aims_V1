@@ -38,7 +38,9 @@ services:
       - ./aims_backend/.env
     environment:
       - DATABASE_URL=postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public
-      - OPENWA_API_URL=http://openwa:2785/api # ✨ FIXED: OpenWA runs on 2785
+      - OPENWA_API_URL=http://openwa:2785/api
+      # ✨ ADDED: The exact key from OpenWA so the backend can authenticate
+      - OPENWA_API_KEY=owa_k1_4cd5d2eb99308da3971f9f4730750a0a2b67aa4530c9c2e4168e7c39bf3cc608 
     depends_on:
       - postgres
     networks:
@@ -57,7 +59,7 @@ services:
         - NEXT_PUBLIC_API_URL=http://76.13.247.225:3001
     container_name: aims_frontend
     logging: *default-logging
-    # ✨ FIXED: Bound to 127.0.0.1 so it cannot bypass Nginx
+    # Bound to 127.0.0.1 so it cannot bypass Nginx
     ports:
       - "127.0.0.1:3000:3000"
     environment: 
@@ -71,18 +73,16 @@ services:
       - aims_network
     restart: unless-stopped
 
-  # ✨ 4. NEW: OpenWA Service
+  # 4. OpenWA Service
   openwa:
     build:
       context: ./openwa/OpenWA-main/OpenWA-main
       dockerfile: Dockerfile
     container_name: aims_whatsapp_service
     logging: *default-logging
-    # 👇 ADD THIS PORTS BLOCK 👇
     ports:
       - "2785:2785"
-    # 👆 --------------------- 👆
-    command: npm run start:prod # ✨ ADDED: Ensures the server actually boots
+    command: npm run start:prod
     restart: unless-stopped
     networks:
       - aims_network
@@ -92,9 +92,10 @@ services:
       postgres:
         condition: service_started
     environment:
-      - API_KEY=${OPENWA_API_KEY} 
-      - DATABASE_URL=postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public # ✨ ADDED: DB connection
-      - ENGINE_TYPE=baileys # ✨ ADDED: Required WhatsApp engine
+      # ✨ FIXED: Hardcoded the exact API key OpenWA generated
+      - API_KEY=owa_k1_4cd5d2eb99308da3971f9f4730750a0a2b67aa4530c9c2e4168e7c39bf3cc608
+      - DATABASE_URL=postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public
+      - ENGINE_TYPE=baileys
 
 networks:
   aims_network:

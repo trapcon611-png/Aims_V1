@@ -120,17 +120,38 @@ export class WhatsappService {
 
   // --- 3. SESSION MONITORING & QR (NEW) ---
 
-  async getSessionStatus(fallbackSessionId: string = 'default') {
+  async getSessionStatus(fallbackSessionId: string = 'aims-finance') {
       try {
           const activeId = await this.getActiveSessionId() || fallbackSessionId;
-          const response = await fetch(`${this.openWaApiUrl}/sessions/${activeId}`, {
+          
+          let response = await fetch(`${this.openWaApiUrl}/sessions/${activeId}`, {
               headers: { 'X-API-Key': process.env.OPENWA_API_KEY || '' }
           });
           
-          if (!response.ok) return { status: 'disconnected' };
+          // If the session got deleted, safely recreate it
+          if (response.status === 404) {
+              this.logger.log(`[WA-STATUS] Session '${activeId}' not found. Auto-creating...`);
+              await fetch(`${this.openWaApiUrl}/sessions`, {
+                  method: 'POST',
+                  headers: { 
+                      'Content-Type': 'application/json',
+                      'X-API-Key': process.env.OPENWA_API_KEY || '' 
+                  },
+                  body: JSON.stringify({ sessionId: activeId })
+              });
+              
+              await this.sleep(2000); // Give OpenWA a moment to boot the engine
+              response = await fetch(`${this.openWaApiUrl}/sessions/${activeId}`, {
+                  headers: { 'X-API-Key': process.env.OPENWA_API_KEY || '' }
+              });
+          }
+
+          if (!response.ok) {
+              this.logger.warn(`[WA-STATUS] OpenWA returned ${response.status}. Check API Key!`);
+              return { status: 'disconnected' };
+          }
           
           const data = await response.json();
-          // Normalize status response depending on the engine
           return { status: data.status || data.state || 'disconnected', data };
       } catch (err) {
           this.logger.error('[WA-STATUS] Error fetching session status', err);
@@ -138,7 +159,7 @@ export class WhatsappService {
       }
   }
 
-  async getSessionQr(fallbackSessionId: string = 'default') {
+  async getSessionQr(fallbackSessionId: string = 'aims-finance') {
       try {
           const activeId = await this.getActiveSessionId() || fallbackSessionId;
           const response = await fetch(`${this.openWaApiUrl}/sessions/${activeId}/qr`, {
@@ -148,7 +169,6 @@ export class WhatsappService {
           if (!response.ok) return null;
           
           const data = await response.json();
-          // Return the base64 string from whichever format the engine returns
           return data.qr || data.qrcode || data.data?.qr || null;
       } catch (err) {
           this.logger.error('[WA-QR] Error fetching session QR', err);

@@ -32,13 +32,13 @@ export class WhatsappController {
     // ✨ NEW: Expose WhatsApp Connection Status to the frontend
     @Get('status')
     async getStatus() {
-        return await this.whatsappService.getSessionStatus('default');
+        return await this.whatsappService.getSessionStatus('aims-finance');
     }
 
     // ✨ NEW: Fetch the QR Code to display in the frontend
     @Get('qr')
     async getQr() {
-        const qrData = await this.whatsappService.getSessionQr('default');
+        const qrData = await this.whatsappService.getSessionQr('aims-finance');
         return { qr: qrData };
     }
 }
