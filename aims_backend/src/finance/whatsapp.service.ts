@@ -8,7 +8,7 @@ export class WhatsappService {
   
   // Connects to your OpenWA microservice
   // Overriding any wrong .env variable to force the correct Docker network port
-  private readonly openWaApiUrl = 'http://aims_whatsapp_service:2785/api';
+ private readonly openWaApiUrl = process.env.OPENWA_API_URL || 'http://openwa:2785/api';
 
   constructor(private prisma: PrismaService) {}
   
