@@ -41,10 +41,10 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
   if (hasValidBreakdown) {
       displayBreakdown = { tuition, dress, books, extraAmount, extraName };
   } else if (baseAmount > 0) {
-      // ✨ AUTO-FALLBACK: Forces exactly 80/10/10 split if the boxes were left blank!
-      displayBreakdown.tuition = Math.round(baseAmount * 0.8);
-      displayBreakdown.books = Math.round(baseAmount * 0.1);
-      displayBreakdown.dress = baseAmount - displayBreakdown.tuition - displayBreakdown.books; 
+      // ✨ FIXED: Old receipts without a breakdown default 100% to Tuition
+      displayBreakdown.tuition = baseAmount;
+      displayBreakdown.books = 0;
+      displayBreakdown.dress = 0; 
   }
 
   return (

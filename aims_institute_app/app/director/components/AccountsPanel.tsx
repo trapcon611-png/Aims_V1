@@ -214,11 +214,16 @@ export default function AccountsPanel({ students }: { students: any[] }) {
     };
 
     const handleAmountChange = (val: number) => {
-        const tuition = Math.round(val * 0.8);
-        const books = Math.round(val * 0.1);
-        const dress = val - tuition - books;
+        // ✨ FIXED: Assigns 100% to tuition by default instead of forcefully splitting
         setFeeForm(prev => ({
-            ...prev, amount: val, tuitionFee: tuition, includeTuition: true, booksFee: books, includeBooks: true, dressFee: dress, includeDress: true
+            ...prev, 
+            amount: val, 
+            tuitionFee: val, 
+            includeTuition: true, 
+            booksFee: 0, 
+            includeBooks: false, 
+            dressFee: 0, 
+            includeDress: false
         }));
     };
 
