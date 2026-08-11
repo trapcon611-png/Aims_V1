@@ -305,6 +305,7 @@ export class ErpService {
         student: {
           include: {
             user: true,
+            feesPaid: true, // ✨ FIXED: Include all their payments to calculate the balance
             batch: {
                 include: {
                     branch: true
@@ -316,27 +317,38 @@ export class ErpService {
       orderBy: { date: 'desc' }
     });
 
-    return records.map(r => ({
-      id: r.id,
-      studentId: r.studentId, 
-      displayId: r.student.user.username, 
-      studentName: r.student.fullName,
-      amount: r.amount,
-      date: r.date,
-      remarks: r.remarks,
-      paymentMode: r.paymentMode,
-      transactionId: r.transactionId,
-      
-      editStatus: r.editStatus, 
-      bankName: r.bankName,
-      feeBreakdown: r.feeBreakdown,
-      
-      batch: r.student.batch?.name || 'Unassigned',
-      branchName: r.student.batch?.branch?.name || null,
-      branchAddress: r.student.batch?.branch?.address || null,
-      branchCity: r.student.batch?.branch?.city || null,
-      branchPhone: r.student.batch?.branch?.phone || null 
-    }));
+    return records.map(r => {
+      // ✨ FIXED: Calculate their exact live remaining balance dynamically
+      const s = r.student;
+      const totalPaid = s.feesPaid ? s.feesPaid.reduce((sum: number, f: any) => sum + f.amount, 0) : 0;
+      const effectiveTotal = Math.max(0, (s.feeAgreed || 0) - (s.waiveOff || 0) + (s.latePenalty || 0));
+      const currentBalance = Math.max(0, effectiveTotal - totalPaid);
+
+      return {
+        id: r.id,
+        studentId: r.studentId, 
+        displayId: r.student.user.username, 
+        studentName: r.student.fullName,
+        amount: r.amount,
+        date: r.date,
+        remarks: r.remarks,
+        paymentMode: r.paymentMode,
+        transactionId: r.transactionId,
+        
+        editStatus: r.editStatus, 
+        bankName: r.bankName,
+        feeBreakdown: r.feeBreakdown,
+        
+        // ✨ Passes the exact balance to the reprint button
+        balanceAfter: currentBalance, 
+        
+        batch: r.student.batch?.name || 'Unassigned',
+        branchName: r.student.batch?.branch?.name || null,
+        branchAddress: r.student.batch?.branch?.address || null,
+        branchCity: r.student.batch?.branch?.city || null,
+        branchPhone: r.student.batch?.branch?.phone || null 
+      };
+    });
   }
 
   async requestFeeEdit(feeId: string, actor: string) {
