@@ -13,8 +13,8 @@ export default function AccountsPanel({ students }: { students: any[] }) {
     //--- STATE ---
     const [feeForm, setFeeForm] = useState({
         studentId: '', amount: 0, remarks: '', paymentMode: 'CASH', transactionId: '', bankName: '', withGst: false,
-        date: new Date().toISOString().split('T')[0], tuitionFee: 0, includeTuition: true, dressFee: 0, includeDress: true,
-        booksFee: 0, includeBooks: true, extraFeeName: '', extraFeeAmount: 0
+        date: new Date().toISOString().split('T')[0], tuitionFee: 0, includeTuition: true, dressFee: 0, includeDress: false,
+        booksFee: 0, includeBooks: false, extraFeeName: '', extraFeeAmount: 0
     });
     
     const [newExpense, setNewExpense] = useState({ title: '', amount: 0, category: 'General' });
@@ -38,7 +38,6 @@ export default function AccountsPanel({ students }: { students: any[] }) {
     
     const [editModalData, setEditModalData] = useState<any>(null);
 
-    // ✨ FEATURE 4: API-CONNECTED FINANCIAL POOL STATE
     const [isPoolUnlocked, setIsPoolUnlocked] = useState(false);
     const [isUnlocking, setIsUnlocking] = useState(false);
     
@@ -73,12 +72,10 @@ export default function AccountsPanel({ students }: { students: any[] }) {
 
     useEffect(() => {
         refreshData();
-        // Polling: Check for status changes every 10 seconds
         const interval = setInterval(() => { refreshData(); }, 10000);
         return () => clearInterval(interval);
     }, []);
 
-    // ✨ POLLING: Check the Security Vault Status every 5 seconds
     useEffect(() => {
         const checkVaultStatus = async () => {
             try {
@@ -124,9 +121,8 @@ export default function AccountsPanel({ students }: { students: any[] }) {
         return { collected: todaysFees, spent: todaysExpenses, net: todaysFees - todaysExpenses };
     }, [feeHistory, expenses]);
 
-    // ✨ FEATURE 4: DATE RANGE FINANCIAL POOL LOGIC
     const poolLedger = useMemo(() => {
-        const activeEndDate = poolEndDate || poolStartDate; // Fallback to start if end isn't picked yet
+        const activeEndDate = poolEndDate || poolStartDate; 
         const txnsInRange = feeHistory.filter(f => {
             const d = new Date(f.date).toLocaleDateString('en-CA');
             return d >= poolStartDate && d <= activeEndDate;
@@ -164,16 +160,12 @@ export default function AccountsPanel({ students }: { students: any[] }) {
         return days;
     };
 
-    // ✨ INTERACTIVE RANGE CALENDAR CLICK LOGIC
     const handleDateSelect = (dateStr: string) => {
         if (!poolStartDate || (poolStartDate && poolEndDate)) {
-            // Fresh selection start
             setPoolStartDate(dateStr);
             setPoolEndDate('');
         } else {
-            // Complete the range
             if (dateStr < poolStartDate) {
-                // If they clicked a date BEFORE the start date, make it the new start
                 setPoolStartDate(dateStr);
             } else {
                 setPoolEndDate(dateStr);
@@ -214,7 +206,6 @@ export default function AccountsPanel({ students }: { students: any[] }) {
     };
 
     const handleAmountChange = (val: number) => {
-        // ✨ FIXED: Assigns 100% to tuition by default instead of forcefully splitting
         setFeeForm(prev => ({
             ...prev, 
             amount: val, 
@@ -264,12 +255,19 @@ export default function AccountsPanel({ students }: { students: any[] }) {
             let finalExtra = Number(feeForm.extraFeeAmount) || 0;
 
             if (finalTuition === 0 && finalDress === 0 && finalBooks === 0 && feeForm.amount > 0) {
-                finalTuition = Math.round(feeForm.amount * 0.8);
-                finalBooks = Math.round(feeForm.amount * 0.1);
-                finalDress = feeForm.amount - finalTuition - finalBooks;
+                finalTuition = feeForm.amount;
             }
 
-            const feeBreakdown = { tuition: finalTuition, dress: finalDress, books: finalBooks, extraName: feeForm.extraFeeName || '', extraAmount: finalExtra };
+            // ✨ FIXED: Added withGst inside feeBreakdown so it's permanently linked to the receipt
+            const feeBreakdown = { 
+                tuition: finalTuition, 
+                dress: finalDress, 
+                books: finalBooks, 
+                extraName: feeForm.extraFeeName || '', 
+                extraAmount: finalExtra,
+                withGst: feeForm.withGst
+            };
+            
             const res = await directorApi.collectFee({ ...feeForm, date: paymentDate.toISOString(), feeBreakdown });
             const studentBatch = batches.find(b => b.name === student.batch);
             const studentBranch = branches.find(br => br.id === studentBatch?.branchId);
@@ -279,15 +277,16 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                 displayId: student.studentId, date: paymentDate.toISOString(), feeBreakdown, branchName: studentBranch?.name || null,
                 branchAddress: studentBranch?.address || null, branchCity: studentBranch?.city || null,
                 branchPhone: studentBranch?.phone || null,
-                bankName: feeForm.bankName, transactionId: feeForm.transactionId, balanceAfter: (student.feeRemaining || 0) - feeForm.amount
+                bankName: feeForm.bankName, transactionId: feeForm.transactionId, balanceAfter: (student.feeRemaining || 0) - feeForm.amount,
+                withGst: feeForm.withGst // Explicitly passed for instant generation
             });
             setShowInvoice(true);
             refreshData();
 
             setFeeForm({
                 studentId: '', amount: 0, remarks: '', paymentMode: 'CASH', transactionId: '', bankName: '', withGst: false,
-                date: new Date().toISOString().split('T')[0], tuitionFee: 0, includeTuition: true, dressFee: 0, includeDress: true,
-                booksFee: 0, includeBooks: true, extraFeeName: '', extraFeeAmount: 0
+                date: new Date().toISOString().split('T')[0], tuitionFee: 0, includeTuition: true, dressFee: 0, includeDress: false,
+                booksFee: 0, includeBooks: false, extraFeeName: '', extraFeeAmount: 0
             });
             setStudentSearchQuery('');
         } catch (e) { alert("Failed to record fee"); }
@@ -312,7 +311,6 @@ export default function AccountsPanel({ students }: { students: any[] }) {
         } catch (e) { alert("Failed to delete expense."); }
     };
 
-    // ✨ FEATURE 3: REQUEST EDIT HANDLER
     const handleRequestEdit = async (feeId: string) => {
         if (!window.confirm("Request edit access for this receipt? This will alert the Security Panel.")) return;
         try {
@@ -322,11 +320,9 @@ export default function AccountsPanel({ students }: { students: any[] }) {
         } catch (e) { alert("Failed to send edit request. Check backend connection."); }
     };
 
-    // ✨ FEATURE 4: VAULT UNLOCK REAL API REQUEST
     const requestVaultUnlock = async () => {
         setIsUnlocking(true);
         try {
-            // We use createExpense here as a quick logging hack to alert the Director that an unlock is requested
             await directorApi.createExpense({ title: "VAULT ACCESS REQUESTED", amount: 0, category: "Security" });
             alert("Access request logged. Please wait for the Security Director to unlock the pool.");
         } catch (e) {
@@ -383,9 +379,8 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                 </div>
             </div>
 
-            {/* ✨ FEATURE 4: SECURE FINANCIAL POOL VAULT */}
+            {/* SECURE FINANCIAL POOL VAULT */}
             <div className={`${glassPanel} overflow-hidden border-2 border-slate-300 relative`}>
-                {/* VAULT LOCK OVERLAY */}
                 {!isPoolUnlocked && (
                     <div className="absolute inset-0 z-50 bg-slate-900/60 backdrop-blur-md flex flex-col items-center justify-center text-white rounded-xl">
                         <div className="bg-slate-900 p-6 rounded-2xl border border-slate-700 shadow-2xl flex flex-col items-center max-w-sm w-full mx-4 text-center">
@@ -404,7 +399,6 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                     </div>
                 )}
 
-                {/* VAULT CONTENT */}
                 <div className={`p-6 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-opacity duration-500 ${!isPoolUnlocked ? 'opacity-20 pointer-events-none' : 'opacity-100'}`}>
                     <div>
                         <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
@@ -413,7 +407,6 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                         <p className="text-xs text-slate-500 font-mono mt-1">Cross-check daily mode of payments with bank statements.</p>
                     </div>
 
-                    {/* LEGEND */}
                     <div className="flex gap-4 bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm text-xs font-bold">
                         <span className="flex items-center gap-1.5 text-emerald-700"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div> CASH</span>
                         <span className="flex items-center gap-1.5 text-blue-700"><div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div> ONLINE</span>
@@ -470,7 +463,6 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                                     >
                                         <span className={`text-xs font-bold ${textClass}`}>{day.getDate()}</span>
                                         
-                                        {/* Payment Mode Dots */}
                                         <div className="flex gap-0.5 absolute bottom-1.5">
                                             {modes.hasCash && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                                             {modes.hasOnline && <div className="w-1.5 h-1.5 rounded-full bg-blue-300"></div>}
@@ -1056,8 +1048,19 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                                                     onClick={() => {
                                                         const studentBatch = batches.find(b => b.name === t.batch);
                                                         const studentBranch = branches.find(br => br.id === studentBatch?.branchId);
+                                                        
+                                                        // ✨ Extract withGst from the stored breakdown safely
+                                                        let savedGst = false;
+                                                        if (t.feeBreakdown) {
+                                                            try {
+                                                                const parsed = typeof t.feeBreakdown === 'string' ? JSON.parse(t.feeBreakdown) : t.feeBreakdown;
+                                                                savedGst = !!parsed.withGst;
+                                                            } catch(e) {}
+                                                        }
+
                                                         setCurrentInvoice({
                                                             ...t,
+                                                            withGst: savedGst, // ✨ Ensure the modal knows!
                                                             branchName: studentBranch?.name || t.branchName,
                                                             branchAddress: studentBranch?.address || t.branchAddress,
                                                             branchCity: studentBranch?.city || t.branchCity,
@@ -1139,7 +1142,7 @@ export default function AccountsPanel({ students }: { students: any[] }) {
                 />
             )}
 
-            {/* ✨ FEATURE 3: EDIT RECEIPT MODAL */}
+            {/* EDIT RECEIPT MODAL */}
             {editModalData && (
                 <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">

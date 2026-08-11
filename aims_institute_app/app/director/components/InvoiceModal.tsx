@@ -6,14 +6,7 @@ import { Printer, X } from 'lucide-react';
 const LOGO_PATH = '/mainpage.png';
 
 const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () => void, isGstEnabled: boolean }) => {
-  // 1. Calculate Base Amounts securely (Fallbacks added to guarantee a number)
-  const rawAmount = Number(data.amount) || Number(data.fees) || 0;
-  const baseAmount = isGstEnabled ? Math.round(rawAmount / 1.18) : Math.round(rawAmount);
-  const gstAmount = isGstEnabled ? rawAmount - baseAmount : 0;
-  const cgst = gstAmount / 2;
-  const sgst = gstAmount / 2;
-
-  // 2. Safely parse the feeBreakdown from the database
+  // 1. Safely parse the feeBreakdown from the database
   let parsedBreakdown = null;
   try {
     if (typeof data.feeBreakdown === 'string') {
@@ -25,23 +18,42 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
     parsedBreakdown = null;
   }
 
-  // 3. Extract Values safely
-  const tuition = Number(parsedBreakdown?.tuition) || 0;
-  const dress = Number(parsedBreakdown?.dress) || 0;
-  const books = Number(parsedBreakdown?.books) || 0;
-  const extraAmount = Number(parsedBreakdown?.extraAmount) || 0;
+  // ✨ STRICT FIX: Only enable GST if it was explicitly passed as true, or saved as true in the DB JSON
+  const actualGstEnabled = isGstEnabled === true || parsedBreakdown?.withGst === true;
+
+  // 2. Calculate Base Amounts securely 
+  const rawAmount = Number(data.amount) || Number(data.fees) || 0;
+  const baseAmount = actualGstEnabled ? Math.round(rawAmount / 1.18) : Math.round(rawAmount);
+  const gstAmount = actualGstEnabled ? rawAmount - baseAmount : 0;
+  
+  // Calculate CGST and SGST down to 2 decimal places to be completely accurate
+  const cgst = Number((gstAmount / 2).toFixed(2));
+  const sgst = Number((gstAmount / 2).toFixed(2));
+
+  // 3. Extract Raw Values from the database breakdown
+  const rawTuition = Number(parsedBreakdown?.tuition) || 0;
+  const rawDress = Number(parsedBreakdown?.dress) || 0;
+  const rawBooks = Number(parsedBreakdown?.books) || 0;
+  const rawExtra = Number(parsedBreakdown?.extraAmount) || 0;
   const extraName = parsedBreakdown?.extraName || 'Additional Fee';
 
-  // 4. Validate if user manually entered a breakdown
-  const hasValidBreakdown = (tuition + dress + books + extraAmount) > 0;
+  const hasValidBreakdown = (rawTuition + rawDress + rawBooks + rawExtra) > 0;
 
-  // 5. Build the Final Display Object 
+  // 4. Build the Final Display Object 
+  // ✨ CRITICAL FIX: If GST is enabled, we MUST strip the 18% tax out of the individual line items
+  // so that the math visually adds up perfectly on the printed receipt!
   let displayBreakdown = { tuition: 0, dress: 0, books: 0, extraAmount: 0, extraName: '' };
 
   if (hasValidBreakdown) {
-      displayBreakdown = { tuition, dress, books, extraAmount, extraName };
+      const ratio = actualGstEnabled ? (1 / 1.18) : 1;
+      displayBreakdown = { 
+          tuition: Math.round(rawTuition * ratio), 
+          dress: Math.round(rawDress * ratio), 
+          books: Math.round(rawBooks * ratio), 
+          extraAmount: Math.round(rawExtra * ratio), 
+          extraName 
+      };
   } else if (baseAmount > 0) {
-      // ✨ FIXED: Old receipts without a breakdown default 100% to Tuition
       displayBreakdown.tuition = baseAmount;
       displayBreakdown.books = 0;
       displayBreakdown.dress = 0; 
@@ -92,7 +104,6 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
                 )}
                 
                 <div className="mt-2 font-mono">
-                  {/* ✨ UPDATED: Splits comma-separated numbers into multiple lines */}
                   {data.branchPhone ? (
                       data.branchPhone.split(',').map((num: string, idx: number) => (
                           <p key={idx}>+91 {num.trim()}</p>
@@ -105,7 +116,7 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
                   )}
                   <p className="text-blue-600">talentsupport@aimsinstitute.org.in</p>
                 </div>
-                {isGstEnabled && <p className="font-bold text-slate-800 mt-2">GSTIN: 27AABCU9603R1ZM</p>}
+                {actualGstEnabled && <p className="font-bold text-slate-800 mt-2">GSTIN: 27AABCU9603R1ZM</p>}
               </div>
           </div>
 
@@ -137,7 +148,6 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
             </thead>
             <tbody>
               
-              {/* ✨ GUARANTEED RENDER OF HEADERS */}
               {displayBreakdown.tuition > 0 && (
                   <tr className="border-b border-slate-200">
                       <td className="py-3 px-4 font-bold text-slate-800">Tuition / Academic Fees</td>
@@ -171,7 +181,6 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
                   </tr>
               )}
               
-              {/* Fallback for 0 amount overall */}
               {displayBreakdown.tuition === 0 && displayBreakdown.dress === 0 && displayBreakdown.books === 0 && displayBreakdown.extraAmount === 0 && (
                   <tr className="border-b border-slate-200">
                     <td className="py-4 px-4">
@@ -189,8 +198,8 @@ const InvoiceModal = ({ data, onClose, isGstEnabled }: { data: any, onClose: () 
                   </td>
               </tr>
 
-              {/* GST ROWS */}
-              {isGstEnabled && (
+              {/* ✨ STRICT CHECK: GST ROWS */}
+              {actualGstEnabled && (
                 <>
                   <tr className="border-b border-slate-100 text-xs">
                     <td className="py-1 px-4 text-slate-600">CGST (9%)</td>

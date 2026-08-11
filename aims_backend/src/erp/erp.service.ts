@@ -67,12 +67,11 @@ export class ErpService {
               name: data.name,
               city: data.city || null,
               address: data.address || null,
-              phone: data.phone || null // ✨ NEW: Now saves the phone number to the DB
+              phone: data.phone || null 
           }
       });
   }
 
-  // ✨ NEW: Created function to handle updating branch details (like the phone number)
   async updateBranch(id: string, data: any) {
       return this.prisma.branch.update({
           where: { id },
@@ -120,7 +119,6 @@ export class ErpService {
           where: { id },
           data: { 
               fee: data.fee !== undefined ? Number(data.fee) : undefined,
-              // ✨ Now accepts branch changes from the frontend
               branchId: data.branchId !== undefined ? (data.branchId === '' ? null : data.branchId) : undefined 
           }
       });
@@ -280,8 +278,8 @@ export class ErpService {
   
   async getFinancialSummary() { return this.getSummary(); }
 
-  // ✨ UPDATED: Accept manual date for Fee Collection
-  async collectFee(data: { studentId: string; amount: number; remarks?: string; paymentMode?: string; transactionId?: string; date?: string }) { 
+  // ✨ FIXED: Now actually receives and saves feeBreakdown and bankName!
+  async collectFee(data: { studentId: string; amount: number; remarks?: string; paymentMode?: string; transactionId?: string; date?: string; feeBreakdown?: any; bankName?: string }) { 
     const student = await this.prisma.studentProfile.findUnique({ where: { id: data.studentId } }); 
     if (!student) throw new BadRequestException("Student not found"); 
     
@@ -294,13 +292,13 @@ export class ErpService {
         remarks: data.remarks || "Fee Payment", 
         paymentMode: data.paymentMode || "CASH", 
         transactionId: data.transactionId || `TXN-${Date.now()}`, 
-        date: paymentDate 
+        date: paymentDate,
+        feeBreakdown: data.feeBreakdown || null, // ✨ THIS WAS MISSING
+        bankName: data.bankName || null          // ✨ THIS WAS MISSING
       } 
     }); 
   }
 
-  // ✨ UPDATED: Include Deep Branch details for Fee Receipt Address
-  // ✨ FIXED: Added editStatus, bankName, and feeBreakdown to the payload
   async getAllFeeRecords() {
     const records = await this.prisma.feeRecord.findMany({
       include: {
@@ -329,7 +327,6 @@ export class ErpService {
       paymentMode: r.paymentMode,
       transactionId: r.transactionId,
       
-      // ✨ THESE WERE MISSING! Added them so the frontend can use them:
       editStatus: r.editStatus, 
       bankName: r.bankName,
       feeBreakdown: r.feeBreakdown,
@@ -342,7 +339,6 @@ export class ErpService {
     }));
   }
 
-// ✨ NEW: Feature 3 Request Admin Edit
   async requestFeeEdit(feeId: string, actor: string) {
     const record = await this.prisma.feeRecord.findUnique({ where: { id: feeId } });
     if (!record) throw new NotFoundException('Fee record not found');
@@ -352,7 +348,6 @@ export class ErpService {
       data: { editStatus: 'PENDING', editRequestDate: new Date() }
     });
 
-    // Directly access securityLog here
     await this.prisma.securityLog.create({
       data: {
         actorId: actor,
@@ -374,7 +369,7 @@ export class ErpService {
               transactionId: data.transactionId,
               bankName: data.bankName,
               remarks: data.remarks,
-              editStatus: 'NONE' // Re-locks the receipt after editing
+              editStatus: 'NONE'
           }
       });
   }
@@ -471,7 +466,6 @@ export class ErpService {
       });
   }
 
-  // ✨ NEW: Feature 3 Fetch Pending Requests
   async getFeeEditRequests() {
     const records = await this.prisma.feeRecord.findMany({
       where: { editStatus: 'PENDING' },
@@ -491,7 +485,6 @@ export class ErpService {
     }));
   }
 
-  // ✨ NEW: Feature 3 Resolve the Request and Log it!
   async resolveFeeEditRequest(feeId: string, status: 'APPROVED' | 'REJECTED', actor: string) {
     const record = await this.prisma.feeRecord.findUnique({ where: { id: feeId } });
     if (!record) throw new NotFoundException('Fee record not found');
@@ -501,7 +494,6 @@ export class ErpService {
       data: { editStatus: status }
     });
 
-    // Directly access securityLog here
     await this.prisma.securityLog.create({
       data: {
         actorId: actor,
@@ -558,7 +550,6 @@ export class ErpService {
           parentPassword: s.parent?.user?.visiblePassword || '******', 
           parentMobile: s.parent?.mobile || 'N/A', 
           
-          // ✨ Expanded Parent Details
           fatherName: s.parent?.fatherName || null,
           motherName: s.parent?.motherName || null,
           parentEmail: s.parent?.email || null,
@@ -577,7 +568,6 @@ export class ErpService {
           photoUrl: s.photoUrl,
           remarks: s.remarks,
 
-          // ✨ Expanded Academic Details
           lastSchool: s.lastSchool || null,
           lastPercentage: s.lastPercentage || null
       };
@@ -596,7 +586,6 @@ export class ErpService {
   
   async getStudents() { return this.getStudentDirectory(); }
 
-  // 🚨 CASCADE DELETE STUDENT
   async deleteStudent(studentProfileId: string) {
       const student = await this.prisma.studentProfile.findUnique({ 
           where: { id: studentProfileId },
@@ -625,7 +614,6 @@ export class ErpService {
       return { success: true, message: 'Student and all related records successfully deleted' };
   }
 
-  // ✨ FULL SIS UPDATE METHOD (Updated with new fields)
   async updateStudent(studentProfileId: string, data: any) {
     const student = await this.prisma.studentProfile.findUnique({
       where: { id: studentProfileId },
@@ -635,7 +623,6 @@ export class ErpService {
     if (!student) throw new NotFoundException('Student not found');
 
     return this.prisma.$transaction(async (tx) => {
-      // 1. Update Student Password
       if (data.studentPassword && data.studentPassword !== student.user.visiblePassword) {
         const hashedPass = await bcrypt.hash(data.studentPassword, 10);
         await tx.user.update({
@@ -644,7 +631,6 @@ export class ErpService {
         });
       }
 
-      // 2. Update Parent Password & Details
       if (student.parentId) {
           if (data.parentPassword && student.parent?.userId && data.parentPassword !== student.parent.user.visiblePassword) {
             const hashedParentPass = await bcrypt.hash(data.parentPassword, 10);
@@ -665,14 +651,12 @@ export class ErpService {
           });
       }
 
-      // 3. Resolve Batch ID if Name was passed from frontend Dropdown
       let targetBatchId = student.batchId;
       if (data.batch) {
           const batchRecord = await tx.batch.findFirst({ where: { name: data.batch } });
           if (batchRecord) targetBatchId = batchRecord.id;
       }
 
-      // 4. Update the Core Profile Data
       const updatedProfile = await tx.studentProfile.update({
         where: { id: studentProfileId },
         data: {
@@ -691,7 +675,6 @@ export class ErpService {
     });
   }
 
-  // ✨ UPDATED ADMISSION ROUTE (Captures all new fields)
   async registerStudent(dto: any) {
     const input = dto; 
     
@@ -829,14 +812,13 @@ export class ErpService {
     }); 
   }
   
-  // ✨ UPDATED: Supports Monthly Reports
   async getAttendanceStats(batchId: string, month?: number, year?: number) { 
     if (!batchId) return []; 
     
     const whereClause: any = { batchId };
     if (month && year) {
         const start = new Date(year, month - 1, 1);
-        const end = new Date(year, month, 0, 23, 59, 59); // Last day of month
+        const end = new Date(year, month, 0, 23, 59, 59); 
         whereClause.date = { gte: start, lte: end };
     }
 
@@ -896,7 +878,6 @@ export class ErpService {
       }); 
   }
   
-  // ✨ UPDATED: Enquiry Log tracking
   async updateEnquiryStatus(id: string, status: any, followUpCount?: number, newRemark?: string) { 
       const enquiry = await this.prisma.enquiry.findUnique({ where: { id }});
       if (!enquiry) throw new NotFoundException('Enquiry not found');
