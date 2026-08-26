@@ -32,19 +32,20 @@ export class WhatsappController {
     // ✨ NEW: Expose WhatsApp Connection Status to the frontend
     @Get('status')
     async getStatus() {
-        return await this.whatsappService.getSessionStatus('aims-finance');
+        // No longer requires 'aims-finance' because the engine runs natively!
+        return await this.whatsappService.getSessionStatus();
     }
 
     // ✨ NEW: Fetch the QR Code to display in the frontend
     @Get('qr')
     async getQr() {
-        const qrData = await this.whatsappService.getSessionQr('aims-finance');
+        const qrData = await this.whatsappService.getSessionQr();
         return { qr: qrData };
     }
+
     // ✨ NEW: Trigger a complete session reset to get a new QR
     @Post('reset')
     async resetSession() {
-        return await this.whatsappService.resetSession('aims-finance');
+        return await this.whatsappService.resetSession();
     }
 }
-
