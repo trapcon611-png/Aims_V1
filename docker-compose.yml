@@ -93,6 +93,7 @@ services:
         condition: service_started
     environment:
       # ✨ FIXED: Hardcoded the exact API key OpenWA generated
+      - HOST=0.0.0.0
       - API_KEY=owa_k1_4cd5d2eb99308da3971f9f4730750a0a2b67aa4530c9c2e4168e7c39bf3cc608
       - DATABASE_URL=postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public
       - ENGINE_TYPE=baileys
