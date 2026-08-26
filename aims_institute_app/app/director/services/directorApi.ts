@@ -507,7 +507,8 @@ export const directorApi = {
       return await parseJsonSafely(res);
   },
   
-  async updateWhatsappRules(payload: { time: string, daysBefore: number, maxFollowUps: number }) {
+  // ✨ UPDATED: Now accepts the automatedMessage property
+  async updateWhatsappRules(payload: { time: string, daysBefore: number, maxFollowUps: number, automatedMessage: string }) {
       const res = await fetchWithAuth(`${API_URL}/whatsapp/rules`, {
           method: 'POST',
           headers: {
