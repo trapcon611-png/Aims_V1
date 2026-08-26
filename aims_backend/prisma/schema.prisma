@@ -385,11 +385,15 @@ model Branch {
 // --- 8. SYSTEM CONFIGURATION ---
 
 model AutomationSettings {
-  id             String   @id @default("whatsapp_rules")
-  dispatchTime   String   @default("09:00")
-  daysBefore     Int      @default(3)
-  maxFollowUps   Int      @default(2)
-  updatedAt      DateTime @updatedAt
+  id               String   @id @default("whatsapp_rules")
+  dispatchTime     String   @default("09:00")
+  daysBefore       Int      @default(3)
+  maxFollowUps     Int      @default(2)
+  
+  // ✨ NEW: Custom template for automated cron messages
+  automatedMessage String?  @db.Text 
+  
+  updatedAt        DateTime @updatedAt
 }
 
 // --- 9. SECURITY & AUDIT LOGS ---

@@ -8,10 +8,12 @@ import * as qrcode from 'qrcode';
 export class WhatsappService implements OnModuleInit {
   private readonly logger = new Logger(WhatsappService.name);
   
-  // Native WhatsApp Engine State
   private client: Client;
   private waStatus: string = 'checking...';
   private currentQrData: string | null = null;
+
+  // ✨ THE DEFAULT TEMPLATE
+  private readonly DEFAULT_TEMPLATE = `*AIMS Institute {{urgency}}*\n\nDear Parent,\nThis is an automated reminder that an installment of *₹{{amount}}* for {{student_name}} ({{batch_name}}) is due on *{{due_date}}*.\n\nPlease ensure timely payment to avoid late penalties.\n\nRegards,\nAIMS Administration`;
 
   constructor(private prisma: PrismaService) {}
 
@@ -20,34 +22,24 @@ export class WhatsappService implements OnModuleInit {
       await this.initializeWhatsappClient();
   }
 
-  // ✨ THE NEW NATIVE ENGINE INITIALIZER
   private async initializeWhatsappClient() {
       this.client = new Client({
-          // This saves the session to the volume we mapped in docker-compose
           authStrategy: new LocalAuth({ dataPath: './whatsapp_auth' }), 
           puppeteer: {
               executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
-              args: [
-                  '--no-sandbox',
-                  '--disable-setuid-sandbox',
-                  '--disable-dev-shm-usage',
-                  '--disable-accelerated-2d-canvas',
-                  '--no-first-run',
-                  '--no-zygote'
-              ]
+              args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-accelerated-2d-canvas', '--no-first-run', '--no-zygote']
           }
       });
 
       this.client.on('qr', async (qr) => {
           this.logger.log('[WA-NATIVE] New QR Code generated. Awaiting scan...');
-          // Convert the raw text QR into a base64 image string for the frontend
           this.currentQrData = await qrcode.toDataURL(qr);
           this.waStatus = 'QR_READY';
       });
 
       this.client.on('ready', () => {
           this.logger.log('[WA-NATIVE] WhatsApp is CONNECTED and READY!');
-          this.currentQrData = null; // Clear QR
+          this.currentQrData = null; 
           this.waStatus = 'CONNECTED';
       });
 
@@ -67,7 +59,6 @@ export class WhatsappService implements OnModuleInit {
           this.currentQrData = null;
       });
 
-      // Start the engine
       this.client.initialize().catch(err => {
           this.logger.error('[WA-NATIVE] Failed to initialize client', err);
           this.waStatus = 'DISCONNECTED';
@@ -75,36 +66,18 @@ export class WhatsappService implements OnModuleInit {
   }
 
   private sleep(ms: number) { return new Promise(resolve => setTimeout(resolve, ms)); }
-  
-  private getRandomDelay(minSeconds: number, maxSeconds: number) {
-      return Math.floor(Math.random() * (maxSeconds - minSeconds + 1) + minSeconds) * 1000;
-  }
+  private getRandomDelay(minSeconds: number, maxSeconds: number) { return Math.floor(Math.random() * (maxSeconds - minSeconds + 1) + minSeconds) * 1000; }
 
-  // --- 1. UI CONNECTION ENDPOINTS ---
+  async getSessionStatus() { return { status: this.waStatus }; }
+  async getSessionQr() { return this.currentQrData; }
 
-  async getSessionStatus() {
-      return { status: this.waStatus };
-  }
-
-  async getSessionQr() {
-      return this.currentQrData;
-  }
-
-  // Handles the "Generate New QR" button from the frontend
   async resetSession() {
       this.logger.log(`[WA-RESET] Hard resetting WhatsApp native session...`);
       this.waStatus = 'checking...';
       this.currentQrData = null;
-      
       try {
-          // Destroy current browser instance
           await this.client.destroy();
           await this.sleep(2000);
-          
-          // Note: In a true production app, you might use fs.rmdirSync to delete 
-          // the ./whatsapp_auth folder here to force a clean slate, but destroy() often suffices.
-          
-          // Reboot
           this.initializeWhatsappClient();
           return { success: true, message: 'Session reset initiated.' };
       } catch (err) {
@@ -113,37 +86,33 @@ export class WhatsappService implements OnModuleInit {
       }
   }
 
-  // --- 2. AUTOMATION & DISPATCH LOGIC ---
-
   async getAutomationRules() {
       let rules = await this.prisma.automationSettings.findUnique({ where: { id: 'whatsapp_rules' } });
       if (!rules) {
           rules = await this.prisma.automationSettings.create({ 
-              data: { id: 'whatsapp_rules', dispatchTime: "09:00", daysBefore: 3, maxFollowUps: 2 } 
+              data: { id: 'whatsapp_rules', dispatchTime: "09:00", daysBefore: 3, maxFollowUps: 2, automatedMessage: this.DEFAULT_TEMPLATE } 
           });
       }
       return rules;
   }
 
-  async updateAutomationRules(data: { time: string, daysBefore: number, maxFollowUps: number }) {
+  // ✨ UPDATED: Now saves the dynamic template
+  async updateAutomationRules(data: { time: string, daysBefore: number, maxFollowUps: number, automatedMessage?: string }) {
       return this.prisma.automationSettings.upsert({
           where: { id: 'whatsapp_rules' },
-          update: { dispatchTime: data.time, daysBefore: data.daysBefore, maxFollowUps: data.maxFollowUps },
-          create: { id: 'whatsapp_rules', dispatchTime: data.time, daysBefore: data.daysBefore, maxFollowUps: data.maxFollowUps }
+          update: { dispatchTime: data.time, daysBefore: data.daysBefore, maxFollowUps: data.maxFollowUps, automatedMessage: data.automatedMessage },
+          create: { id: 'whatsapp_rules', dispatchTime: data.time, daysBefore: data.daysBefore, maxFollowUps: data.maxFollowUps, automatedMessage: data.automatedMessage || this.DEFAULT_TEMPLATE }
       });
   }
 
   async dispatchOpenWAMessage(mobile: string | undefined, text: string) {
       if (!mobile) return false;
-      
       if (this.waStatus !== 'CONNECTED') {
           this.logger.error(`[WA-DISPATCH] Aborted! Engine is not connected.`);
           return false;
       }
-
       const cleanMobile = mobile.replace(/[^0-9]/g, '').replace(/^91/, '');
       const chatId = `91${cleanMobile}@c.us`; 
-      
       try {
           this.logger.log(`[WA-DISPATCH] Native send to ${chatId}`);
           await this.client.sendMessage(chatId, text);
@@ -157,31 +126,19 @@ export class WhatsappService implements OnModuleInit {
   async automatedFeeRemindersManual(targets: any[], customText?: string) {
         let successCount = 0;
         let failCount = 0;
-
         for (const target of targets) {
-            const message = customText 
-                ? customText 
-                : `*AIMS Institute Reminder*\n\nDear Parent of ${target.name},\nThis is a reminder for your pending installment of ₹${target.amount} due on ${new Date(target.date).toLocaleDateString()}.\n\nRegards,\nAIMS Admin`;
-            
+            const message = customText ? customText : `*AIMS Institute Reminder*\n\nDear Parent of ${target.name},\nThis is a reminder for your pending installment of ₹${target.amount} due on ${new Date(target.date).toLocaleDateString()}.\n\nRegards,\nAIMS Admin`;
             const isSuccess = await this.dispatchOpenWAMessage(target.mobile, message);
-            
-            if (isSuccess) successCount++;
-            else failCount++;
-
+            if (isSuccess) successCount++; else failCount++;
             if (isSuccess && (successCount + failCount) < targets.length) {
-                const delay = this.getRandomDelay(4, 9);
-                this.logger.log(`[STEALTH] Waiting ${delay / 1000} seconds before next message...`);
-                await this.sleep(delay);
+                await this.sleep(this.getRandomDelay(4, 9));
             }
         }
-
         return { success: failCount === 0, dispatched: successCount, failed: failCount };
     }
 
-  // --- Cron Scheduler ---
   @Cron(CronExpression.EVERY_MINUTE)
   async dynamicFeeReminders() {
-      // (This contains the exact same automated time-checking logic you already had)
       const rules = await this.getAutomationRules();
       const today = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
       
@@ -211,6 +168,9 @@ export class WhatsappService implements OnModuleInit {
           include: { parent: true, feesPaid: true, batch: true }
       });
 
+      // ✨ THE DYNAMIC REPLACEMENT ENGINE
+      const templateStr = rules.automatedMessage || this.DEFAULT_TEMPLATE;
+
       for (const s of students) {
           const totalPaid = s.feesPaid.reduce((acc, curr) => acc + curr.amount, 0);
           let cumulativeInst = 0;
@@ -223,12 +183,19 @@ export class WhatsappService implements OnModuleInit {
                       const instDateStr = new Date(inst.dueDate).toISOString().split('T')[0];
                       if (datesToTarget.includes(instDateStr)) {
                           const amountDue = cumulativeInst - Math.max(totalPaid, cumulativeInst - inst.amount);
-                          let urgency = "Update";
+                          let urgency = "Reminder";
                           if (instDateStr === today.toISOString().split('T')[0]) urgency = "URGENT";
                           else if (instDateStr < today.toISOString().split('T')[0]) urgency = "OVERDUE";
 
-                          const message = `*AIMS Institute ${urgency}*\n\nDear Parent,\nThis is an automated reminder that an installment of *₹${amountDue}* for ${s.fullName} (${s.batch?.name || 'Assigned Batch'}) is due on *${new Date(inst.dueDate).toLocaleDateString()}*.\n\nPlease ensure timely payment to avoid late penalties.\n\nRegards,\nAIMS Administration`;
-                          await this.dispatchOpenWAMessage(s.parent?.mobile, message);
+                          // Swap out the variables
+                          const finalMessage = templateStr
+                              .replace(/{{urgency}}/g, urgency)
+                              .replace(/{{student_name}}/g, s.fullName)
+                              .replace(/{{batch_name}}/g, s.batch?.name || 'Assigned Batch')
+                              .replace(/{{amount}}/g, amountDue.toLocaleString())
+                              .replace(/{{due_date}}/g, new Date(inst.dueDate).toLocaleDateString());
+
+                          await this.dispatchOpenWAMessage(s.parent?.mobile, finalMessage);
                       }
                   }
               }
