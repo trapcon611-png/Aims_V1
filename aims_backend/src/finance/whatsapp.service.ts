@@ -176,6 +176,39 @@ export class WhatsappService {
       }
   }
 
+  // ✨ NEW: Hard-reset the session to generate a fresh QR or force logout
+  async resetSession(fallbackSessionId: string = 'aims-finance') {
+      try {
+          const activeId = await this.getActiveSessionId() || fallbackSessionId;
+          this.logger.log(`[WA-RESET] Terminating session: ${activeId}`);
+
+          // 1. Force logout and delete the current session state
+          await fetch(`${this.openWaApiUrl}/sessions/${activeId}`, {
+              method: 'DELETE',
+              headers: { 'X-API-Key': process.env.OPENWA_API_KEY || '' }
+          });
+
+          // Wait a moment for the microservice to clear the file system caches
+          await this.sleep(2000); 
+
+          // 2. Re-initialize a brand new session
+          this.logger.log(`[WA-RESET] Booting fresh session: ${fallbackSessionId}`);
+          await fetch(`${this.openWaApiUrl}/sessions`, {
+              method: 'POST',
+              headers: { 
+                  'Content-Type': 'application/json',
+                  'X-API-Key': process.env.OPENWA_API_KEY || '' 
+              },
+              body: JSON.stringify({ sessionId: fallbackSessionId })
+          });
+
+          return { success: true, message: 'Session reset. Fresh QR incoming.' };
+      } catch (err) {
+          this.logger.error('[WA-RESET] Error resetting session', err);
+          throw new Error('Failed to reset WhatsApp session');
+      }
+  }
+
   // --- 4. CORE DISPATCHERS ---
 
   // ✨ HELPER: Dynamically fetches the active session ID from OpenWA

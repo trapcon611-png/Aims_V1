@@ -41,4 +41,10 @@ export class WhatsappController {
         const qrData = await this.whatsappService.getSessionQr('aims-finance');
         return { qr: qrData };
     }
+    // ✨ NEW: Trigger a complete session reset to get a new QR
+    @Post('reset')
+    async resetSession() {
+        return await this.whatsappService.resetSession('aims-finance');
+    }
 }
+

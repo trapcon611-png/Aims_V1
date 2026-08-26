@@ -9,6 +9,7 @@ import { directorApi } from '../services/directorApi';
 
 export default function WhatsappPanel({ students = [], dueInstallments = [] }: { students: any[], dueInstallments: any[] }) {
     // UI State
+    const [isResetting, setIsResetting] = useState(false);
     const [activeTab, setActiveTab] = useState<'dues' | 'general' | 'templates' | 'automation'>('dues');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [customMessage, setCustomMessage] = useState("");
@@ -169,6 +170,26 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
 
     const addLog = (name: string, status: string, isError = false) => {
         setDispatchLogs(prev => [{ name, status, time: new Date().toLocaleTimeString(), isError }, ...prev]);
+    };
+
+    const handleResetWa = async () => {
+        if (!window.confirm("This will disconnect any currently linked WhatsApp and generate a fresh QR code. Proceed?")) return;
+        
+        setIsResetting(true);
+        setWaStatus('checking...'); // Trigger UI update immediately
+        setQrCodeData(null);
+        
+        try {
+            await directorApi.resetWhatsappSession();
+            // The polling useEffect will automatically fetch the new status and QR on its next tick,
+            // but we can speed it up by setting it to QR_READY visually
+            setWaStatus('QR_READY'); 
+        } catch (error: any) {
+            alert(`Failed to reset session: ${error.message}`);
+            setWaStatus('DISCONNECTED');
+        } finally {
+            setIsResetting(false);
+        }
     };
 
     const handleDispatch = async (targetsToSend: any[]) => {
@@ -444,7 +465,14 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
                             <div className="text-center p-4 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200">
                                 <CheckCircle size={32} className="mx-auto mb-2" />
                                 <span className="font-bold">Connected & Ready</span>
-                                <p className="text-xs mt-1 opacity-80">System is online and transmitting.</p>
+                                <p className="text-xs mt-1 opacity-80 mb-3">System is online and transmitting.</p>
+                                <button 
+                                    onClick={handleResetWa}
+                                    disabled={isResetting}
+                                    className="text-xs font-bold bg-white text-emerald-700 px-3 py-1.5 rounded border border-emerald-200 hover:bg-emerald-100 transition-colors shadow-sm disabled:opacity-50"
+                                >
+                                    {isResetting ? "Disconnecting..." : "Disconnect & Relink"}
+                                </button>
                             </div>
                         )}
 
@@ -452,13 +480,23 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
                             <div className="text-center">
                                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Scan QR to Link WhatsApp</p>
                                 <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-inner inline-block">
-                                    {qrCodeData ? (
+                                    {qrCodeData && !isResetting ? (
                                         <img src={qrCodeData} alt="WhatsApp QR Code" className="w-40 h-40 object-contain" />
                                     ) : (
-                                        <div className="w-40 h-40 flex items-center justify-center text-slate-400">
+                                        <div className="w-40 h-40 flex flex-col items-center justify-center text-slate-400 gap-2">
                                             <Loader2 className="animate-spin" size={24} />
+                                            <span className="text-xs font-medium">{isResetting ? "Generating..." : "Fetching QR..."}</span>
                                         </div>
                                     )}
+                                </div>
+                                <div className="mt-4">
+                                    <button 
+                                        onClick={handleResetWa}
+                                        disabled={isResetting}
+                                        className="text-xs font-bold text-slate-500 hover:text-slate-800 underline decoration-slate-300 underline-offset-4 transition-colors disabled:opacity-50"
+                                    >
+                                        QR Expired? Generate New
+                                    </button>
                                 </div>
                             </div>
                         )}

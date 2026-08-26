@@ -545,5 +545,14 @@ export const directorApi = {
       } catch (e) {
           return null;
       }
+  },
+  // ✨ NEW: WhatsApp Reset API
+  async resetWhatsappSession() {
+      const res = await fetchWithAuth(`${API_URL}/whatsapp/reset`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${this.getToken()}` }
+      });
+      if (!res.ok) throw new Error('Failed to reset WhatsApp session');
+      return await parseJsonSafely(res);
   }
 };
