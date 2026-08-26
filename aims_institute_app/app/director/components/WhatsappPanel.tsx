@@ -3,26 +3,21 @@ import React, { useState, useEffect } from 'react';
 import { 
     MessageSquare, Send, Clock, Users, Activity, CheckSquare, Square, 
     Edit3, AlertCircle, CheckCircle, BookmarkPlus, Save, Filter, 
-    Settings, BellRing, Smartphone, QrCode, AlertTriangle, Loader2 
+    Settings, BellRing, Smartphone, QrCode, AlertTriangle, Loader2, Code
 } from 'lucide-react';
 import { directorApi } from '../services/directorApi';
 
 export default function WhatsappPanel({ students = [], dueInstallments = [] }: { students: any[], dueInstallments: any[] }) {
-    // UI State
-    const [isResetting, setIsResetting] = useState(false);
     const [activeTab, setActiveTab] = useState<'dues' | 'general' | 'templates' | 'automation'>('dues');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [customMessage, setCustomMessage] = useState("");
     
-    // Separated Filters
     const [branchFilter, setBranchFilter] = useState("ALL");
     const [batchFilter, setBatchFilter] = useState("ALL");
     
-    // System State
     const [isDispatching, setIsDispatching] = useState(false);
     const [dispatchLogs, setDispatchLogs] = useState<{name: string, status: string, time: string, isError?: boolean}[]>([]);
     
-    // Templates State
     const [templates, setTemplates] = useState<{title: string, text: string}[]>([]);
     const [newTemplateTitle, setNewTemplateTitle] = useState("");
 
@@ -30,10 +25,12 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
     const [autoTime, setAutoTime] = useState("09:00");
     const [daysBefore, setDaysBefore] = useState(3);
     const [maxFollowUps, setMaxFollowUps] = useState(2);
+    // ✨ NEW: Automated Message State
+    const [autoMessage, setAutoMessage] = useState("");
 
-    // ✨ NEW: WhatsApp Connection State
     const [waStatus, setWaStatus] = useState<string>('checking...');
     const [qrCodeData, setQrCodeData] = useState<string | null>(null);
+    const [isResetting, setIsResetting] = useState(false);
 
     const glassPanel = "bg-white border border-slate-200 shadow-sm rounded-xl transition-all duration-300 flex flex-col";
 
@@ -52,6 +49,7 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
                     if (rules.dispatchTime) setAutoTime(rules.dispatchTime);
                     if (rules.daysBefore !== undefined) setDaysBefore(rules.daysBefore);
                     if (rules.maxFollowUps !== undefined) setMaxFollowUps(rules.maxFollowUps);
+                    if (rules.automatedMessage) setAutoMessage(rules.automatedMessage);
                 }
             } catch (err) {
                 console.error("Could not load automation rules", err);
@@ -60,47 +58,30 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
         loadRules();
     }, [dueInstallments]);
 
-    // ✨ NEW: Polling Hook for WhatsApp Status & QR Code
     useEffect(() => {
         const checkWaConnection = async () => {
             const statusData = await directorApi.getWhatsappStatus();
             if (statusData) {
                 const state = String(statusData.status).toUpperCase();
                 setWaStatus(state);
-                
-                // If it needs a scan, fetch the QR
                 if (['UNPAIRED', 'QR_READY', 'QR'].includes(state)) {
                     const qrRes = await directorApi.getWhatsappQr();
-                    if (qrRes && qrRes.qr) {
-                        setQrCodeData(qrRes.qr);
-                    }
+                    if (qrRes && qrRes.qr) setQrCodeData(qrRes.qr);
                 }
             } else {
                 setWaStatus('DISCONNECTED');
             }
         };
-
         checkWaConnection();
-
-        // Poll every 10 seconds if it's not fully connected
         const interval = setInterval(() => {
-            if (waStatus !== 'READY' && waStatus !== 'CONNECTED') {
-                checkWaConnection();
-            }
+            if (waStatus !== 'READY' && waStatus !== 'CONNECTED') checkWaConnection();
         }, 10000);
-
         return () => clearInterval(interval);
     }, [waStatus]);
 
-    // --- 1. DERIVED DATA (DEPENDENT DROPDOWNS) ---
     const uniqueBranches = Array.from(new Set(students.map(s => s.branch?.name || s.branch).filter(Boolean)));
-    
-    const availableStudentsForBatches = branchFilter === "ALL" 
-        ? students 
-        : students.filter(s => (s.branch?.name || s.branch) === branchFilter);
-        
+    const availableStudentsForBatches = branchFilter === "ALL" ? students : students.filter(s => (s.branch?.name || s.branch) === branchFilter);
     const uniqueBatches = Array.from(new Set(availableStudentsForBatches.map(s => s.batch?.name || s.batch).filter(Boolean)));
-    
     const currentList = activeTab === 'dues' ? dueInstallments : students;
     
     const filteredList = currentList.filter(item => {
@@ -111,11 +92,9 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
         return branchMatch && batchMatch;
     });
 
-    // --- 2. HANDLERS ---
     const toggleSelection = (id: string) => {
         const newSet = new Set(selectedIds);
-        if (newSet.has(id)) newSet.delete(id);
-        else newSet.add(id);
+        if (newSet.has(id)) newSet.delete(id); else newSet.add(id);
         setSelectedIds(newSet);
     };
 
@@ -125,13 +104,8 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
     };
 
     const handleFilterChange = (type: 'branch' | 'batch', value: string) => {
-        if (type === 'branch') {
-            setBranchFilter(value);
-            setBatchFilter("ALL"); 
-        }
-        if (type === 'batch') {
-            setBatchFilter(value);
-        }
+        if (type === 'branch') { setBranchFilter(value); setBatchFilter("ALL"); }
+        if (type === 'batch') { setBatchFilter(value); }
         setSelectedIds(new Set()); 
     };
 
@@ -150,19 +124,18 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
         localStorage.setItem('aims_wa_templates', JSON.stringify(newTemplates));
     };
 
-    const applyTemplate = (text: string) => {
-        setCustomMessage(text);
-        setActiveTab('general'); 
-    };
+    const applyTemplate = (text: string) => { setCustomMessage(text); setActiveTab('general'); };
 
     const saveAutomationRules = async () => {
+        if (!autoMessage.trim()) return alert("Automated message cannot be empty.");
         try {
             await directorApi.updateWhatsappRules({
                 time: autoTime,
                 daysBefore: daysBefore,
-                maxFollowUps: maxFollowUps
+                maxFollowUps: maxFollowUps,
+                automatedMessage: autoMessage // ✨ Save new template
             });
-            alert(`Automation Saved to Server! 🚀\nReminders will run daily at ${autoTime}, starting ${daysBefore} days before the due date.`);
+            alert(`Automation Saved to Server! 🚀\nReminders will run daily at ${autoTime}.`);
         } catch (error: any) {
             alert(`Failed to save rules: ${error.message}`);
         }
@@ -174,15 +147,9 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
 
     const handleResetWa = async () => {
         if (!window.confirm("This will disconnect any currently linked WhatsApp and generate a fresh QR code. Proceed?")) return;
-        
-        setIsResetting(true);
-        setWaStatus('checking...'); // Trigger UI update immediately
-        setQrCodeData(null);
-        
+        setIsResetting(true); setWaStatus('checking...'); setQrCodeData(null);
         try {
             await directorApi.resetWhatsappSession();
-            // The polling useEffect will automatically fetch the new status and QR on its next tick,
-            // but we can speed it up by setting it to QR_READY visually
             setWaStatus('QR_READY'); 
         } catch (error: any) {
             alert(`Failed to reset session: ${error.message}`);
@@ -194,16 +161,9 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
 
     const handleDispatch = async (targetsToSend: any[]) => {
         if (targetsToSend.length === 0) return;
-        
-        // Prevent sending if WA is disconnected
-        if (waStatus !== 'READY' && waStatus !== 'CONNECTED') {
-            return alert("Cannot broadcast: WhatsApp is currently disconnected or not scanned.");
-        }
+        if (waStatus !== 'READY' && waStatus !== 'CONNECTED') return alert("Cannot broadcast: WhatsApp is currently disconnected or not scanned.");
 
-        const confirmMsg = targetsToSend.length === 1 
-            ? `Send message to ${targetsToSend[0].name || targetsToSend[0].fullName}?` 
-            : `Broadcast to ${targetsToSend.length} selected recipients?`;
-        
+        const confirmMsg = targetsToSend.length === 1 ? `Send message to ${targetsToSend[0].name || targetsToSend[0].fullName}?` : `Broadcast to ${targetsToSend.length} selected recipients?`;
         if (!window.confirm(confirmMsg)) return;
         
         setIsDispatching(true);
@@ -211,25 +171,16 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
             const formattedTargets = targetsToSend.map(t => {
                 const rawMobile = t.parentMobile || t.mobile || (t.parent && t.parent.mobile);
                 const validMobile = rawMobile && rawMobile !== 'N/A' ? rawMobile : null;
-
-                return {
-                    name: t.name || t.fullName,
-                    mobile: validMobile,
-                    amount: t.amount || 0,
-                    date: t.date || new Date().toISOString()
-                };
+                return { name: t.name || t.fullName, mobile: validMobile, amount: t.amount || 0, date: t.date || new Date().toISOString() };
             }).filter(t => t.mobile); 
 
             if (formattedTargets.length === 0) throw new Error("No valid mobile numbers found.");
-
             formattedTargets.forEach(t => addLog(t.name, 'Broadcasting...'));
 
-            const payload = {
+            await directorApi.broadcastWhatsappReminders({
                 targets: formattedTargets,
                 customText: customMessage.trim() !== "" ? customMessage : null
-            };
-
-            await directorApi.broadcastWhatsappReminders(payload);
+            });
             
             formattedTargets.forEach(t => addLog(t.name, 'Delivered successfully!'));
             
@@ -247,24 +198,19 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
     };
 
     const selectedTargets = filteredList.filter(item => selectedIds.has(item.id || item.mobile));
-
-    // WhatsApp Status Logic for the UI
     const isWaReady = ['CONNECTED', 'READY'].includes(waStatus);
     const isWaScanning = ['UNPAIRED', 'QR_READY', 'QR'].includes(waStatus) || (qrCodeData && !isWaReady);
     const isWaDisconnected = !isWaReady && !isWaScanning && waStatus !== 'checking...';
 
     return (
-        <div className="space-y-6 max-w-7xl mx-auto py-6 px-4">
-            {/* Header Dashboard */}
+        <div className="space-y-6 max-w-7xl mx-auto py-6 px-4 pb-24">
             <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 shadow-xl flex flex-col md:flex-row justify-between items-center gap-4 text-white">
                 <div>
-                    <h2 className="text-2xl font-black flex items-center gap-2">
-                        <MessageSquare className="text-blue-400" size={24}/> AIMS Communication Hub
-                    </h2>
+                    <h2 className="text-2xl font-black flex items-center gap-2"><MessageSquare className="text-blue-400" size={24}/> AIMS Communication Hub</h2>
                     <p className="text-slate-400 text-sm mt-1 font-medium">Broadcast notices, fee reminders, and manage automation.</p>
                 </div>
                 <div className="flex gap-4 items-center">
-                    <div className="bg-slate-800 px-5 py-2 rounded-xl border border-slate-700 text-center flex flex-col items-center min-w-25">
+                    <div className="bg-slate-800 px-5 py-2 rounded-xl border border-slate-700 text-center flex flex-col items-center min-w-[100px]">
                         <div className="text-2xl font-black">{selectedIds.size} <span className="text-sm text-slate-500 font-normal">/ {filteredList.length}</span></div>
                         <div className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Selected</div>
                     </div>
@@ -273,13 +219,11 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
                         disabled={selectedIds.size === 0 || isDispatching || (!isWaReady)}
                         className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 font-bold py-3 px-6 rounded-xl shadow-lg shadow-blue-900/50 transition-all active:scale-95 flex items-center gap-2"
                     >
-                        {isDispatching ? <Clock className="animate-spin"/> : <Send size={18}/>}
-                        Broadcast Now
+                        {isDispatching ? <Clock className="animate-spin"/> : <Send size={18}/>} Broadcast Now
                     </button>
                 </div>
             </div>
 
-            {/* Navigation Tabs */}
             <div className="flex gap-2 border-b border-slate-200 pb-px overflow-x-auto custom-scrollbar">
                 <button onClick={() => { setActiveTab('dues'); setBranchFilter('ALL'); setBatchFilter('ALL'); }} className={`px-5 py-3 font-bold rounded-t-lg transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'dues' ? 'bg-white text-blue-600 border border-b-0 border-slate-200' : 'text-slate-500 hover:bg-slate-50'}`}><BellRing size={16}/> Fee Dues</button>
                 <button onClick={() => { setActiveTab('general'); setBranchFilter('ALL'); setBatchFilter('ALL'); }} className={`px-5 py-3 font-bold rounded-t-lg transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'general' ? 'bg-white text-blue-600 border border-b-0 border-slate-200' : 'text-slate-500 hover:bg-slate-50'}`}><Users size={16}/> General</button>
@@ -288,13 +232,10 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
-                {/* LEFT COLUMN: Main Content Area */}
                 <div className={`lg:col-span-2 ${glassPanel}`}>
                     
                     {activeTab === 'automation' ? (
-                        // --- AUTOMATION SETTINGS VIEW ---
-                        <div className="p-8 space-y-8">
+                        <div className="p-6 md:p-8 space-y-6">
                             <div className="border-b border-slate-100 pb-4">
                                 <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
                                     <Settings className="text-blue-600"/> Automated Reminder Protocol
@@ -325,16 +266,37 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
                                     </select>
                                 </div>
                             </div>
+
+                            {/* ✨ NEW EDITABLE CRON MESSAGE TEMPLATE */}
+                            <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                                <div className="bg-slate-100 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
+                                    <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2"><Edit3 size={16} className="text-purple-600"/> Automated Message Template</h4>
+                                </div>
+                                <div className="p-4 bg-white">
+                                    <div className="flex flex-wrap gap-2 mb-3">
+                                        <span className="text-[10px] font-bold bg-purple-50 text-purple-700 px-2 py-1 rounded border border-purple-100"><Code size={10} className="inline mr-1"/>{`{{student_name}}`}</span>
+                                        <span className="text-[10px] font-bold bg-purple-50 text-purple-700 px-2 py-1 rounded border border-purple-100"><Code size={10} className="inline mr-1"/>{`{{amount}}`}</span>
+                                        <span className="text-[10px] font-bold bg-purple-50 text-purple-700 px-2 py-1 rounded border border-purple-100"><Code size={10} className="inline mr-1"/>{`{{due_date}}`}</span>
+                                        <span className="text-[10px] font-bold bg-purple-50 text-purple-700 px-2 py-1 rounded border border-purple-100"><Code size={10} className="inline mr-1"/>{`{{batch_name}}`}</span>
+                                        <span className="text-[10px] font-bold bg-purple-50 text-purple-700 px-2 py-1 rounded border border-purple-100"><Code size={10} className="inline mr-1"/>{`{{urgency}}`}</span>
+                                    </div>
+                                    <textarea 
+                                        value={autoMessage}
+                                        onChange={(e) => setAutoMessage(e.target.value)}
+                                        className="w-full h-40 p-4 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium placeholder:text-slate-400 focus:bg-white focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none resize-none custom-scrollbar text-sm"
+                                        placeholder="Type the message the server should send automatically..."
+                                    />
+                                    <p className="text-xs text-slate-500 mt-2">Use the tags above to automatically insert student details. Surround text with *asterisks* to make it bold on WhatsApp.</p>
+                                </div>
+                            </div>
+
                             <button onClick={saveAutomationRules} className="w-full bg-slate-900 hover:bg-black text-white font-bold py-4 rounded-xl transition-colors">
                                 Update Server Protocol
                             </button>
                         </div>
                     ) : activeTab === 'templates' ? (
-                        // --- TEMPLATES VIEW ---
                         <div className="p-6 space-y-6">
-                            <h3 className="font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
-                                <BookmarkPlus size={18} className="text-purple-600"/> Manage Message Templates
-                            </h3>
+                            <h3 className="font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2"><BookmarkPlus size={18} className="text-purple-600"/> Manage Message Templates</h3>
                             {templates.length === 0 ? (
                                 <div className="text-center py-10 text-slate-400 font-medium">No templates saved yet. Compose a message on the right and save it.</div>
                             ) : (
@@ -342,7 +304,7 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
                                     {templates.map((tpl, i) => (
                                         <div key={i} className="border-2 border-slate-200 p-4 rounded-xl hover:border-purple-400 transition-colors bg-white shadow-sm relative group flex flex-col h-full">
                                             <h4 className="font-black text-slate-800 text-sm mb-2">{tpl.title}</h4>
-                                            <p className="text-sm text-slate-600 mb-6 font-medium bg-slate-50 p-3 rounded-lg border border-slate-100 grow">{tpl.text}</p>
+                                            <p className="text-sm text-slate-600 mb-6 font-medium bg-slate-50 p-3 rounded-lg border border-slate-100 grow whitespace-pre-wrap">{tpl.text}</p>
                                             <div className="flex justify-between items-center mt-auto">
                                                 <button onClick={() => deleteTemplate(i)} className="text-xs font-bold text-red-500 hover:bg-red-50 px-2 py-1 rounded">Delete</button>
                                                 <button onClick={() => applyTemplate(tpl.text)} className="bg-purple-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-purple-700 shadow-md transition-transform active:scale-95">Use This Template</button>
@@ -353,82 +315,52 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
                             )}
                         </div>
                     ) : (
-                        // --- TARGET SELECTION VIEW ---
                         <>
                             <div className="p-4 border-b border-slate-200 bg-slate-100 rounded-t-xl flex flex-col md:flex-row justify-between md:items-center gap-4">
-                                <div className="flex items-center gap-2 font-black text-slate-800 shrink-0">
-                                    <Users size={18} className="text-blue-600"/> Target Audience
-                                </div>
-                                
+                                <div className="flex items-center gap-2 font-black text-slate-800 shrink-0"><Users size={18} className="text-blue-600"/> Target Audience</div>
                                 <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-                                    {/* Branch Filter */}
                                     <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-2 shadow-inner border border-slate-700 w-full sm:w-[180px] shrink-0">
                                         <span className="text-xs font-bold text-slate-400 uppercase tracking-wide shrink-0">Branch:</span>
                                         <div className="min-w-0 flex-1">
-                                            <select 
-                                                value={branchFilter} 
-                                                onChange={(e) => handleFilterChange('branch', e.target.value)}
-                                                className="bg-transparent text-white font-bold w-full text-sm outline-none cursor-pointer truncate"
-                                            >
+                                            <select value={branchFilter} onChange={(e) => handleFilterChange('branch', e.target.value)} className="bg-transparent text-white font-bold w-full text-sm outline-none cursor-pointer truncate">
                                                 <option value="ALL" className="text-slate-800 bg-white font-medium">All Branches</option>
-                                                {uniqueBranches.length > 0 ? (
-                                                    uniqueBranches.map((b, i) => <option key={`branch-${i}`} value={b as string} className="text-slate-800 bg-white font-medium">{b as string}</option>)
-                                                ) : (
-                                                    <option value="ALL" disabled className="text-slate-500 bg-slate-50 italic">No Branches Found</option>
-                                                )}
+                                                {uniqueBranches.length > 0 ? uniqueBranches.map((b, i) => <option key={`branch-${i}`} value={b as string} className="text-slate-800 bg-white font-medium">{b as string}</option>) : <option value="ALL" disabled className="text-slate-500 bg-slate-50 italic">No Branches Found</option>}
                                             </select>
                                         </div>
                                     </div>
-                                    
-                                    {/* Batch Filter */}
                                     <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-2 shadow-inner border border-slate-700 w-full sm:w-[220px] shrink-0">
                                         <span className="text-xs font-bold text-slate-400 uppercase tracking-wide shrink-0">Batch:</span>
                                         <div className="min-w-0 flex-1">
-                                            <select 
-                                                value={batchFilter} 
-                                                onChange={(e) => handleFilterChange('batch', e.target.value)}
-                                                className="bg-transparent text-white font-bold w-full text-sm outline-none cursor-pointer truncate"
-                                            >
+                                            <select value={batchFilter} onChange={(e) => handleFilterChange('batch', e.target.value)} className="bg-transparent text-white font-bold w-full text-sm outline-none cursor-pointer truncate">
                                                 <option value="ALL" className="text-slate-800 bg-white font-medium">All Batches</option>
-                                                {uniqueBatches.length > 0 ? (
-                                                    uniqueBatches.map((b, i) => <option key={`batch-${i}`} value={b as string} className="text-slate-800 bg-white font-medium">{b as string}</option>)
-                                                ) : (
-                                                    <option value="ALL" disabled className="text-slate-500 bg-slate-50 italic">No Batches Found</option>
-                                                )}
+                                                {uniqueBatches.length > 0 ? uniqueBatches.map((b, i) => <option key={`batch-${i}`} value={b as string} className="text-slate-800 bg-white font-medium">{b as string}</option>) : <option value="ALL" disabled className="text-slate-500 bg-slate-50 italic">No Batches Found</option>}
                                             </select>
                                         </div>
                                     </div>
-
                                 </div>
                             </div>
                             
                             <div className="flex justify-between items-center px-4 py-3 bg-white border-b border-slate-100 shadow-sm z-10 sticky top-0">
                                 <span className="text-xs font-black text-slate-500 uppercase tracking-wider bg-slate-100 px-2 py-1 rounded">{filteredList.length} Contacts Found</span>
                                 <button onClick={toggleAll} className="text-sm text-blue-700 hover:text-blue-900 font-bold flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 px-4 py-1.5 rounded-lg transition-colors border border-blue-200">
-                                    {selectedIds.size === filteredList.length && filteredList.length > 0 ? <CheckSquare size={16}/> : <Square size={16}/>}
-                                    {selectedIds.size === filteredList.length ? "Deselect All" : "Select All"}
+                                    {selectedIds.size === filteredList.length && filteredList.length > 0 ? <CheckSquare size={16}/> : <Square size={16}/>} {selectedIds.size === filteredList.length ? "Deselect All" : "Select All"}
                                 </button>
                             </div>
                             
-                            <div className="overflow-y-auto max-h-125 custom-scrollbar p-2 space-y-2">
+                            {/* ✨ FIXED: Removed invalid max-h tailwind class that caused layout collapse */}
+                            <div className="overflow-y-auto max-h-[500px] custom-scrollbar p-2 space-y-2">
                                 {filteredList.length === 0 ? (
-                                    <div className="text-center py-10 text-slate-400 flex flex-col items-center font-medium">
-                                        <CheckCircle className="mb-2 opacity-30" size={32}/>
-                                        <p>No valid targets found for these filters.</p>
-                                    </div>
+                                    <div className="text-center py-10 text-slate-400 flex flex-col items-center font-medium"><CheckCircle className="mb-2 opacity-30" size={32}/><p>No valid targets found for these filters.</p></div>
                                 ) : filteredList.map((item, i) => {
                                     const id = item.id || item.mobile;
                                     const isSelected = selectedIds.has(id);
                                     const name = item.name || item.fullName;
                                     const batchName = item.batch?.name || item.batch;
-                                    const mobile = item.parentMobile || item.mobile || (item.parent && item.parent.mobile) || "No Number";;
-                                    
+                                    const mobile = item.parentMobile || item.mobile || (item.parent && item.parent.mobile) || "No Number";
                                     return (
                                         <div key={i} className={`flex justify-between items-center p-4 border-2 rounded-xl transition-all cursor-pointer ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-100 bg-white hover:border-slate-300'}`} onClick={() => toggleSelection(id)}>
                                             <div className="flex items-center gap-4">
-                                                <div className={`text-${isSelected ? 'blue-600' : 'slate-300'}`}>
-                                                    {isSelected ? <CheckSquare size={22}/> : <Square size={22}/>}
-                                                </div>
+                                                <div className={`text-${isSelected ? 'blue-600' : 'slate-300'}`}>{isSelected ? <CheckSquare size={22}/> : <Square size={22}/>}</div>
                                                 <div>
                                                     <div className="font-black text-slate-800 text-sm">{name} <span className="text-slate-500 font-medium">({batchName})</span></div>
                                                     <div className={`text-xs font-mono mt-1 font-bold flex items-center gap-1 ${mobile === "No Number" ? "text-red-500 bg-red-50 px-2 py-0.5 rounded inline-flex" : "text-slate-600"}`}>
@@ -452,126 +384,71 @@ export default function WhatsappPanel({ students = [], dueInstallments = [] }: {
                     )}
                 </div>
 
-                {/* RIGHT COLUMN: Connection, Composer & Logs */}
-                <div className="space-y-6 flex flex-col h-full">
-                    
-                    {/* ✨ NEW: WHATSAPP CONNECTION STATUS CARD */}
+                <div className="space-y-6 flex flex-col">
                     <div className={`${glassPanel} p-5 shrink-0 bg-white`}>
-                        <h3 className="font-black text-slate-800 mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
-                            <Smartphone size={16} className="text-emerald-600"/> API Connection
-                        </h3>
-                        
+                        <h3 className="font-black text-slate-800 mb-4 flex items-center gap-2 border-b border-slate-100 pb-2"><Smartphone size={16} className="text-emerald-600"/> API Connection</h3>
                         {isWaReady && (
                             <div className="text-center p-4 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200">
                                 <CheckCircle size={32} className="mx-auto mb-2" />
                                 <span className="font-bold">Connected & Ready</span>
                                 <p className="text-xs mt-1 opacity-80 mb-3">System is online and transmitting.</p>
-                                <button 
-                                    onClick={handleResetWa}
-                                    disabled={isResetting}
-                                    className="text-xs font-bold bg-white text-emerald-700 px-3 py-1.5 rounded border border-emerald-200 hover:bg-emerald-100 transition-colors shadow-sm disabled:opacity-50"
-                                >
+                                <button onClick={handleResetWa} disabled={isResetting} className="text-xs font-bold bg-white text-emerald-700 px-3 py-1.5 rounded border border-emerald-200 hover:bg-emerald-100 transition-colors shadow-sm disabled:opacity-50">
                                     {isResetting ? "Disconnecting..." : "Disconnect & Relink"}
                                 </button>
                             </div>
                         )}
-
                         {isWaScanning && (
                             <div className="text-center">
                                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Scan QR to Link WhatsApp</p>
                                 <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-inner inline-block">
-                                    {qrCodeData && !isResetting ? (
-                                        <img src={qrCodeData} alt="WhatsApp QR Code" className="w-40 h-40 object-contain" />
-                                    ) : (
-                                        <div className="w-40 h-40 flex flex-col items-center justify-center text-slate-400 gap-2">
-                                            <Loader2 className="animate-spin" size={24} />
-                                            <span className="text-xs font-medium">{isResetting ? "Generating..." : "Fetching QR..."}</span>
-                                        </div>
-                                    )}
+                                    {qrCodeData && !isResetting ? <img src={qrCodeData} alt="WhatsApp QR Code" className="w-40 h-40 object-contain" /> : <div className="w-40 h-40 flex flex-col items-center justify-center text-slate-400 gap-2"><Loader2 className="animate-spin" size={24} /><span className="text-xs font-medium">{isResetting ? "Generating..." : "Fetching QR..."}</span></div>}
                                 </div>
-                                <div className="mt-4">
-                                    <button 
-                                        onClick={handleResetWa}
-                                        disabled={isResetting}
-                                        className="text-xs font-bold text-slate-500 hover:text-slate-800 underline decoration-slate-300 underline-offset-4 transition-colors disabled:opacity-50"
-                                    >
-                                        QR Expired? Generate New
-                                    </button>
-                                </div>
+                                <div className="mt-4"><button onClick={handleResetWa} disabled={isResetting} className="text-xs font-bold text-slate-500 hover:text-slate-800 underline decoration-slate-300 underline-offset-4 transition-colors disabled:opacity-50">QR Expired? Generate New</button></div>
                             </div>
                         )}
-
-                        {waStatus === 'checking...' && (
-                            <div className="flex items-center justify-center gap-2 text-slate-500 p-4">
-                                <Loader2 className="animate-spin" size={16}/> Checking OpenWA API...
-                            </div>
-                        )}
-
+                        {waStatus === 'checking...' && <div className="flex items-center justify-center gap-2 text-slate-500 p-4"><Loader2 className="animate-spin" size={16}/> Checking Native API...</div>}
                         {isWaDisconnected && (
                             <div className="text-center p-4 bg-red-50 text-red-700 rounded-lg border border-red-200">
                                 <AlertTriangle size={32} className="mx-auto mb-2" />
                                 <span className="font-bold">Disconnected</span>
-                                <p className="text-xs mt-1 opacity-80">API is offline or starting up.</p>
+                                <p className="text-xs mt-1 opacity-80 mb-3">API is offline or scanning failed.</p>
+                                <button onClick={handleResetWa} disabled={isResetting} className="text-xs font-bold bg-white text-red-700 px-3 py-1.5 rounded border border-red-200 hover:bg-red-100 transition-colors shadow-sm disabled:opacity-50">
+                                    {isResetting ? "Generating..." : "Generate New QR"}
+                                </button>
                             </div>
                         )}
                     </div>
 
-                    {/* Darkened Message Composer */}
                     <div className={`${glassPanel} p-5 shrink-0 bg-white`}>
-                        <h3 className="font-black text-slate-800 mb-2 flex items-center gap-2">
-                            <Edit3 size={16} className="text-blue-600"/> Compose Broadcast
-                        </h3>
+                        <h3 className="font-black text-slate-800 mb-2 flex items-center gap-2"><Edit3 size={16} className="text-blue-600"/> Compose Broadcast</h3>
                         {activeTab === 'dues' && <p className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded mb-3">Leave blank to use the standard system fee template.</p>}
-                        
-                        <textarea 
-                            value={customMessage}
-                            onChange={(e) => setCustomMessage(e.target.value)}
-                            placeholder="Type your message here..."
-                            className="w-full h-32 p-4 bg-slate-100 border-2 border-slate-300 rounded-xl text-slate-900 font-medium placeholder:text-slate-400 focus:bg-white focus:border-blue-500 outline-none resize-none custom-scrollbar mb-4 transition-colors"
-                        />
-                        
+                        <textarea value={customMessage} onChange={(e) => setCustomMessage(e.target.value)} placeholder="Type your message here..." className="w-full h-32 p-4 bg-slate-100 border-2 border-slate-300 rounded-xl text-slate-900 font-medium placeholder:text-slate-400 focus:bg-white focus:border-blue-500 outline-none resize-none custom-scrollbar mb-4 transition-colors" />
                         <div className="space-y-2">
                             <label className="text-xs font-black text-slate-500 uppercase tracking-wide">Save as Template</label>
                             <div className="flex gap-2">
-                                <input 
-                                    type="text" 
-                                    placeholder="e.g., Holiday Notice" 
-                                    value={newTemplateTitle}
-                                    onChange={(e) => setNewTemplateTitle(e.target.value)}
-                                    className="grow bg-slate-100 border-2 border-slate-300 text-slate-900 font-bold rounded-lg px-3 py-2 text-sm focus:bg-white focus:border-blue-500 outline-none transition-colors"
-                                />
-                                <button onClick={saveTemplate} className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shrink-0 transition-colors shadow-sm">
-                                    <Save size={16}/> Save
-                                </button>
+                                <input type="text" placeholder="e.g., Holiday Notice" value={newTemplateTitle} onChange={(e) => setNewTemplateTitle(e.target.value)} className="grow bg-slate-100 border-2 border-slate-300 text-slate-900 font-bold rounded-lg px-3 py-2 text-sm focus:bg-white focus:border-blue-500 outline-none transition-colors" />
+                                <button onClick={saveTemplate} className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shrink-0 transition-colors shadow-sm"><Save size={16}/> Save</button>
                             </div>
                         </div>
                     </div>
 
-                    {/* Live Dispatch Logs */}
-                    <div className={`${glassPanel} bg-slate-950 text-white grow overflow-hidden border-slate-800 shadow-xl`}>
+                    {/* ✨ FIXED: Removed invalid grow classes and gave terminal fixed height */}
+                    <div className={`${glassPanel} bg-slate-950 text-white overflow-hidden border-slate-800 shadow-xl h-80`}>
                         <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900">
-                            <h3 className="font-bold text-slate-100 flex items-center gap-2 text-sm">
-                                <Activity size={16} className="text-green-400"/> Dispatch Terminal
-                            </h3>
-                            {dispatchLogs.length > 0 && (
-                                <button onClick={() => setDispatchLogs([])} className="text-[10px] font-bold text-slate-400 hover:text-white uppercase tracking-wider bg-slate-800 px-2 py-1 rounded">Clear</button>
-                            )}
+                            <h3 className="font-bold text-slate-100 flex items-center gap-2 text-sm"><Activity size={16} className="text-green-400"/> Dispatch Terminal</h3>
+                            {dispatchLogs.length > 0 && <button onClick={() => setDispatchLogs([])} className="text-[10px] font-bold text-slate-400 hover:text-white uppercase tracking-wider bg-slate-800 px-2 py-1 rounded">Clear</button>}
                         </div>
-                        <div className="p-4 font-mono text-xs space-y-3 overflow-y-auto max-h-62.5 custom-scrollbar leading-relaxed">
+                        <div className="p-4 font-mono text-xs space-y-3 overflow-y-auto h-full custom-scrollbar leading-relaxed pb-16">
                             <div className="text-slate-500 font-bold">[SYSTEM] Awaiting commands...</div>
                             {dispatchLogs.map((log, i) => (
                                 <div key={i} className={`flex gap-3 ${log.isError ? 'text-red-400' : 'text-green-400'}`}>
                                     <span className="text-slate-600 shrink-0">[{log.time}]</span>
                                     <span className="truncate max-w-[120px] shrink-0 font-bold text-slate-300">{log.name}:</span>
-                                    <span className={log.isError ? 'text-red-400 font-bold' : 'text-green-300'}>
-                                        {log.isError && <AlertCircle size={12} className="inline mr-1"/>}
-                                        {log.status}
-                                    </span>
+                                    <span className={log.isError ? 'text-red-400 font-bold' : 'text-green-300'}>{log.isError && <AlertCircle size={12} className="inline mr-1"/>} {log.status}</span>
                                 </div>
                             ))}
                         </div>
                     </div>
-
                 </div>
             </div>
         </div>

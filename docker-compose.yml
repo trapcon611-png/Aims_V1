@@ -38,9 +38,6 @@ services:
       - ./aims_backend/.env
     environment:
       - DATABASE_URL=postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public
-      - OPENWA_API_URL=http://openwa:2785/api
-      # ✨ ADDED: The exact key from OpenWA so the backend can authenticate
-      - OPENWA_API_KEY=owa_k1_4cd5d2eb99308da3971f9f4730750a0a2b67aa4530c9c2e4168e7c39bf3cc608 
     depends_on:
       - postgres
     networks:
@@ -48,6 +45,8 @@ services:
     restart: unless-stopped
     volumes:
       - ./backups:/app/backups
+      # ✨ NEW: Saves the native WhatsApp session
+      - ./whatsapp_auth:/app/whatsapp_auth 
 
   # 3. Next.js Frontend Service
   aims_frontend:
@@ -72,31 +71,6 @@ services:
     networks:
       - aims_network
     restart: unless-stopped
-
-  # 4. OpenWA Service
-  openwa:
-    build:
-      context: ./openwa/OpenWA-main/OpenWA-main
-      dockerfile: Dockerfile
-    container_name: aims_whatsapp_service
-    logging: *default-logging
-    ports:
-      - "2785:2785"
-    command: npm run start:prod
-    restart: unless-stopped
-    networks:
-      - aims_network
-    volumes:
-      - ./openwa_data:/app/data
-    depends_on:
-      postgres:
-        condition: service_started
-    environment:
-      # ✨ FIXED: Hardcoded the exact API key OpenWA generated
-      - HOST=0.0.0.0
-      - API_KEY=owa_k1_4cd5d2eb99308da3971f9f4730750a0a2b67aa4530c9c2e4168e7c39bf3cc608
-      - DATABASE_URL=postgresql://aims_manual:Sameer@postgres:5432/aims_manual?schema=public
-      - ENGINE_TYPE=baileys
 
 networks:
   aims_network:
