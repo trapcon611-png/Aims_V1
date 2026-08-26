@@ -1,17 +1,30 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
-export class WhatsappService {
+export class WhatsappService implements OnModuleInit {
   private readonly logger = new Logger(WhatsappService.name);
   
-  // Connects to your OpenWA microservice
-  // Overriding any wrong .env variable to force the correct Docker network port
-// Replace 'openwa' with 'aims_whatsapp_service'
+  // 🚀 THE FIX: Pointing exactly to the Docker container name 'aims_whatsapp_service'
   private readonly openWaApiUrl = process.env.OPENWA_API_URL || 'http://aims_whatsapp_service:2785/api';
+
   constructor(private prisma: PrismaService) {}
-  
+
+  // ✨ NEW: Automatically check/create the session when the backend boots up
+  async onModuleInit() {
+      this.logger.log(`[WA-INIT] Initializing WhatsApp module. Target API: ${this.openWaApiUrl}`);
+      await this.ensureSessionExists('aims-finance');
+  }
+
+  // ✨ HELPER: Inject API keys securely into every request
+  private getHeaders() {
+      return {
+          'Content-Type': 'application/json',
+          'X-API-Key': process.env.OPENWA_API_KEY || ''
+      };
+  }
+
   // HELPER: Simulates human typing delay
   private sleep(ms: number) {
       return new Promise(resolve => setTimeout(resolve, ms));
@@ -50,22 +63,22 @@ export class WhatsappService {
   async dynamicFeeReminders() {
       const rules = await this.getAutomationRules();
       
-      // ✨ THE FIX: Force the server to calculate the exact current time in IST (India)
+      // Force the server to calculate the exact current time in IST (India)
       const today = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
       
       const currentHours = String(today.getHours()).padStart(2, '0');
       const currentMinutes = String(today.getMinutes()).padStart(2, '0');
       const currentTime = `${currentHours}:${currentMinutes}`;
 
-      // 2. If it is NOT the exact minute the Director requested, sleep.
+      // If it is NOT the exact minute the Director requested, sleep.
       if (currentTime !== rules.dispatchTime) return;
 
       this.logger.log(`[AUTOMATION] Executing WhatsApp Protocol at scheduled time: ${currentTime} IST`);
 
-      // 3. Define target dates based on Director's Rules
+      // Define target dates based on Director's Rules
       const datesToTarget: string[] = [];
 
-      // Rule 1: First Warning (e.g., 3 days from now)
+      // Rule 1: First Warning
       const warningDate = new Date(today);
       warningDate.setDate(warningDate.getDate() + rules.daysBefore);
       datesToTarget.push(warningDate.toISOString().split('T')[0]);
@@ -82,13 +95,13 @@ export class WhatsappService {
           datesToTarget.push(lateDate.toISOString().split('T')[0]);
       }
 
-      // 4. Scan the database for pending dues
+      // Scan the database for pending dues
       const students = await this.prisma.studentProfile.findMany({
           where: { feeAgreed: { gt: 0 } },
           include: { parent: true, feesPaid: true, batch: true }
       });
 
-      // 5. Calculate and Dispatch
+      // Calculate and Dispatch
       for (const s of students) {
           const totalPaid = s.feesPaid.reduce((acc, curr) => acc + curr.amount, 0);
           let cumulativeInst = 0;
@@ -118,36 +131,39 @@ export class WhatsappService {
       }
   }
 
-  // --- 3. SESSION MONITORING & QR (NEW) ---
+  // --- 3. SESSION MONITORING & QR ---
+
+  // ✨ HELPER: Ensures session exists on the microservice before querying it
+  private async ensureSessionExists(sessionId: string) {
+      try {
+          const res = await fetch(`${this.openWaApiUrl}/sessions/${sessionId}`, {
+              headers: this.getHeaders()
+          });
+          if (res.status === 404) {
+              this.logger.log(`[WA-INIT] Session '${sessionId}' missing in OpenWA. Creating it now...`);
+              await fetch(`${this.openWaApiUrl}/sessions`, {
+                  method: 'POST',
+                  headers: this.getHeaders(),
+                  body: JSON.stringify({ sessionId })
+              });
+              await this.sleep(2000); // Give it time to spin up
+          }
+      } catch (err) {
+          this.logger.error('[WA-INIT] Failed to ensure session exists. Is the container running?', err);
+      }
+  }
 
   async getSessionStatus(fallbackSessionId: string = 'aims-finance') {
       try {
           const activeId = await this.getActiveSessionId() || fallbackSessionId;
+          await this.ensureSessionExists(activeId); // Pre-flight check
           
-          let response = await fetch(`${this.openWaApiUrl}/sessions/${activeId}`, {
-              headers: { 'X-API-Key': process.env.OPENWA_API_KEY || '' }
+          const response = await fetch(`${this.openWaApiUrl}/sessions/${activeId}`, {
+              headers: this.getHeaders()
           });
           
-          // If the session got deleted, safely recreate it
-          if (response.status === 404) {
-              this.logger.log(`[WA-STATUS] Session '${activeId}' not found. Auto-creating...`);
-              await fetch(`${this.openWaApiUrl}/sessions`, {
-                  method: 'POST',
-                  headers: { 
-                      'Content-Type': 'application/json',
-                      'X-API-Key': process.env.OPENWA_API_KEY || '' 
-                  },
-                  body: JSON.stringify({ sessionId: activeId })
-              });
-              
-              await this.sleep(2000); // Give OpenWA a moment to boot the engine
-              response = await fetch(`${this.openWaApiUrl}/sessions/${activeId}`, {
-                  headers: { 'X-API-Key': process.env.OPENWA_API_KEY || '' }
-              });
-          }
-
           if (!response.ok) {
-              this.logger.warn(`[WA-STATUS] OpenWA returned ${response.status}. Check API Key!`);
+              this.logger.warn(`[WA-STATUS] OpenWA returned ${response.status}. Check API Key or Network!`);
               return { status: 'disconnected' };
           }
           
@@ -163,7 +179,7 @@ export class WhatsappService {
       try {
           const activeId = await this.getActiveSessionId() || fallbackSessionId;
           const response = await fetch(`${this.openWaApiUrl}/sessions/${activeId}/qr`, {
-              headers: { 'X-API-Key': process.env.OPENWA_API_KEY || '' }
+              headers: this.getHeaders()
           });
           
           if (!response.ok) return null;
@@ -185,7 +201,7 @@ export class WhatsappService {
           // 1. Force logout and delete the current session state
           await fetch(`${this.openWaApiUrl}/sessions/${activeId}`, {
               method: 'DELETE',
-              headers: { 'X-API-Key': process.env.OPENWA_API_KEY || '' }
+              headers: this.getHeaders()
           });
 
           // Wait a moment for the microservice to clear the file system caches
@@ -195,10 +211,7 @@ export class WhatsappService {
           this.logger.log(`[WA-RESET] Booting fresh session: ${fallbackSessionId}`);
           await fetch(`${this.openWaApiUrl}/sessions`, {
               method: 'POST',
-              headers: { 
-                  'Content-Type': 'application/json',
-                  'X-API-Key': process.env.OPENWA_API_KEY || '' 
-              },
+              headers: this.getHeaders(),
               body: JSON.stringify({ sessionId: fallbackSessionId })
           });
 
@@ -211,30 +224,24 @@ export class WhatsappService {
 
   // --- 4. CORE DISPATCHERS ---
 
-  // ✨ HELPER: Dynamically fetches the active session ID from OpenWA
+  // Dynamically fetches the active session ID from OpenWA
   private async getActiveSessionId(): Promise<string | null> {
       try {
           const res = await fetch(`${this.openWaApiUrl}/sessions`, {
-              headers: { 'X-API-Key': process.env.OPENWA_API_KEY || '' }
+              headers: this.getHeaders()
           });
           
           if (!res.ok) return null;
           
           const data = await res.json();
-          // OpenWA might return an array directly, or wrap it in { data: [...] }
           const sessions = Array.isArray(data) ? data : (data.data || []);
           
           // Find the session that is actively connected to a phone
           const active = sessions.find((s: any) => s.status === 'READY' || s.status === 'CONNECTED');
-          
-          if (active) {
-              return active.id || active.sessionId || active.name;
-          }
+          if (active) return active.id || active.sessionId || active.name;
           
           // Fallback: If none say READY, just grab the first one that exists
-          if (sessions.length > 0) {
-              return sessions[0].id || sessions[0].sessionId || sessions[0].name;
-          }
+          if (sessions.length > 0) return sessions[0].id || sessions[0].sessionId || sessions[0].name;
           
           return null;
       } catch (err) {
@@ -243,7 +250,6 @@ export class WhatsappService {
       }
   }
 
-  // UPDATED DISPATCHER: Now 100% Dynamic!
   async dispatchOpenWAMessage(mobile: string | undefined, text: string) {
       if (!mobile) return false;
       
@@ -251,7 +257,6 @@ export class WhatsappService {
       const chatId = `91${cleanMobile}@c.us`; 
       
       try {
-          // ✨ STEP 1: Ask OpenWA for the current active Session ID
           const sessionId = await this.getActiveSessionId();
           
           if (!sessionId) {
@@ -259,16 +264,11 @@ export class WhatsappService {
               return false;
           }
 
-          this.logger.log(`[WA-DISPATCH] Auto-detected Active Session: ${sessionId}`);
-          this.logger.log(`[WA-DISPATCH] Sending to ${chatId}`);
+          this.logger.log(`[WA-DISPATCH] Auto-detected Active Session: ${sessionId} | Sending to ${chatId}`);
           
-          // ✨ STEP 2: Send the message using the dynamic ID
           const response = await fetch(`${this.openWaApiUrl}/sessions/${sessionId}/messages/send-text`, {
               method: 'POST',
-              headers: {
-                  'Content-Type': 'application/json',
-                  'X-API-Key': process.env.OPENWA_API_KEY || '' 
-              },
+              headers: this.getHeaders(),
               body: JSON.stringify({
                   chatId: chatId,
                   text: text
@@ -300,7 +300,6 @@ export class WhatsappService {
                 ? customText 
                 : `*AIMS Institute Reminder*\n\nDear Parent of ${target.name},\nThis is a reminder for your pending installment of ₹${target.amount} due on ${new Date(target.date).toLocaleDateString()}.\n\nRegards,\nAIMS Admin`;
             
-            // ✨ We now wait to see if it actually returned true or false!
             const isSuccess = await this.dispatchOpenWAMessage(target.mobile, message);
             
             if (isSuccess) {
