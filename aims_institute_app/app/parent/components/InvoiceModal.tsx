@@ -50,7 +50,7 @@ export default function InvoiceModal({ data, onClose, onSuccess }: { data: any, 
 
       // 2. Open Razorpay Checkout
       const options = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_YOUR_KEY_HERE',
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID as string,
         amount: order.amount,
         currency: order.currency,
         name: 'AIMS Institute',
